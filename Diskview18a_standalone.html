@@ -1616,7 +1616,7 @@ let dt=g(/Date:\s*([^\n]+)/),tm=g(/Time:\s*([^\n]+)/),intf=g(/Interface:\s*([^\n
 let model=GetModel()
 let capGB=cap?(Number(cap)/1e9).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})+' GB':''
 W(G('dvTitle2'),'DA Drive Analyzer Bin File: "'+CurFile+'"')
-W(G('dvTitle'),[dt,tm,model,intf,capGB].filter(x=>x).join(' '))}
+W(G('dvTitle'),[model,intf,capGB,dt,tm].filter(x=>x).join(' '))}
 
 DpGp234=z=>{
 let arYM=',31,,,40,41,32,42,43,44,45,,,,,,46,33,34,35,47,48,36,37,38,39,0,1'.split(',')
