@@ -45,7 +45,7 @@ td button:not(.nbtn),th button{width:20px;height:20px}
 </div>
 <div style='background:#e8f2fb;border-bottom:1px solid #1a5fa8;padding:5px 12px;font-size:11px;color:#0d3d6e;display:flex;align-items:center;justify-content:space-between'>
   <span>&#128274; <b>Privacy:</b> All processing is performed locally in your browser. No file data is transmitted to any server. &copy; 2026 <a href='https://ulinktech.com' target='_blank' style='color:#0d3d6e'>ULINK Technology, Inc.</a></span>
-  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260721e</span>
+  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260721f</span>
 </div>
 <input id='local'type='file'style='display:none'onchange='OpFl()'>
 <input id='local2'type='file'style='display:none'onchange='OpFl2()'>
@@ -2839,6 +2839,8 @@ CurFile=entry.name;W(G('fileLabel'),entry.name)
 if(ScanRawT>=0)PrevRawT=ScanRawT
 try{DcFl0(buf)}catch(e){k+=dir;found=false;continue}
 if(!ArIx||!ArIx.length){k+=dir;found=false;continue}
+// Skip file if it doesn't contain the target template (would show wrong template)
+if(ScanRawT>=0&&ArIx.findIndex((v,i)=>i%2===0&&v===ScanRawT)<0){k+=dir;found=false;continue}
 }
 }finally{_ScanLoading=false}  // always reset, even on continue/error
 ScanIdx=k+1;if(ScanIdx>=ScanTotal)ScanIdx=0
