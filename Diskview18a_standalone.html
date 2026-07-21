@@ -45,7 +45,7 @@ td button:not(.nbtn),th button{width:20px;height:20px}
 </div>
 <div style='background:#e8f2fb;border-bottom:1px solid #1a5fa8;padding:5px 12px;font-size:11px;color:#0d3d6e;display:flex;align-items:center;justify-content:space-between'>
   <span>&#128274; <b>Privacy:</b> All processing is performed locally in your browser. No file data is transmitted to any server. &copy; 2026 <a href='https://ulinktech.com' target='_blank' style='color:#0d3d6e'>ULINK Technology, Inc.</a></span>
-  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260721c</span>
+  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260721d</span>
 </div>
 <input id='local'type='file'style='display:none'onchange='OpFl()'>
 <input id='local2'type='file'style='display:none'onchange='OpFl2()'>
@@ -1152,7 +1152,10 @@ let vals2=[]
 let defectSum2=''
 if(fi2>=0){
 Tx=fi2/2
+// Save tmpl display before File 2 render to prevent visible flash
+let _ts=G('tmpl').innerHTML,_tn=G('tmplName').innerHTML
 DpFl()
+W(G('tmpl'),_ts);W(G('tmplName'),_tn)  // restore immediately
 vals2=Array.from(Q('#rTab tr')).map(e=>Array.from(e.children).map(c=>c.innerText))
 // Capture File 2 defect summary (for T332/T333 GList/PList)
 let ds2=G('defectSum');if(ds2&&ds2.innerHTML)defectSum2=ds2.innerHTML
@@ -2616,7 +2619,7 @@ let lmt=ArIx.length/2-1,v=Tx+x
 if(v>lmt)v=0
 if(v<0)v=lmt
 DpT(v)
-if((ScanActive||ScanStepMode)&&!_ScanLoading)ScanRawT=ArIx[Tx*2]}
+if((ScanActive||ScanStepMode)&&!_ScanLoading&&!RevTimer)ScanRawT=ArIx[Tx*2]}
 
 // ── Scan play/stop/direction controls ───────────────────────────────────────
 ScanSetup=async()=>{
@@ -2629,7 +2632,8 @@ G('scanCtrl').style.display='inline-flex';G('scanBtn').style.display='none';G('s
 _doScanStepDir(1)
 }
 
-ScanPlayFwd=async()=>{
+ScanPlayFwd=async()>{
+if(RevTimer){clearInterval(RevTimer);RevTimer=null;W(G('revBtn'),'Play')}
 if(!ScanEntries.length){let ready=await ScanEnsureReady();if(!ready)return}
 if(ScanTimer!==null){clearTimeout(ScanTimer);ScanTimer=null}
 ScanActive=true;ScanStepMode=false;ScanDirection=1
@@ -2637,7 +2641,8 @@ G('scanCtrl').style.display='inline-flex';G('scanBtn').style.display='none';G('s
 _doScanStepDir(1)
 }
 
-ScanPlayBack=async()=>{
+ScanPlayBack=async()>{
+if(RevTimer){clearInterval(RevTimer);RevTimer=null;W(G('revBtn'),'Play')}
 if(!ScanEntries.length){let ready=await ScanEnsureReady();if(!ready)return}
 if(ScanTimer!==null){clearTimeout(ScanTimer);ScanTimer=null}
 ScanActive=true;ScanStepMode=false;ScanDirection=-1
@@ -2846,7 +2851,8 @@ if(!found){W(G('nVer'),'No matching interface files — click Scan to select ano
 if(ScanActive)ScanTimer=setTimeout(()=>_doScanStepDir(ScanDirection),Number(G('revSpeed').value)*1000)
 }
 
-ScanStepBackClick=async()=>{
+ScanStepBackClick=async()>{
+if(RevTimer){clearInterval(RevTimer);RevTimer=null;W(G('revBtn'),'Play')}
 if(!ScanEntries.length){if(RevTimer){clearInterval(RevTimer);RevTimer=null;W(G('revBtn'),'Play')}
 let ready=await ScanEnsureReady();if(!ready)return}
 if(ScanTimer!==null){clearTimeout(ScanTimer);ScanTimer=null}
