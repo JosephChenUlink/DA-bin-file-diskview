@@ -48,7 +48,7 @@ td button:not(.nbtn),th button{width:20px;height:20px}
 </div>
 <div style='background:#e8f2fb;border-bottom:1px solid #1a5fa8;padding:5px 12px;font-size:11px;color:#0d3d6e;display:flex;align-items:center;justify-content:space-between'>
   <span>&#128274; <b>Privacy:</b> All processing is performed locally in your browser. No file data is transmitted to any server. &copy; 2026 <a href='https://ulinktech.com' target='_blank' style='color:#0d3d6e'>ULINK Technology, Inc.</a></span>
-  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260722d</span>
+  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260722e</span>
 </div>
 <input id='local'type='file'style='display:none'onchange='OpFl()'>
 <input id='local2'type='file'style='display:none'onchange='OpFl2()'>
@@ -2817,8 +2817,10 @@ if(k>=ScanTotal)k-=ScanTotal
 if(i>0&&i%20===0)await new Promise(r=>setTimeout(r,0))
 if(!ScanActive&&!ScanStepMode)return  // stopped during search
 let entry=ScanEntries[k],seqNum=k+1
+console.log('[ScanDiag]',seqNum,entry.name,'→ start',performance.now().toFixed(0))
 let file
 try{file=entry.file||(await entry.handle.getFile())}catch(e){k+=dir;continue}
+console.log('[ScanDiag]',seqNum,entry.name,'→ got file handle, size',file.size,performance.now().toFixed(0))
 // ── Header-only read (8KB) for interface check — fast for non-matching files ──
 let fIntf=''
 try{
@@ -2827,6 +2829,7 @@ let ar=new Uint8Array(hdrBuf),txt='',j=0
 while(j<ar.length&&j<8000){let c=ar[j++];if(c>0&&c<128)txt+=String.fromCharCode(c);if(txt.endsWith('END'))break}
 let im=txt.match(/Interface:\s*([^\n]+)/);fIntf=im?im[1].trim():''
 }catch(e){k+=dir;continue}
+console.log('[ScanDiag]',seqNum,entry.name,'→ header read ok, intf='+fIntf,performance.now().toFixed(0))
 if(ScanIntf&&fIntf&&fIntf!==ScanIntf){k+=dir;continue}
 // Skip abnormally large outlier files — a normal drive dump is well under this size,
 // and decoding something far bigger (e.g. a stray non-dump .bin) would freeze the
@@ -2835,6 +2838,7 @@ if(file.size>8*1024*1024){k+=dir;continue}
 // ── Interface matches — read full file and display ──────────────────────────
 let buf
 try{buf=await file.arrayBuffer()}catch(e){k+=dir;continue}
+console.log('[ScanDiag]',seqNum,entry.name,'→ full read ok',performance.now().toFixed(0))
 found=true;_ScanLoading=true
 try{
 ScanLastBuf=buf;ScanLastName=entry.name
@@ -2844,11 +2848,13 @@ CurFile2=entry.name;DcFl0_2(buf)
 CurFile=entry.name;W(G('fileLabel'),entry.name)
 if(ScanRawT>=0)PrevRawT=ScanRawT
 try{DcFl0(buf)}catch(e){k+=dir;found=false;continue}
+console.log('[ScanDiag]',seqNum,entry.name,'→ decode+render ok',performance.now().toFixed(0))
 if(!ArIx||!ArIx.length){k+=dir;found=false;continue}
 // Skip file if it doesn't contain the target template (would show wrong template)
 if(ScanRawT>=0&&ArIx.findIndex((v,i)=>i%2===0&&v===ScanRawT)<0){k+=dir;found=false;continue}
 }
 }finally{_ScanLoading=false}  // always reset, even on continue/error
+console.log('[ScanDiag]',seqNum,entry.name,'→ COMPLETE',performance.now().toFixed(0))
 ScanIdx=k+1;if(ScanIdx>=ScanTotal)ScanIdx=0
 let modeLabel=(ScanStepMode?(dir<0?' ◀ Back':' ▶ Step'):'')
 let speedNote=(ScanActive&&ScanTimerRAF)?' ⚡full speed':''
