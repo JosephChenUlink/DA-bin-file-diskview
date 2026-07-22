@@ -48,7 +48,7 @@ td button:not(.nbtn),th button{width:20px;height:20px}
 </div>
 <div style='background:#e8f2fb;border-bottom:1px solid #1a5fa8;padding:5px 12px;font-size:11px;color:#0d3d6e;display:flex;align-items:center;justify-content:space-between'>
   <span>&#128274; <b>Privacy:</b> All processing is performed locally in your browser. No file data is transmitted to any server. &copy; 2026 <a href='https://ulinktech.com' target='_blank' style='color:#0d3d6e'>ULINK Technology, Inc.</a></span>
-  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260722a</span>
+  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260722b</span>
 </div>
 <input id='local'type='file'style='display:none'onchange='OpFl()'>
 <input id='local2'type='file'style='display:none'onchange='OpFl2()'>
@@ -2441,12 +2441,13 @@ if(ScanRawT>=0&&ArIx.findIndex((v,i)=>i%2===0&&v===ScanRawT)<0){k+=dir;found=fal
 }finally{_ScanLoading=false}  // always reset, even on continue/error
 ScanIdx=k+1;if(ScanIdx>=ScanTotal)ScanIdx=0
 let modeLabel=(ScanStepMode?(dir<0?' ◀ Back':' ▶ Step'):'')
-W(G('nVer'),`▶ [${seqNum.toLocaleString()}/${ScanTotal.toLocaleString()}]${ScanIntf?' '+ScanIntf:''}${modeLabel}`)
+let speedNote=(ScanActive&&Number(G('revSpeed').value)*1000<300)?' (min 0.3s/file while scanning)':''
+W(G('nVer'),`▶ [${seqNum.toLocaleString()}/${ScanTotal.toLocaleString()}]${ScanIntf?' '+ScanIntf:''}${modeLabel}${speedNote}`)
 let dvt=G('dvTitle');if(dvt)dvt.innerHTML=(dvt.innerHTML||'').replace(/\s*<span[^>]*>\[\d+.*?\]<\/span>/,'')+` <span style='color:#1a5fa8;font-size:12px'>[${seqNum}/${ScanTotal}: ${entry.name}]</span>`
 break
 }
 if(!found){W(G('nVer'),'No matching interface files — click Scan to select another folder');ScanActive=false;ScanStepMode=false;ScanBinList=[];ScanEntries=[];if(ScanDirHandle)_ScanDB.saveDirHint(ScanDirHandle);ScanDirHandle=null;_ScanDB.clear();G('scanCtrl').style.display='none';G('scanBtn').style.display='inline';return}
-if(ScanActive)ScanTimer=setTimeout(()=>_doScanStepDir(ScanDirection),Number(G('revSpeed').value)*1000)
+if(ScanActive)ScanTimer=setTimeout(()=>_doScanStepDir(ScanDirection),Math.max(Number(G('revSpeed').value)*1000,300))
 }
 
 ScanStepBackClick=async()=>{
