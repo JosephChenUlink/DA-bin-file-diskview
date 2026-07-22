@@ -48,7 +48,7 @@ td button:not(.nbtn),th button{width:20px;height:20px}
 </div>
 <div style='background:#e8f2fb;border-bottom:1px solid #1a5fa8;padding:5px 12px;font-size:11px;color:#0d3d6e;display:flex;align-items:center;justify-content:space-between'>
   <span>&#128274; <b>Privacy:</b> All processing is performed locally in your browser. No file data is transmitted to any server. &copy; 2026 <a href='https://ulinktech.com' target='_blank' style='color:#0d3d6e'>ULINK Technology, Inc.</a></span>
-  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260722b</span>
+  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260722c</span>
 </div>
 <input id='local'type='file'style='display:none'onchange='OpFl()'>
 <input id='local2'type='file'style='display:none'onchange='OpFl2()'>
@@ -945,7 +945,7 @@ ScanFileHandle=fh  // remember for startIn next time
 _ScanDB.saveFileHint(fh)  // persist file location across sessions
 // Stop scan/play
 if(RevTimer){clearInterval(RevTimer);RevTimer=null;W(G('revBtn'),'Play')}
-if(ScanActive||ScanStepMode){ScanActive=false;ScanStepMode=false;if(ScanTimer!==null){clearTimeout(ScanTimer);ScanTimer=null};G('scanCtrl').style.display='inline-flex';G('scanBtn').style.display='none';G('s1').style.fontWeight='';G('s3').style.fontWeight='';W(G('nVer'),'')}
+if(ScanActive||ScanStepMode){ScanActive=false;ScanStepMode=false;_ScanClearTimer();G('scanCtrl').style.display='inline-flex';G('scanBtn').style.display='none';G('s1').style.fontWeight='';G('s3').style.fontWeight='';W(G('nVer'),'')}
 // Load the selected file (no folder dialog)
 let file=await fh.getFile()
 let fname=file.name
@@ -975,7 +975,7 @@ DcFl0(buf)
 // Fallback OpFl: for browsers that don't support showOpenFilePicker (triggered by #local onchange)
 OpFl=z=>{
 if(RevTimer){clearInterval(RevTimer);RevTimer=null;W(G('revBtn'),'Play')}
-if(ScanActive||ScanStepMode){ScanActive=false;ScanStepMode=false;ScanEntries=[];if(ScanTimer!==null){clearTimeout(ScanTimer);ScanTimer=null}W(G('scanBtn'),'Scan');G('scanCtrl').style.display='none';G('scanBtn').style.display='inline';W(G('nVer'),'')}
+if(ScanActive||ScanStepMode){ScanActive=false;ScanStepMode=false;ScanEntries=[];_ScanClearTimer();W(G('scanBtn'),'Scan');G('scanCtrl').style.display='none';G('scanBtn').style.display='inline';W(G('nVer'),'')}
 let f=G('local').files[0],r=new FileReader()
 CurFile=f.name;W(G('fileLabel'),f.name)
 PrevRawT=(ArIx&&ArIx.length>0&&Tx>=0)?ArIx[Tx*2]:-1;Tx=0
@@ -2638,7 +2638,7 @@ _doScanStepDir(1)
 ScanPlayFwd=async()=>{
 if(RevTimer){clearInterval(RevTimer);RevTimer=null;W(G('revBtn'),'Play')}
 if(!ScanEntries.length){let ready=await ScanEnsureReady();if(!ready)return}
-if(ScanTimer!==null){clearTimeout(ScanTimer);ScanTimer=null}
+_ScanClearTimer()
 ScanActive=true;ScanStepMode=false;ScanDirection=1
 G('scanCtrl').style.display='inline-flex';G('scanBtn').style.display='none';G('s1').style.fontWeight='';G('s3').style.fontWeight='bold'
 _doScanStepDir(1)
@@ -2647,14 +2647,14 @@ _doScanStepDir(1)
 ScanPlayBack=async()=>{
 if(RevTimer){clearInterval(RevTimer);RevTimer=null;W(G('revBtn'),'Play')}
 if(!ScanEntries.length){let ready=await ScanEnsureReady();if(!ready)return}
-if(ScanTimer!==null){clearTimeout(ScanTimer);ScanTimer=null}
+_ScanClearTimer()
 ScanActive=true;ScanStepMode=false;ScanDirection=-1
 G('scanCtrl').style.display='inline-flex';G('scanBtn').style.display='none';G('s3').style.fontWeight='';G('s1').style.fontWeight='bold'
 _doScanStepDir(-1)
 }
 
 ScanStop=()=>{
-if(ScanTimer!==null){clearTimeout(ScanTimer);ScanTimer=null}
+_ScanClearTimer()
 ScanActive=false;ScanStepMode=false;ScanBinList=[];ScanEntries=[]
 // Save current dir as hint BEFORE clearing (preserves "last location" for next picker)
 if(ScanDirHandle)_ScanDB.saveDirHint(ScanDirHandle)
@@ -2665,7 +2665,7 @@ W(G('nVer'),'')
 
 ToggleReview=()=>{
 // Stop scan if running — keep scan icons visible
-if(ScanActive){ScanActive=false;if(ScanTimer!==null){clearTimeout(ScanTimer);ScanTimer=null};G('scanCtrl').style.display='inline-flex';G('scanBtn').style.display='none';G('s1').style.fontWeight='';G('s3').style.fontWeight=''}
+if(ScanActive){ScanActive=false;_ScanClearTimer();G('scanCtrl').style.display='inline-flex';G('scanBtn').style.display='none';G('s1').style.fontWeight='';G('s3').style.fontWeight=''}
 if(RevTimer){
 clearInterval(RevTimer);RevTimer=null
 W(G('revBtn'),'Play')
@@ -2675,9 +2675,10 @@ RevTimer=setInterval(()=>Adv(1),Number(G('revSpeed').value)*1000)
 }}
 
 // ── Scan: crawl folder, same template & interface, step or auto ──────────────
-let ScanEntries=[],ScanIdx=0,ScanTimer=null,ScanActive=false,ScanStepMode=false,
+let ScanEntries=[],ScanIdx=0,ScanTimer=null,ScanTimerRAF=false,ScanActive=false,ScanStepMode=false,
     ScanRawT=-1,ScanIntf='',ScanDirHandle=null,ScanFileHandle=null,ScanTotal=0,
     _ScanLoading=false,ScanOrigBuf=null,ScanOrigName='',ScanLastBuf=null,ScanLastName='',ScanDirection=1
+_ScanClearTimer=()=>{if(ScanTimer!==null){if(ScanTimerRAF)cancelAnimationFrame(ScanTimer);else clearTimeout(ScanTimer);ScanTimer=null;ScanTimerRAF=false}}
 
 // IndexedDB helpers for persistent directory handle
 const _ScanDB={
@@ -2765,7 +2766,7 @@ return true
 ScanClick=async()=>{
 if(ScanActive){
 // Stop auto scan
-ScanActive=false;if(ScanTimer!==null){clearTimeout(ScanTimer);ScanTimer=null}
+ScanActive=false;_ScanClearTimer()
 G('scanCtrl').style.display='inline-flex';G('scanBtn').style.display='none';G('s1').style.fontWeight='';G('s3').style.fontWeight=''
 W(G('nVer'),'Scan stopped — use icons to resume')
 ScanStepMode=false;return
@@ -2789,7 +2790,7 @@ _doScanStepDir(1)
 ScanStepClick=async()=>{
 // Cancel auto timer if running, switch to step mode
 if(ScanActive){
-if(ScanTimer!==null){clearTimeout(ScanTimer);ScanTimer=null}
+_ScanClearTimer()
 ScanActive=false;ScanStepMode=true
 G('scanCtrl').style.display='inline-flex';G('scanBtn').style.display='none';G('s1').style.fontWeight='';G('s3').style.fontWeight=''
 _doScanStepDir(1);return
@@ -2848,20 +2849,30 @@ if(ScanRawT>=0&&ArIx.findIndex((v,i)=>i%2===0&&v===ScanRawT)<0){k+=dir;found=fal
 }finally{_ScanLoading=false}  // always reset, even on continue/error
 ScanIdx=k+1;if(ScanIdx>=ScanTotal)ScanIdx=0
 let modeLabel=(ScanStepMode?(dir<0?' ◀ Back':' ▶ Step'):'')
-let speedNote=(ScanActive&&Number(G('revSpeed').value)*1000<300)?' (min 0.3s/file while scanning)':''
+let speedNote=(ScanActive&&ScanTimerRAF)?' ⚡full speed':''
 W(G('nVer'),`▶ [${seqNum.toLocaleString()}/${ScanTotal.toLocaleString()}]${ScanIntf?' '+ScanIntf:''}${modeLabel}${speedNote}`)
 let dvt=G('dvTitle');if(dvt)dvt.innerHTML=(dvt.innerHTML||'').replace(/\s*<span[^>]*>\[\d+.*?\]<\/span>/,'')+` <span style='color:#1a5fa8;font-size:12px'>[${seqNum}/${ScanTotal}: ${entry.name}]</span>`
 break
 }
 if(!found){W(G('nVer'),'No matching interface files — click Scan to select another folder');ScanActive=false;ScanStepMode=false;ScanBinList=[];ScanEntries=[];if(ScanDirHandle)_ScanDB.saveDirHint(ScanDirHandle);ScanDirHandle=null;_ScanDB.clear();G('scanCtrl').style.display='none';G('scanBtn').style.display='inline';return}
-if(ScanActive)ScanTimer=setTimeout(()=>_doScanStepDir(ScanDirection),Math.max(Number(G('revSpeed').value)*1000,300))
+if(ScanActive){
+let delayMs=Number(G('revSpeed').value)*1000
+if(delayMs<=150){
+// Full speed: pace to the browser's paint cycle instead of a fixed timer.
+// This always yields for input/rendering, so it can't freeze the tab, but runs
+// as fast as this machine can decode+render each file — usually well under 0.1s/file.
+ScanTimerRAF=true;ScanTimer=requestAnimationFrame(()=>_doScanStepDir(ScanDirection))
+}else{
+ScanTimerRAF=false;ScanTimer=setTimeout(()=>_doScanStepDir(ScanDirection),delayMs)
+}
+}
 }
 
 ScanStepBackClick=async()=>{
 if(RevTimer){clearInterval(RevTimer);RevTimer=null;W(G('revBtn'),'Play')}
 if(!ScanEntries.length){if(RevTimer){clearInterval(RevTimer);RevTimer=null;W(G('revBtn'),'Play')}
 let ready=await ScanEnsureReady();if(!ready)return}
-if(ScanTimer!==null){clearTimeout(ScanTimer);ScanTimer=null}
+_ScanClearTimer()
 ScanActive=false;ScanStepMode=true;G('scanCtrl').style.display='inline-flex';G('scanBtn').style.display='none';G('s1').style.fontWeight='';G('s3').style.fontWeight=''
 await _doScanStepDir(-1)
 }
