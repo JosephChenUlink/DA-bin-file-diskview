@@ -48,7 +48,7 @@ td button:not(.nbtn),th button{width:20px;height:20px}
 </div>
 <div style='background:#e8f2fb;border-bottom:1px solid #1a5fa8;padding:5px 12px;font-size:11px;color:#0d3d6e;display:flex;align-items:center;justify-content:space-between'>
   <span>&#128274; <b>Privacy:</b> All processing is performed locally in your browser. No file data is transmitted to any server. &copy; 2026 <a href='https://ulinktech.com' target='_blank' style='color:#0d3d6e'>ULINK Technology, Inc.</a></span>
-  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260722e</span>
+  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260722f</span>
 </div>
 <input id='local'type='file'style='display:none'onchange='OpFl()'>
 <input id='local2'type='file'style='display:none'onchange='OpFl2()'>
@@ -1014,81 +1014,83 @@ fields.forEach(fl=>{
 if(fl[2]=='array24'){for(let hn=0;hn<24;hn++)rows.push([fl[0]+hn*8,fl[1]+' - Head '+hn,'ctr'])}
 else rows.push([fl[0],fl[1],fl[2]||'ctr'])
 })
-let qr="<tr><th>Item</th><th>Index</th><th>Value</th></tr>"
-rows.forEach((r,ix)=>{qr+="<tr id=r"+ix+"><td></td><td></td><td></td></tr>"})
-W(G('rTab'),qr)
+// Single-pass render: compute each cell's content directly into the HTML string
+// instead of writing an empty skeleton then re-querying the DOM to fill it in —
+// this avoids a full extra DOM walk + per-cell innerHTML write for large pages
+// (some FARM pages have 200+ rows due to per-head array expansion).
 ArRange=[]
-Q('#rTab td').forEach((e,i)=>{
-let r=Math.trunc(i/3),c=i%3,off=rows[r][0],nm=rows[r][1],ty=rows[r][2]
-if(c==0){W(e,nm)}
-else if(c==1){W(e,U(off,2));ArRange.push(off+'-8')}
-else{
+let qr="<tr><th>Item</th><th>Index</th><th>Value</th></tr>"
+rows.forEach((r,ix)=>{
+let off=r[0],nm=r[1],ty=r[2]
+ArRange.push(off+'-8')
+let val
 if(ty=='plain'){
 let hex='';for(let k=7;k>=0;k--)hex+=U(A[F+off+k]*1,1)
-W(e,hex)
+val=hex
 }else if(ty=='ascii'){
 let fq=FarmVal(off),s=''
 for(let k=6;k>=0;k--)s+=(A[F+off+k]>=32&&A[F+off+k]<=126)?String.fromCharCode(A[F+off+k]*1):''
-W(e,fq.sup?(s||'(empty)'):'(not supported)')
+val=fq.sup?(s||'(empty)'):'(not supported)'
 }else if(ty=='ascii2'){
 let s=''
 for(let k=6;k>=0;k--)s+=(A[F+off+k]>=32&&A[F+off+k]<=126)?String.fromCharCode(A[F+off+k]*1):''
 for(let k=6;k>=0;k--)s+=(A[F+off+8+k]>=32&&A[F+off+8+k]<=126)?String.fromCharCode(A[F+off+8+k]*1):''
-W(e,s||'(empty)')
+val=s||'(empty)'
 }else if(ty=='model'){
 let s=''
 for(let qi=0;qi<10;qi++)for(let k=6;k>=0;k--)s+=(A[F+off+qi*8+k]>=32&&A[F+off+qi*8+k]<=126)?String.fromCharCode(A[F+off+qi*8+k]*1):''
-W(e,s.trim()||'(empty)')
+val=s.trim()||'(empty)'
 }else if(ty=='yyww'){
 let fq=FarmVal(off),s=''
 for(let k=3;k>=0;k--)s+=(A[F+off+k]>=32&&A[F+off+k]<=126)?String.fromCharCode(A[F+off+k]*1):'?'
-W(e,fq.hex+(fq.sup?' (20'+s.slice(0,2)+' week '+s.slice(2,4)+')':' (not supported)'))
+val=fq.hex+(fq.sup?' (20'+s.slice(0,2)+' week '+s.slice(2,4)+')':' (not supported)')
 }else if(ty=='rectype'){
 let sb=A[F+off]*1
-W(e,U(sb,1)+' ('+(sb&1?'SMR':(sb&2?'CMR':'unspecified'))+')')
+val=U(sb,1)+' ('+(sb&1?'SMR':(sb&2?'CMR':'unspecified'))+')'
 }else if(ty=='bool'){
 let fq=FarmVal(off)
-W(e,fq.hex+' ('+(fq.dv==1n?'depopped':'not depopped')+')')
+val=fq.hex+' ('+(fq.dv==1n?'depopped':'not depopped')+')'
 }else if(ty=='hr'){
 let fq=FarmVal(off)
-W(e,fq.hex+(fq.sup?' ('+Cx(fq.dv)+'h = '+Cx(fq.dv/24n)+'d '+(fq.dv%24n)+'h)':' (not supported)'))
+val=fq.hex+(fq.sup?' ('+Cx(fq.dv)+'h = '+Cx(fq.dv/24n)+'d '+(fq.dv%24n)+'h)':' (not supported)')
 }else if(ty=='min'){
 let fq=FarmVal(off)
-W(e,fq.hex+(fq.sup?' ('+Cx(fq.dv)+' min)':' (not supported)'))
+val=fq.hex+(fq.sup?' ('+Cx(fq.dv)+' min)':' (not supported)')
 }else if(ty=='temp'){
 let fq=FarmVal(off),v=Number(fq.dv&0xFFFFn),sv=v>32767?v-65536:v
-W(e,fq.hex+(fq.sup?' ('+sv+'\u00b0C)':' (not supported)'))
+val=fq.hex+(fq.sup?' ('+sv+'\u00b0C)':' (not supported)')
 }else if(ty=='gb'){
 let fq=FarmVal(off),by=fq.dv*512n,gi=by/1000000000n,gf=(by%1000000000n)*100n/1000000000n
-W(e,fq.hex+(fq.sup?' ('+Cx(fq.dv)+' sectors, '+Cx(gi)+'.'+(gf<10n?'0':'')+gf+' GB)':' (not supported)'))
+val=fq.hex+(fq.sup?' ('+Cx(fq.dv)+' sectors, '+Cx(gi)+'.'+(gf<10n?'0':'')+gf+' GB)':' (not supported)')
 }else if(ty=='gbbytes'){
 let fq=FarmVal(off),gi=fq.dv/1000000000n,gf=(fq.dv%1000000000n)*100n/1000000000n
-W(e,fq.hex+(fq.sup?' ('+Cx(gi)+'.'+(gf<10n?'0':'')+gf+' GB)':' (not supported)'))
+val=fq.hex+(fq.sup?' ('+Cx(gi)+'.'+(gf<10n?'0':'')+gf+' GB)':' (not supported)')
 }else if(ty=='formfactor'){
 let fq=FarmVal(off),ff=Number(fq.dv&0xFn),ffNames=['Not reported','5.25 inch','3.5 inch','2.5 inch','1.8 inch','Less than 1.8 inch']
-W(e,fq.hex+(fq.sup?' ('+(ffNames[ff]||'Reserved')+')':' (not supported)'))
+val=fq.hex+(fq.sup?' ('+(ffNames[ff]||'Reserved')+')':' (not supported)')
 }else if(ty=='ms'){
 let fq=FarmVal(off)
-W(e,fq.hex+(fq.sup?' ('+Cx(fq.dv)+' ms)':' (not supported)'))
+val=fq.hex+(fq.sup?' ('+Cx(fq.dv)+' ms)':' (not supported)')
 }else if(ty=='hrcap'){
 let fq=FarmVal(off)
-if(fq.dv>438000n)W(e,fq.hex+(fq.sup?' ('+Cx(fq.dv)+'h \u2014 unusually large value, may not be populated by this firmware)':' (not supported)'))
-else W(e,fq.hex+(fq.sup?' ('+Cx(fq.dv)+'h = '+Cx(fq.dv/24n)+'d '+(fq.dv%24n)+'h)':' (not supported)'))
+if(fq.dv>438000n)val=fq.hex+(fq.sup?' ('+Cx(fq.dv)+'h \u2014 unusually large value, may not be populated by this firmware)':' (not supported)')
+else val=fq.hex+(fq.sup?' ('+Cx(fq.dv)+'h = '+Cx(fq.dv/24n)+'d '+(fq.dv%24n)+'h)':' (not supported)')
 }else if(ty=='unitless'){
 let fq=FarmVal(off)
-W(e,fq.hex+(fq.sup?' ('+Cx(fq.dv)+', unit not specified in spec)':' (not supported)'))
+val=fq.hex+(fq.sup?' ('+Cx(fq.dv)+', unit not specified in spec)':' (not supported)')
 }else if(ty=='smart_raw'){
 let fq=FarmVal(off)
-W(e,fq.hex+(fq.sup?' ('+Cx(fq.dv)+' raw count, vendor-specific encoding)':' (not supported)'))
+val=fq.hex+(fq.sup?' ('+Cx(fq.dv)+' raw count, vendor-specific encoding)':' (not supported)')
 }else if(ty=='smart_score'){
 let fq=FarmVal(off)
-W(e,fq.hex+(fq.sup?' ('+Cx(fq.dv)+' \u2014 SMART normalized score, 1-253 scale, higher is better)':' (not supported)'))
+val=fq.hex+(fq.sup?' ('+Cx(fq.dv)+' \u2014 SMART normalized score, 1-253 scale, higher is better)':' (not supported)')
 }else{
 let fq=FarmVal(off)
-W(e,fq.hex+(fq.sup?' ('+Cx(fq.dv)+')':' (not supported)'))
+val=fq.hex+(fq.sup?' ('+Cx(fq.dv)+')':' (not supported)')
 }
-}
+qr+="<tr id=r"+ix+"><td>"+nm+"</td><td>"+U(off,2)+"</td><td>"+val+"</td></tr>"
 })
+W(G('rTab'),qr)
 W(G('ruSide'),`<b>Seagate FARM (Field Accessible Reliability Metrics) Log, Page `+pg+`</b> \u2014 SATA Log 0xA6 (FARM Specification Rev 4.23.1)<br>
 `+(pg==0?`This is the FARM Header page, identifying the log structure and validity (log size, page size, max heads supported, etc).`:``)+`Each field is an 8-byte (Qword) value. The <b>last byte</b> (shown first in the hex here) is a status byte: bit 7 = Field Supported, bit 6 = Field Valid, remaining bits reserved. The other 7 bytes hold the actual field value.<br>
 Fields shown as "(not supported)" have the Field Supported bit clear \u2014 the drive/firmware does not populate this field.<br>
