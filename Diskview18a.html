@@ -54,7 +54,7 @@ td button:not(.nbtn),th button{width:20px;height:20px}
 </div>
 <div style='background:#e8f2fb;border-bottom:1px solid #1a5fa8;padding:5px 12px;font-size:11px;color:#0d3d6e;display:flex;align-items:center;justify-content:space-between'>
   <span>&#128274; <b>Privacy:</b> All processing is performed locally in your browser. No file data is transmitted to any server. &copy; 2026 <a href='https://ulinktech.com' target='_blank' style='color:#0d3d6e'>ULINK Technology, Inc.</a></span>
-  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260722g</span>
+  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260722h</span>
 </div>
 <input id='local'type='file'style='display:none'onchange='OpFl()'>
 <input id='local2'type='file'style='display:none'onchange='OpFl2()'>
@@ -2421,14 +2421,23 @@ let entry=ScanEntries[k],seqNum=k+1
 let file
 try{file=entry.file||(await entry.handle.getFile())}catch(e){k+=dir;continue}
 // ── Header-only read (8KB) for interface check — fast for non-matching files ──
-let fIntf=''
+let fIntf='',fHdrTxt=''
 try{
 let hdrBuf=await file.slice(0,Math.min(file.size,8192)).arrayBuffer()
 let ar=new Uint8Array(hdrBuf),txt='',j=0
 while(j<ar.length&&j<8000){let c=ar[j++];if(c>0&&c<128)txt+=String.fromCharCode(c);if(txt.endsWith('END'))break}
 let im=txt.match(/Interface:\s*([^\n]+)/);fIntf=im?im[1].trim():''
+fHdrTxt=txt
 }catch(e){k+=dir;continue}
 if(ScanIntf&&fIntf&&fIntf!==ScanIntf){k+=dir;continue}
+// Skip files that don't contain the target template — checked here (cheap, header-only
+// text already fetched above) rather than after the full decode+render. Previously a
+// mismatched file (e.g. an older/smaller drive without this template) would briefly
+// flash on screen before the scan detected the mismatch and moved on.
+if(ScanRawT>=0){
+let templateNums=[...fHdrTxt.matchAll(/template:\s*(\d+)/gi)].map(m=>parseInt(m[1],10))
+if(!templateNums.includes(ScanRawT)){k+=dir;continue}
+}
 // Skip abnormally large outlier files — a normal drive dump is well under this size,
 // and decoding something far bigger (e.g. a stray non-dump .bin) would freeze the
 // browser on the synchronous byte-by-byte decode below, regardless of scan speed.
