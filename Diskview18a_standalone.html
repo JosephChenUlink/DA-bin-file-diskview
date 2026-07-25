@@ -26,6 +26,7 @@ g{background:#90EE90}
 #tmpl{display:inline-block;min-width:140px;text-align:center}
 #cmpBtn{display:inline-block;min-width:78px;text-align:center}
 #scanWrap{display:inline-flex;align-items:center;min-width:172px}
+#scanBtn{width:172px;text-align:center}
 h{background:magenta}
 hr,c{background:#fefa2a}
 .g1{font-size:16px;height:32px;margin-top:10px}
@@ -54,7 +55,7 @@ td button:not(.nbtn),th button{width:20px;height:20px}
 </div>
 <div style='background:#e8f2fb;border-bottom:1px solid #1a5fa8;padding:5px 12px;font-size:11px;color:#0d3d6e;display:flex;align-items:center;justify-content:space-between'>
   <span>&#128274; <b>Privacy:</b> All processing is performed locally in your browser. No file data is transmitted to any server. &copy; 2026 <a href='https://ulinktech.com' target='_blank' style='color:#0d3d6e'>ULINK Technology, Inc.</a></span>
-  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260722h</span>
+  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260722i</span>
 </div>
 <input id='local'type='file'style='display:none'onchange='OpFl()'>
 <input id='local2'type='file'style='display:none'onchange='OpFl2()'>
@@ -67,7 +68,7 @@ td button:not(.nbtn),th button{width:20px;height:20px}
 <div id='dvTitle2'style='display:none'></div>
 <div id='dvTitle'style='font-weight:bold;font-size:14px;margin:0 0 6px 0'></div>
 <table style='table-layout:fixed;width:100%'>
-<tr><td style='font-size:12px;white-space:nowrap;vertical-align:top;width:360px'class='cell'><div id='tmplName'style='font-weight:bold;text-align:center;padding:2px'></div><div id='lTabWrap'style='overflow-y:auto;overflow-x:visible;height:630px'><table id='lTab'></table></div></td>
+<tr><td style='font-size:12px;white-space:nowrap;vertical-align:top;width:360px;max-width:360px;overflow:hidden'class='cell'><div id='tmplName'style='font-weight:bold;text-align:center;padding:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap'></div><div id='lTabWrap'style='overflow-y:auto;overflow-x:hidden;height:630px;width:100%'><table id='lTab'></table></div></td>
   <td style='font-size:12px;vertical-align:top'><div id='ruSide'style='overflow:auto;height:258px;width:100%'class='cell'></div>
   <div id='split'style='height:5px;cursor:row-resize'></div>
   <div id='rdSide'style='overflow:auto;height:363px;width:100%'class='cell'></div></td>
@@ -2634,16 +2635,32 @@ if((ScanActive||ScanStepMode)&&!_ScanLoading&&!RevTimer)ScanRawT=ArIx[Tx*2]}
 ScanSetup=async()=>{
 // Called by "Scan" button (idle state) to initialize and start
 if(RevTimer){clearInterval(RevTimer);RevTimer=null;W(G('revBtn'),'Play')}
+// Show the Stop-capable control row immediately — file collection below can take a
+// while on large folders, and previously there was no way to cancel during that phase.
+ScanCollectAbort=false
+G('scanCtrl').style.display='inline-flex';G('scanBtn').style.display='none'
+G('s0').style.display='none';G('s1').style.display='none';G('s3').style.display='none';G('s4').style.display='none'
 let ready=await ScanEnsureReady()
-if(!ready)return
+G('s0').style.display='';G('s1').style.display='';G('s3').style.display='';G('s4').style.display=''
+if(!ready){
+// Cancelled picker, no files found, or collection was aborted — revert to idle button
+G('scanCtrl').style.display='none';G('scanBtn').style.display='inline'
+return
+}
 ScanActive=true;ScanStepMode=false;ScanDirection=1
-G('scanCtrl').style.display='inline-flex';G('scanBtn').style.display='none';G('s1').style.fontWeight='';G('s3').style.fontWeight='bold'
+G('s1').style.fontWeight='';G('s3').style.fontWeight='bold'
 _doScanStepDir(1)
 }
 
 ScanPlayFwd=async()=>{
 if(RevTimer){clearInterval(RevTimer);RevTimer=null;W(G('revBtn'),'Play')}
-if(!ScanEntries.length){let ready=await ScanEnsureReady();if(!ready)return}
+if(!ScanEntries.length){
+ScanCollectAbort=false
+G('s0').style.display='none';G('s1').style.display='none';G('s3').style.display='none';G('s4').style.display='none'
+let ready=await ScanEnsureReady()
+G('s0').style.display='';G('s1').style.display='';G('s3').style.display='';G('s4').style.display=''
+if(!ready)return
+}
 _ScanClearTimer()
 ScanActive=true;ScanStepMode=false;ScanDirection=1
 G('scanCtrl').style.display='inline-flex';G('scanBtn').style.display='none';G('s1').style.fontWeight='';G('s3').style.fontWeight='bold'
@@ -2652,7 +2669,13 @@ _doScanStepDir(1)
 
 ScanPlayBack=async()=>{
 if(RevTimer){clearInterval(RevTimer);RevTimer=null;W(G('revBtn'),'Play')}
-if(!ScanEntries.length){let ready=await ScanEnsureReady();if(!ready)return}
+if(!ScanEntries.length){
+ScanCollectAbort=false
+G('s0').style.display='none';G('s1').style.display='none';G('s3').style.display='none';G('s4').style.display='none'
+let ready=await ScanEnsureReady()
+G('s0').style.display='';G('s1').style.display='';G('s3').style.display='';G('s4').style.display=''
+if(!ready)return
+}
 _ScanClearTimer()
 ScanActive=true;ScanStepMode=false;ScanDirection=-1
 G('scanCtrl').style.display='inline-flex';G('scanBtn').style.display='none';G('s3').style.fontWeight='';G('s1').style.fontWeight='bold'
@@ -2660,6 +2683,7 @@ _doScanStepDir(-1)
 }
 
 ScanStop=()=>{
+ScanCollectAbort=true
 _ScanClearTimer()
 ScanActive=false;ScanStepMode=false;ScanBinList=[];ScanEntries=[]
 // Save current dir as hint BEFORE clearing (preserves "last location" for next picker)
@@ -2683,7 +2707,7 @@ RevTimer=setInterval(()=>Adv(1),Number(G('revSpeed').value)*1000)
 // ── Scan: crawl folder, same template & interface, step or auto ──────────────
 let ScanEntries=[],ScanIdx=0,ScanTimer=null,ScanTimerRAF=false,ScanActive=false,ScanStepMode=false,
     ScanRawT=-1,ScanIntf='',ScanDirHandle=null,ScanFileHandle=null,ScanTotal=0,
-    _ScanLoading=false,ScanOrigBuf=null,ScanOrigName='',ScanLastBuf=null,ScanLastName='',ScanDirection=1
+    _ScanLoading=false,ScanOrigBuf=null,ScanOrigName='',ScanLastBuf=null,ScanLastName='',ScanDirection=1,ScanCollectAbort=false
 _ScanClearTimer=()=>{if(ScanTimer!==null){if(ScanTimerRAF)cancelAnimationFrame(ScanTimer);else clearTimeout(ScanTimer);ScanTimer=null;ScanTimerRAF=false}}
 
 // IndexedDB helpers for persistent directory handle
@@ -2751,8 +2775,10 @@ let _dotN=0,_collectN=0
 let _dotT=setInterval(()=>{_dotN=(_dotN+1)%4;W(G('nVer'),'⟳ Collecting'+'.'.repeat(_dotN+1)+' '+_collectN.toLocaleString()+' bin files found')},250)
 try{
 for await(const[name,handle]of ScanDirHandle.entries()){
+if(ScanCollectAbort)break
 if(handle.kind==='file'&&name.toLowerCase().endsWith('.bin')){ScanBinList.push({name,handle});_collectN++}
 }
+if(ScanCollectAbort){clearInterval(_dotT);W(G('nVer'),'');return false}
 ScanBinList.sort((a,b)=>a.name.localeCompare(b.name,undefined,{numeric:true}))
 clearInterval(_dotT)
 W(G('nVer'),'✓ '+ScanBinList.length.toLocaleString()+' bin files ready')
