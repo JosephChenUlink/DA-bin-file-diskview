@@ -55,7 +55,7 @@ td button:not(.nbtn),th button{width:20px;height:20px}
 </div>
 <div style='background:#e8f2fb;border-bottom:1px solid #1a5fa8;padding:5px 12px;font-size:11px;color:#0d3d6e;display:flex;align-items:center;justify-content:space-between'>
   <span>&#128274; <b>Privacy:</b> All processing is performed locally in your browser. No file data is transmitted to any server. &copy; 2026 <a href='https://ulinktech.com' target='_blank' style='color:#0d3d6e'>ULINK Technology, Inc.</a></span>
-  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260722l</span>
+  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260722m</span>
 </div>
 <input id='local'type='file'style='display:none'onchange='OpFl()'>
 <input id='local2'type='file'style='display:none'onchange='OpFl2()'>
@@ -2860,8 +2860,14 @@ let k=startIdx,found=false
 for(let i=0;i<ScanTotal;i++){
 if(k<0)k+=ScanTotal
 if(k>=ScanTotal)k-=ScanTotal
-// Yield to UI every 20 iterations so browser can repaint/respond
-if(i>0&&i%20===0)await new Promise(r=>setTimeout(r,0))
+// Yield to UI every 20 iterations so browser can repaint/respond, and show live
+// progress — previously the status text only updated when a match was found, so a
+// long run of non-matching files (e.g. searching a template that's rare among NVMe
+// drives) made the screen look frozen even though it was actively working.
+if(i>0&&i%20===0){
+W(G('nVer'),`🔍 Searching… ${ScanExaminedCount.toLocaleString()} scanned, ${ScanMatchedCount.toLocaleString()} matched`)
+await new Promise(r=>setTimeout(r,0))
+}
 if(!ScanActive&&!ScanStepMode)return  // stopped during search
 let entry=ScanEntries[k],seqNum=k+1
 ScanExaminedCount++
