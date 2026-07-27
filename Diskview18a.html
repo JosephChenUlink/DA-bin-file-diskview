@@ -55,7 +55,7 @@ td button:not(.nbtn),th button{width:20px;height:20px}
 </div>
 <div style='background:#e8f2fb;border-bottom:1px solid #1a5fa8;padding:5px 12px;font-size:11px;color:#0d3d6e;display:flex;align-items:center;justify-content:space-between'>
   <span>&#128274; <b>Privacy:</b> All processing is performed locally in your browser. No file data is transmitted to any server. &copy; 2026 <a href='https://ulinktech.com' target='_blank' style='color:#0d3d6e'>ULINK Technology, Inc.</a></span>
-  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260727a</span>
+  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260727b</span>
 </div>
 <input id='local'type='file'style='display:none'onchange='OpFl()'>
 <input id='local2'type='file'style='display:none'onchange='OpFl2()'>
@@ -2300,7 +2300,7 @@ RevTimer=setInterval(()=>Adv(1),Number(G('revSpeed').value)*1000)
 // ── Scan: crawl folder, same template & interface, step or auto ──────────────
 let ScanEntries=[],ScanIdx=0,ScanTimer=null,ScanTimerRAF=false,ScanActive=false,ScanStepMode=false,
     ScanRawT=-1,ScanIntf='',ScanDirHandle=null,ScanFileHandle=null,ScanTotal=0,
-    _ScanLoading=false,ScanOrigBuf=null,ScanOrigName='',ScanLastBuf=null,ScanLastName='',ScanDirection=1,ScanCollectAbort=false,ScanMatchedCount=0,ScanExaminedCount=0
+    _ScanLoading=false,ScanOrigBuf=null,ScanOrigName='',ScanLastBuf=null,ScanLastName='',ScanDirection=1,ScanCollectAbort=false,ScanMatchedCount=0,ScanExaminedCount=0,_ScanDirsVisited=0,_ScanFilesSeen=0,_ScanWalkErrors=[]
 _ScanClearTimer=()=>{if(ScanTimer!==null){if(ScanTimerRAF)cancelAnimationFrame(ScanTimer);else clearTimeout(ScanTimer);ScanTimer=null;ScanTimerRAF=false}}
 
 // IndexedDB helpers for persistent directory handle
@@ -2325,13 +2325,28 @@ async loadFileHint(){return this._get('fileHint')}
 // Recursively walk a directory and all subdirectories, yielding {name, handle} for each .bin file found.
 // 'name' includes the relative subfolder path (e.g. "sub/deeper/file.bin") so sorting and display stay meaningful.
 _ScanWalkDir=async function*(dirHandle,prefix=''){
-for await(const[name,handle]of dirHandle.entries()){
+_ScanDirsVisited++
+let entries
+try{
+entries=dirHandle.entries()
+}catch(e){
+_ScanWalkErrors.push((prefix||'(root)')+' — could not read: '+e.message)
+return
+}
+try{
+for await(const[name,handle]of entries){
 if(ScanCollectAbort)return
 if(handle.kind==='directory'){
 yield*_ScanWalkDir(handle,prefix+name+'/')
-}else if(handle.kind==='file'&&name.toLowerCase().endsWith('.bin')){
+}else if(handle.kind==='file'){
+_ScanFilesSeen++
+if(name.toLowerCase().endsWith('.bin')){
 yield{name:prefix+name,handle}
 }
+}
+}
+}catch(e){
+_ScanWalkErrors.push((prefix||'(root)')+' — iteration error: '+e.message)
 }
 }
 
@@ -2377,8 +2392,9 @@ ScanBinList=[]  // reset to re-collect
 }
 // Collect .bin files from the folder and all subfolders
 if(!ScanBinList.length){
+_ScanDirsVisited=0;_ScanFilesSeen=0;_ScanWalkErrors=[]
 let _dotN=0,_collectN=0
-let _dotT=setInterval(()=>{_dotN=(_dotN+1)%4;W(G('nVer'),'⟳ Collecting'+'.'.repeat(_dotN+1)+' '+_collectN.toLocaleString()+' bin files found')},250)
+let _dotT=setInterval(()=>{_dotN=(_dotN+1)%4;W(G('nVer'),'⟳ Collecting'+'.'.repeat(_dotN+1)+' '+_collectN.toLocaleString()+' bin files found ('+_ScanDirsVisited.toLocaleString()+' folders checked)')},250)
 try{
 for await(const{name,handle}of _ScanWalkDir(ScanDirHandle)){
 if(ScanCollectAbort)break
@@ -2387,10 +2403,15 @@ ScanBinList.push({name,handle});_collectN++
 if(ScanCollectAbort){clearInterval(_dotT);W(G('nVer'),'');return false}
 ScanBinList.sort((a,b)=>a.name.localeCompare(b.name,undefined,{numeric:true}))
 clearInterval(_dotT)
-W(G('nVer'),'✓ '+ScanBinList.length.toLocaleString()+' bin files ready (including subfolders)')
+W(G('nVer'),'✓ '+ScanBinList.length.toLocaleString()+' bin files ready ('+_ScanDirsVisited.toLocaleString()+' folders, '+_ScanFilesSeen.toLocaleString()+' total files checked)')
 }catch(e){clearInterval(_dotT);ScanDirHandle=null;await _ScanDB.clear();W(G('nVer'),'Folder access lost. Try Scan again.');return false}
 }
-if(!ScanBinList.length){alert('No .bin files found in the selected folder (including subfolders).\n\nClick Scan again to choose a different folder.');W(G('nVer'),'');ScanDirHandle=null;await _ScanDB.clear();return false}
+if(!ScanBinList.length){
+let diag=`Checked ${_ScanDirsVisited.toLocaleString()} folder(s) and ${_ScanFilesSeen.toLocaleString()} file(s) total.`
+if(_ScanWalkErrors.length)diag+=`\n\n${_ScanWalkErrors.length} folder(s) could not be read:\n`+_ScanWalkErrors.slice(0,5).join('\n')+(_ScanWalkErrors.length>5?`\n…and ${_ScanWalkErrors.length-5} more`:'')
+alert('No .bin files found in the selected folder (including subfolders).\n\n'+diag+'\n\nClick Scan again to choose a different folder.')
+W(G('nVer'),'');ScanDirHandle=null;await _ScanDB.clear();return false
+}
 
 // Determine what we're filtering for, from the currently-open file
 ScanRawT=ArIx&&ArIx.length>0?ArIx[Tx*2]:-1
