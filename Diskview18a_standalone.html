@@ -56,8 +56,8 @@ td button:not(.nbtn),th button{width:20px;height:20px}
 <div style='background:#e8f2fb;border-bottom:1px solid #1a5fa8;padding:5px 12px;font-size:11px;color:#0d3d6e;display:flex;align-items:center;justify-content:space-between'>
   <span>&#128274; <b>Privacy:</b> All processing is performed locally in your browser. No file data is transmitted to any server. &copy; 2026 <a href='https://ulinktech.com' target='_blank' style='color:#0d3d6e'>ULINK Technology, Inc.</a></span>
   <span style='display:flex;align-items:center;gap:8px'>
-  <span id='lifetimeStats' title='Cumulative matched files across all Scan clicks this session' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
-  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260727h</span>
+  <span id='lifetimeStats' title='How many times a template has been displayed while stepping/playing through results, across all Scan clicks this session' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
+  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260727i</span>
   </span>
 </div>
 <input id='local'type='file'style='display:none'onchange='OpFl()'>
@@ -2714,7 +2714,7 @@ RevTimer=setInterval(()=>Adv(1),Number(G('revSpeed').value)*1000)
 let ScanEntries=[],ScanIdx=0,ScanTimer=null,ScanTimerRAF=false,ScanActive=false,ScanStepMode=false,
     ScanRawT=-1,ScanIntf='',ScanDirHandle=null,ScanFileHandle=null,ScanTotal=0,
     _ScanLoading=false,ScanOrigBuf=null,ScanOrigName='',ScanLastBuf=null,ScanLastName='',ScanDirection=1,ScanCollectAbort=false,ScanMatchedCount=0,ScanExaminedCount=0,_ScanDirsVisited=0,_ScanFilesSeen=0,_ScanWalkErrors=[],_ScanExtCounts={},_ScanSampleNames=[],
-    _ScanLifetimeScanned=0,_ScanLifetimeMatched=0,_ScanLifetimeRuns=0
+    _ScanLifetimeDisplayed=0,_ScanLifetimeRuns=0
 _ScanClearTimer=()=>{if(ScanTimer!==null){if(ScanTimerRAF)cancelAnimationFrame(ScanTimer);else clearTimeout(ScanTimer);ScanTimer=null;ScanTimerRAF=false}}
 
 // IndexedDB helpers for persistent directory handle
@@ -2950,12 +2950,12 @@ clearInterval(_fT)
 }catch(e){clearInterval(_fT);W(G('nVer'),'Error while filtering. Try Scan again.');return false}
 
 if(!_fList.length){
-_ScanLifetimeRuns++;_ScanLifetimeScanned+=ScanBinList.length
-W(G('lifetimeStats'),`Matched: ${_ScanLifetimeMatched.toLocaleString()} (${_ScanLifetimeRuns} scan${_ScanLifetimeRuns===1?'':'s'})`)
+_ScanLifetimeRuns++
+W(G('lifetimeStats'),`Displayed: ${_ScanLifetimeDisplayed.toLocaleString()} (${_ScanLifetimeRuns} scan${_ScanLifetimeRuns===1?'':'s'})`)
 W(G('nVer'),`No files matching this template/interface (checked ${ScanBinList.length.toLocaleString()} files). Try a different template, or click Scan again to choose a different folder.`);return false}
 
-_ScanLifetimeRuns++;_ScanLifetimeScanned+=ScanBinList.length;_ScanLifetimeMatched+=_fList.length
-W(G('lifetimeStats'),`Matched: ${_ScanLifetimeMatched.toLocaleString()} (${_ScanLifetimeRuns} scan${_ScanLifetimeRuns===1?'':'s'})`)
+_ScanLifetimeRuns++
+W(G('lifetimeStats'),`Displayed: ${_ScanLifetimeDisplayed.toLocaleString()} (${_ScanLifetimeRuns} scan${_ScanLifetimeRuns===1?'':'s'})`)
 ScanEntries=_fList
 ScanTotal=ScanEntries.length;ScanIdx=0;ScanMatchedCount=0;ScanExaminedCount=ScanBinList.length
 W(G('nVer'),'')
@@ -3051,6 +3051,8 @@ if(ScanActive)_ScanScheduleNext()
 return
 }
 ScanMatchedCount++
+_ScanLifetimeDisplayed++
+W(G('lifetimeStats'),`Displayed: ${_ScanLifetimeDisplayed.toLocaleString()} (${_ScanLifetimeRuns} scan${_ScanLifetimeRuns===1?'':'s'})`)
 ScanIdx=k+1;if(ScanIdx>=ScanTotal)ScanIdx=0
 let modeLabel=(ScanStepMode?(dir<0?' ◀ Back':' ▶ Step'):'')
 let speedNote=(ScanActive&&ScanTimerRAF)?' ⚡full speed':''
