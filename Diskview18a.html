@@ -56,8 +56,9 @@ td button:not(.nbtn),th button{width:20px;height:20px}
 <div style='background:#e8f2fb;border-bottom:1px solid #1a5fa8;padding:5px 12px;font-size:11px;color:#0d3d6e;display:flex;align-items:center;justify-content:space-between'>
   <span>&#128274; <b>Privacy:</b> All processing is performed locally in your browser. No file data is transmitted to any server. &copy; 2026 <a href='https://ulinktech.com' target='_blank' style='color:#0d3d6e'>ULINK Technology, Inc.</a></span>
   <span style='display:flex;align-items:center;gap:8px'>
+  <span id='scanElapsed' title='Time elapsed since the current scan started (resets on each Scan click)' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
   <span id='lifetimeStats' title='How many times a template has been displayed while stepping/playing through results, across all Scan clicks this session' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
-  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260727l</span>
+  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260728a</span>
   </span>
 </div>
 <input id='local'type='file'style='display:none'onchange='OpFl()'>
@@ -2239,6 +2240,11 @@ if(RevTimer){clearInterval(RevTimer);RevTimer=null;W(G('revBtn'),'Play')}
 // true lifetime total).
 _ScanLifetimeDisplayed=0;_SaveLifetimeStats()
 W(G('lifetimeStats'),`Displayed: 0 (${_ScanLifetimeRuns} scan${_ScanLifetimeRuns===1?'':'s'})`)
+// Reset and (re)start the elapsed-time clock for this scan
+_ScanStartTime=Date.now()
+if(_ScanElapsedTimer)clearInterval(_ScanElapsedTimer)
+_ScanElapsedTimer=setInterval(_UpdateScanElapsed,1000)
+_UpdateScanElapsed()
 // Show the Stop-capable control row immediately — file collection below can take a
 // while on large folders, and previously there was no way to cancel during that phase.
 ScanCollectAbort=false
@@ -2312,9 +2318,18 @@ RevTimer=setInterval(()=>Adv(1),Number(G('revSpeed').value)*1000)
 let ScanEntries=[],ScanIdx=0,ScanTimer=null,ScanTimerRAF=false,ScanActive=false,ScanStepMode=false,
     ScanRawT=-1,ScanIntf='',ScanDirHandle=null,ScanFileHandle=null,ScanTotal=0,
     _ScanLoading=false,ScanOrigBuf=null,ScanOrigName='',ScanLastBuf=null,ScanLastName='',ScanDirection=1,ScanCollectAbort=false,ScanMatchedCount=0,ScanExaminedCount=0,_ScanDirsVisited=0,_ScanFilesSeen=0,_ScanWalkErrors=[],_ScanExtCounts={},_ScanSampleNames=[],
-    _ScanLifetimeDisplayed=(()=>{try{return parseInt(localStorage.getItem('dv_lifetimeDisplayed'))||0}catch(e){return 0}})(),_ScanLifetimeRuns=(()=>{try{return parseInt(localStorage.getItem('dv_lifetimeRuns'))||0}catch(e){return 0}})()
+    _ScanLifetimeDisplayed=(()=>{try{return parseInt(localStorage.getItem('dv_lifetimeDisplayed'))||0}catch(e){return 0}})(),_ScanLifetimeRuns=(()=>{try{return parseInt(localStorage.getItem('dv_lifetimeRuns'))||0}catch(e){return 0}})(),
+    _ScanStartTime=0,_ScanElapsedTimer=null
 _ScanClearTimer=()=>{if(ScanTimer!==null){if(ScanTimerRAF)cancelAnimationFrame(ScanTimer);else clearTimeout(ScanTimer);ScanTimer=null;ScanTimerRAF=false}}
 _SaveLifetimeStats=()=>{try{localStorage.setItem('dv_lifetimeDisplayed',_ScanLifetimeDisplayed);localStorage.setItem('dv_lifetimeRuns',_ScanLifetimeRuns)}catch(e){}}
+_UpdateScanElapsed=()=>{
+if(!_ScanStartTime)return
+let s=Math.floor((Date.now()-_ScanStartTime)/1000)
+let h=Math.floor(s/3600),m=Math.floor((s%3600)/60),sec=s%60
+let txt=h>0?`${h}h ${m}m ${sec}s`:(m>0?`${m}m ${sec}s`:`${sec}s`)
+let el=document.getElementById('scanElapsed')
+if(el)el.innerHTML=`⏱ ${txt}`
+}
 if(document.getElementById('lifetimeStats'))document.getElementById('lifetimeStats').innerHTML=`Displayed: ${_ScanLifetimeDisplayed.toLocaleString()} (${_ScanLifetimeRuns} scan${_ScanLifetimeRuns===1?'':'s'})`
 
 // IndexedDB helpers for persistent directory handle
@@ -2339,10 +2354,13 @@ async loadFileHint(){return this._get('fileHint')}
 // Recursively walk a directory and all subdirectories, yielding {name, handle} for each .bin file found.
 // 'name' includes the relative subfolder path (e.g. "sub/deeper/file.bin") so sorting and display stay meaningful.
 _ReadZipEntryBytes=async(zipHandle,entryName)=>{
+if(zipHandle!==_ZipCacheHandle){
 let zipFile=zipHandle.getFile?await zipHandle.getFile():zipHandle
 let zipBuf=new Uint8Array(await zipFile.arrayBuffer())
-let result=fflate.unzipSync(zipBuf,{filter:f=>f.name===entryName})
-return result[entryName]||null
+_ZipCacheData=fflate.unzipSync(zipBuf,{filter:f=>_IsBinLike(f.name)})
+_ZipCacheHandle=zipHandle
+}
+return _ZipCacheData[entryName]||null
 }
 
 _IsBinLike=(name)=>{
