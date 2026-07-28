@@ -58,7 +58,7 @@ td button:not(.nbtn),th button{width:20px;height:20px}
   <span style='display:flex;align-items:center;gap:8px'>
   <span id='scanElapsed' title='Time elapsed since the current scan started (resets on each Scan click)' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
   <span id='lifetimeStats' title='How many times a template has been displayed while stepping/playing through results, across all Scan clicks this session' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
-  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260728a</span>
+  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260728b</span>
   </span>
 </div>
 <input id='local'type='file'style='display:none'onchange='OpFl()'>
@@ -2943,11 +2943,20 @@ if(!zipGroups.has(entry.zipHandle))zipGroups.set(entry.zipHandle,[])
 zipGroups.get(entry.zipHandle).push(entry)
 }else plainEntries.push(entry)
 }
+// Time-based yielding: only pause for the browser every ~50ms of actual work,
+// instead of every fixed N items. A fixed-count yield (e.g. every 25 items) can
+// fire tens of thousands of times on a large dataset — and if the tab is ever
+// backgrounded, Chrome clamps each yield to a MINIMUM of ~1 second, turning what
+// should be a quick pause into a massive, silent slowdown. Yielding by elapsed
+// time instead keeps the UI responsive while minimizing how many times we pay
+// that potential per-yield cost.
+let _lastYield=performance.now()
+let _maybeYield=async()=>{if(performance.now()-_lastYield>50){await new Promise(r=>setTimeout(r,0));_lastYield=performance.now()}}
 // Plain files — one read per file, same as before
 for(const entry of plainEntries){
 if(ScanCollectAbort){clearInterval(_fT);W(G('nVer'),'');return false}
 _fN++
-if(_fN%25===0)await new Promise(r=>setTimeout(r,0))
+await _maybeYield()
 let file
 try{file=entry.file||(await entry.handle.getFile())}catch(e){continue}
 if(file.size>8*1024*1024)continue  // outlier guard
@@ -2958,7 +2967,7 @@ if(_CheckHeaderMatch(headerBytes)){_fList.push(entry);_fMatched++}
 // Zip-contained entries — one read+decompress pass per ZIP, not per entry
 for(const[zipHandle,groupEntries]of zipGroups){
 if(ScanCollectAbort){clearInterval(_fT);W(G('nVer'),'');return false}
-await new Promise(r=>setTimeout(r,0))  // yield between zips
+await _maybeYield()
 let zipBuf
 try{
 let zipFile=await zipHandle.getFile()
@@ -2971,7 +2980,7 @@ decompressed=fflate.unzipSync(zipBuf,{filter:f=>wantedNames.has(f.name)})
 }catch(e){_fN+=groupEntries.length;continue}
 for(const entry of groupEntries){
 _fN++
-if(_fN%25===0)await new Promise(r=>setTimeout(r,0))
+await _maybeYield()
 let full=decompressed[entry.entryName]
 if(!full)continue
 if(full.length>8*1024*1024)continue  // outlier guard
