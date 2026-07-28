@@ -57,7 +57,7 @@ td button:not(.nbtn),th button{width:20px;height:20px}
   <span>&#128274; <b>Privacy:</b> All processing is performed locally in your browser. No file data is transmitted to any server. &copy; 2026 <a href='https://ulinktech.com' target='_blank' style='color:#0d3d6e'>ULINK Technology, Inc.</a></span>
   <span style='display:flex;align-items:center;gap:8px'>
   <span id='lifetimeStats' title='How many times a template has been displayed while stepping/playing through results, across all Scan clicks this session' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
-  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260727j</span>
+  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260727k</span>
   </span>
 </div>
 <input id='local'type='file'style='display:none'onchange='OpFl()'>
@@ -2234,6 +2234,11 @@ if((ScanActive||ScanStepMode)&&!_ScanLoading&&!RevTimer)ScanRawT=ArIx[Tx*2]}
 ScanSetup=async()=>{
 // Called by "Scan" button (idle state) to initialize and start
 if(RevTimer){clearInterval(RevTimer);RevTimer=null;W(G('revBtn'),'Play')}
+// Reset the display counter on every fresh Scan click (per user preference — this
+// counter tracks "how many templates displayed since I last clicked Scan", not a
+// true lifetime total).
+_ScanLifetimeDisplayed=0;_SaveLifetimeStats()
+W(G('lifetimeStats'),`Displayed: 0 (${_ScanLifetimeRuns} scan${_ScanLifetimeRuns===1?'':'s'})`)
 // Show the Stop-capable control row immediately — file collection below can take a
 // while on large folders, and previously there was no way to cancel during that phase.
 ScanCollectAbort=false
