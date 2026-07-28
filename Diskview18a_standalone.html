@@ -56,8 +56,8 @@ td button:not(.nbtn),th button{width:20px;height:20px}
 <div style='background:#e8f2fb;border-bottom:1px solid #1a5fa8;padding:5px 12px;font-size:11px;color:#0d3d6e;display:flex;align-items:center;justify-content:space-between'>
   <span>&#128274; <b>Privacy:</b> All processing is performed locally in your browser. No file data is transmitted to any server. &copy; 2026 <a href='https://ulinktech.com' target='_blank' style='color:#0d3d6e'>ULINK Technology, Inc.</a></span>
   <span style='display:flex;align-items:center;gap:8px'>
-  <span id='lifetimeStats' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
-  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260727g</span>
+  <span id='lifetimeStats' title='Cumulative matched files across all Scan clicks this session' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
+  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260727h</span>
   </span>
 </div>
 <input id='local'type='file'style='display:none'onchange='OpFl()'>
@@ -2951,11 +2951,11 @@ clearInterval(_fT)
 
 if(!_fList.length){
 _ScanLifetimeRuns++;_ScanLifetimeScanned+=ScanBinList.length
-W(G('lifetimeStats'),`Total: ${_ScanLifetimeScanned.toLocaleString()} scanned, ${_ScanLifetimeMatched.toLocaleString()} matched (${_ScanLifetimeRuns} scan${_ScanLifetimeRuns===1?'':'s'})`)
+W(G('lifetimeStats'),`Matched: ${_ScanLifetimeMatched.toLocaleString()} (${_ScanLifetimeRuns} scan${_ScanLifetimeRuns===1?'':'s'})`)
 W(G('nVer'),`No files matching this template/interface (checked ${ScanBinList.length.toLocaleString()} files). Try a different template, or click Scan again to choose a different folder.`);return false}
 
 _ScanLifetimeRuns++;_ScanLifetimeScanned+=ScanBinList.length;_ScanLifetimeMatched+=_fList.length
-W(G('lifetimeStats'),`Total: ${_ScanLifetimeScanned.toLocaleString()} scanned, ${_ScanLifetimeMatched.toLocaleString()} matched (${_ScanLifetimeRuns} scan${_ScanLifetimeRuns===1?'':'s'})`)
+W(G('lifetimeStats'),`Matched: ${_ScanLifetimeMatched.toLocaleString()} (${_ScanLifetimeRuns} scan${_ScanLifetimeRuns===1?'':'s'})`)
 ScanEntries=_fList
 ScanTotal=ScanEntries.length;ScanIdx=0;ScanMatchedCount=0;ScanExaminedCount=ScanBinList.length
 W(G('nVer'),'')
