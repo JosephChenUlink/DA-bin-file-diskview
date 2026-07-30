@@ -58,7 +58,7 @@ td button:not(.nbtn),th button{width:20px;height:20px}
   <span style='display:flex;align-items:center;gap:8px'>
   <span id='scanElapsed' title='Time elapsed since the current scan started (resets on each Scan click)' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
   <span id='lifetimeStats' title='How many times a template has been displayed while stepping/playing through results, across all Scan clicks this session' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
-  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260730b</span>
+  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260730c</span>
   </span>
 </div>
 <input id='local'type='file'style='display:none'onchange='OpFl()'>
@@ -2827,6 +2827,10 @@ fflate.unzipSync(zipBuf,{filter:f=>{if(_IsBinLike(f.name))innerNames.push(f.name
 for(const innerName of innerNames){
 _ScanFilesSeen++
 if(_ScanSampleNames.length<8)_ScanSampleNames.push(prefix+name+' » '+innerName)
+if(performance.now()-_ScanWalkLastYield>50){
+await new Promise(r=>setTimeout(r,0))
+_ScanWalkLastYield=performance.now()
+}
 yield{name:prefix+name+' » '+innerName,zipHandle:handle,entryName:innerName}
 }
 }catch(e){
