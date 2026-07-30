@@ -58,7 +58,7 @@ td button:not(.nbtn),th button{width:20px;height:20px}
   <span style='display:flex;align-items:center;gap:8px'>
   <span id='scanElapsed' title='Time elapsed since the current scan started (resets on each Scan click)' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
   <span id='lifetimeStats' title='How many times a template has been displayed while stepping/playing through results, across all Scan clicks this session' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
-  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260728b</span>
+  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260730a</span>
   </span>
 </div>
 <input id='local'type='file'style='display:none'onchange='OpFl()'>
@@ -2923,7 +2923,10 @@ let _CheckHeaderMatch=(headerBytes)=>{
 let txt='',j=0
 while(j<headerBytes.length&&j<8000){let c=headerBytes[j++];if(c>0&&c<128)txt+=String.fromCharCode(c);if(txt.endsWith('END'))break}
 let im2=txt.match(/Interface:\s*([^\n]+)/);let fIntf=im2?im2[1].trim():''
-if(ScanIntf&&fIntf&&fIntf!==ScanIntf)return false
+// Case-insensitive comparison — different DA tool/firmware versions report
+// interface names with inconsistent capitalization (e.g. 'NVMe' vs 'NVME'),
+// which an exact string match would silently and incorrectly reject.
+if(ScanIntf&&fIntf&&fIntf.toUpperCase()!==ScanIntf.toUpperCase())return false
 if(ScanRawT>=0){
 let templateNums=[...txt.matchAll(/template:\s*(\d+)/gi)].map(m=>parseInt(m[1],10))
 if(!templateNums.includes(ScanRawT))return false
