@@ -58,7 +58,7 @@ td button:not(.nbtn),th button{width:20px;height:20px}
   <span style='display:flex;align-items:center;gap:8px'>
   <span id='scanElapsed' title='Time elapsed since the current scan started (resets on each Scan click)' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
   <span id='lifetimeStats' title='How many times a template has been displayed while stepping/playing through results, across all Scan clicks this session' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
-  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260730a</span>
+  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260730b</span>
   </span>
 </div>
 <input id='local'type='file'style='display:none'onchange='OpFl()'>
@@ -2726,7 +2726,7 @@ let ScanEntries=[],ScanIdx=0,ScanTimer=null,ScanTimerRAF=false,ScanActive=false,
     ScanRawT=-1,ScanIntf='',ScanDirHandle=null,ScanFileHandle=null,ScanTotal=0,
     _ScanLoading=false,ScanOrigBuf=null,ScanOrigName='',ScanLastBuf=null,ScanLastName='',ScanDirection=1,ScanCollectAbort=false,ScanMatchedCount=0,ScanExaminedCount=0,_ScanDirsVisited=0,_ScanFilesSeen=0,_ScanWalkErrors=[],_ScanExtCounts={},_ScanSampleNames=[],
     _ScanLifetimeDisplayed=(()=>{try{return parseInt(localStorage.getItem('dv_lifetimeDisplayed'))||0}catch(e){return 0}})(),_ScanLifetimeRuns=(()=>{try{return parseInt(localStorage.getItem('dv_lifetimeRuns'))||0}catch(e){return 0}})(),
-    _ScanStartTime=0,_ScanElapsedTimer=null
+    _ScanStartTime=0,_ScanElapsedTimer=null,_ScanWalkLastYield=0
 _ScanClearTimer=()=>{if(ScanTimer!==null){if(ScanTimerRAF)cancelAnimationFrame(ScanTimer);else clearTimeout(ScanTimer);ScanTimer=null;ScanTimerRAF=false}}
 _SaveLifetimeStats=()=>{try{localStorage.setItem('dv_lifetimeDisplayed',_ScanLifetimeDisplayed);localStorage.setItem('dv_lifetimeRuns',_ScanLifetimeRuns)}catch(e){}}
 _UpdateScanElapsed=()=>{
@@ -2798,6 +2798,14 @@ return
 try{
 for await(const[name,handle]of entries){
 if(ScanCollectAbort)return
+// Time-based yield: give the browser a real breathing point periodically.
+// Without this, thousands of zips processed back-to-back with only natural
+// async yields (file reads) can still leave the tab unresponsive — a plain
+// setTimeout(0) macrotask here guarantees genuine paint/input opportunity.
+if(performance.now()-_ScanWalkLastYield>50){
+await new Promise(r=>setTimeout(r,0))
+_ScanWalkLastYield=performance.now()
+}
 if(handle.kind==='directory'){
 yield*_ScanWalkDir(handle,prefix+name+'/')
 }else if(handle.kind==='file'){
