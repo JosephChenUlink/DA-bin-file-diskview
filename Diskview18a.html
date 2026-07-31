@@ -58,7 +58,7 @@ td button:not(.nbtn),th button{width:20px;height:20px}
   <span style='display:flex;align-items:center;gap:8px'>
   <span id='scanElapsed' title='Time elapsed since the current scan started (resets on each Scan click)' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
   <span id='lifetimeStats' title='How many times a template has been displayed while stepping/playing through results, across all Scan clicks this session' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
-  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260730f</span>
+  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260730g</span>
   </span>
 </div>
 <input id='local'type='file'style='display:none'onchange='OpFl()'>
@@ -1146,31 +1146,37 @@ qr+="<tr"+(e==0?" class='c0'":'')+"><td>"+(e+1)+"</td><td>"+Cx(base)+"</td><td>"
 }
 if(skipped)qr+="<tr><td colspan='7' style='color:#777;font-style:italic'>"+Cx(skipped)+" empty Error Log "+(skipped==1?'entry':'entries')+" (all-zero) not shown</td></tr>"
 W(G('rTab'),qr)
-W(G('ruSide'),`<b>NVMe Error Information Log</b> (NVMe Base Spec \u00a75.14.1.1) \u2014 `+Cx(nEnt)+` entries allocated, `+Cx(nEnt-skipped)+` populated. Each entry is a 64-byte structure describing one internal controller error; the most recent error is generally entry 1. An all-zero entry is an unused slot.`)
+W(G('ruSide'),`<b>NVMe Error Information Log</b> (NVMe Base Spec \u00a75.14.1.1) \u2014 `+Cx(nEnt)+` entries allocated, `+Cx(nEnt-skipped)+` populated. Each entry is a 64-byte structure describing one internal controller error; the most recent error is generally entry 1. An all-zero entry is an unused slot.<br>
+<b>Status Field</b> (2 bytes, offset 12) \u2014 shown as <code>hex (SCT=n, SC=xx)</code>:<br>
+Bit 0 = Phase Tag (P); Bits 8:1 = Status Code (SC); Bits 11:9 = Status Code Type (SCT: 0=Generic Command Status, 1=Command Specific Status, 2=Media and Data Integrity Errors, 3=Path Related Status, 7=Vendor Specific); Bit 14 = More (additional info via Get Log Page); Bit 15 = Do Not Retry (DNR).<br>
+SCT=1/2/3/7 status codes are command- or vendor-specific \u2014 consult the NVMe Base Spec table for the relevant opcode to interpret SC beyond SCT=0 (Generic).`)
 }else{
 let entSize=28,hdrSize=4,nEnt=Math.floor((LenT-hdrSize)/entSize)
 ,qr=''
 let opStat=A[F+0]*1,comp=A[F+1]*1
 const opNames={0:'No self-test in progress',1:'Short device self-test in progress',2:'Extended device self-test in progress',0xe:'Vendor specific self-test in progress'}
-qr+="<tr><td colspan='2'>Current Self-test Operation</td><td>0</td><td>"+U(opStat,1)+' ('+(opNames[opStat&0xF]||'Reserved')+')'+"</td></tr>"
-qr+="<tr><td colspan='2'>Current Self-test Completion</td><td>1</td><td>"+U(comp,1)+' ('+(comp&0x7F)+'% complete)'+"</td></tr>"
-qr+="<tr class='c4'><th>Entry</th><th>Offset</th><th>Summary</th><th>POH</th><th>NSID</th><th>LBA</th><th>Status</th></tr>"
+,opStr=U(opStat,1)+' ('+(opNames[opStat&0xF]||'Reserved')+')'
+,compStr=U(comp,1)+' ('+(comp&0x7F)+'% complete)'
+qr+="<tr class='c4'><th>Entry</th><th>Offset</th><th>Result</th><th>Test Type</th><th>POH</th><th>NSID</th><th>LBA</th><th>Status</th></tr>"
 const codeNames={1:'Short',2:'Extended',0xe:'Vendor'}
 for(let e=0;e<nEnt;e++){
 let base=hdrSize+e*entSize
 if(NvmeAllZero(base,entSize)){skipped++;continue}
 let statusByte=Number(NvmeLE(base+0,1)),res=statusByte&0xF,code=(statusByte>>4)&0xF
-,summaryStr=U(statusByte,1)+' ('+(res==0?'No Error':'Error')+', '+(codeNames[code]||('Reserved('+code+')'))+')'
+,resultStr=statusByte==0x0F?'N/A':(U(statusByte,1)+' ('+(res==0?'No Error':'Error')+')')
+,testStr=statusByte==0x0F?'N/A':(codeNames[code]||('Reserved('+code+')'))
 ,poh=NvmeLE(base+4,8),pohStr=NvmeHex(base+4,3)+' ('+Cx(poh/24n)+'d '+(poh%24n)+'h)'
 ,nsidStr=NvmeHex(base+12,4)
-,lbaStr=NvmeHex(base+16,8)
+,lbaStr=NvmeHex(base+16,6)
 ,sct=Number(NvmeLE(base+24,1)),sc=Number(NvmeLE(base+25,1))
 ,statusStr=(sct||sc)?('SCT=0x'+U(sct,1)+', SC=0x'+U(sc,1)):'n/a'
-qr+="<tr"+(e==0?" class='c0'":'')+"><td>"+(e+1)+"</td><td>"+Cx(base)+"</td><td>"+summaryStr+"</td><td>"+pohStr+"</td><td>"+nsidStr+"</td><td>"+lbaStr+"</td><td>"+statusStr+"</td></tr>"
+qr+="<tr"+(e==0?" class='c0'":'')+"><td>"+(e+1)+"</td><td>"+Cx(base)+"</td><td>"+resultStr+"</td><td>"+testStr+"</td><td>"+pohStr+"</td><td>"+nsidStr+"</td><td>"+lbaStr+"</td><td>"+statusStr+"</td></tr>"
 }
-if(skipped)qr+="<tr><td colspan='7' style='color:#777;font-style:italic'>"+Cx(skipped)+" empty Self-test Log "+(skipped==1?'entry':'entries')+" (all-zero) not shown</td></tr>"
+if(skipped)qr+="<tr><td colspan='8' style='color:#777;font-style:italic'>"+Cx(skipped)+" empty Self-test Log "+(skipped==1?'entry':'entries')+" (all-zero) not shown</td></tr>"
 W(G('rTab'),qr)
-W(G('ruSide'),`<b>NVMe Device Self-test Log</b> (NVMe Base Spec \u00a75.14.1.7) \u2014 4-byte header plus up to `+Cx(nEnt)+` 28-byte Self-test Result Data Structures (most-recent-first), `+Cx(nEnt-skipped)+` populated.`)
+W(G('ruSide'),`<b>NVMe Device Self-test Log</b> (NVMe Base Spec \u00a75.14.1.7) \u2014 Current Self-test Operation (offset 0): `+opStr+`. Current Self-test Completion (offset 1): `+compStr+`.<br>
+4-byte header plus up to `+Cx(nEnt)+` 28-byte Self-test Result Data Structures (most-recent-first), `+Cx(nEnt-skipped)+` populated.<br>
+<b>Result / Test Type columns</b> \u2014 decoded from the Device Self-test Status byte's two nibbles. Result (low nibble, bits 3:0): 0=Completed without error, 1=Aborted by Self-test command, 2=Aborted by Controller Level Reset, 3=Aborted due to namespace removal, 4=Aborted due to Format NVM command, 5=Fatal or unknown error, 6=Completed with segment failure, 7=Completed with segment failure and unknown segment, 8=Aborted for unknown reason, 9=Aborted due to sanitize operation (condensed to "No Error" for 0, "Error" for any other defined value, alongside the raw hex byte). Test Type (high nibble, bits 7:4): 1=Short device self-test, 2=Extended device self-test, 0xE=Vendor specific. A status byte of 0x0F is shown as N/A in both columns (undefined/reserved combination, typically an unused or partially-initialized slot).`)
 }
 ArRange=[]
 Rows=Q('#rTab tr')
