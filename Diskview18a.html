@@ -58,7 +58,7 @@ td button:not(.nbtn),th button{width:20px;height:20px}
   <span style='display:flex;align-items:center;gap:8px'>
   <span id='scanElapsed' title='Time elapsed since the current scan started (resets on each Scan click)' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
   <span id='lifetimeStats' title='How many times a template has been displayed while stepping/playing through results, across all Scan clicks this session' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
-  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260730e</span>
+  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260730f</span>
   </span>
 </div>
 <input id='local'type='file'style='display:none'onchange='OpFl()'>
@@ -852,10 +852,11 @@ Q('#lTab td.adr').forEach((e,i)=>W(e,U(i*16,2)))
 ArRange=[]
 for(j=0;j<ArT.length;j++){if(ArT[j]==ArIx[ii*2])break}
 T=j+1
-G('rTab').className=(T==15?'ts15':(T>=10&&T<13?'t1012':([2,3,13,14,38,40,42,49,50,51,56,57].includes(T)?'':'wideitem')))
+G('rTab').className=(T==15?'ts15':(T>=10&&T<13?'t1012':([2,3,13,14,26,27,38,40,42,49,50,51,56,57].includes(T)?'':'wideitem')))
 
 if(T>58&&T<65){DpFARM()}
 else if(T>65&&Buf==null){}
+else if(T==26||T==27){DpNVMeLog()}
 else if(T>10&&T<16){
 if(T<13){
 W(G('ruSide'),`DCR: Device Control Register when the command was initiated.<br>
@@ -1111,6 +1112,67 @@ W(G('ruSide'),`<b>Seagate FARM (Field Accessible Reliability Metrics) Log, Page 
 `+(pg==0?`This is the FARM Header page, identifying the log structure and validity (log size, page size, max heads supported, etc).`:``)+`Each field is an 8-byte (Qword) value. The <b>last byte</b> (shown first in the hex here) is a status byte: bit 7 = Field Supported, bit 6 = Field Valid, remaining bits reserved. The other 7 bytes hold the actual field value.<br>
 Fields shown as "(not supported)" have the Field Supported bit clear \u2014 the drive/firmware does not populate this field.<br>
 <i>Note: byte-offset mapping is per the official spec; exact alignment may vary slightly by drive/firmware revision.</i>`)
+Rows=Q('#rTab tr')
+Rows.forEach((e,i)=>{if(i)e.addEventListener('click',z=>{HiLiRow(i);CkItemD(e)})})
+SyncH()
+}
+
+// NVMe Error Information Log (Template 104) and NVMe Device Self-test Log (Template 105).
+// Both are fixed-size repeating structures (NVMe Base Spec 5.14.1.1 / 5.14.1.7) that were
+// previously shown only as raw index/value pairs (single "Error Count" / "Power On Hours"
+// field per entry). This renders every named sub-field per entry, one row each, skipping
+// entries whose 64/28-byte block is entirely zero (unused Error Log slots on a healthy
+// drive, or unwritten Self-test Log slots) so the table isn't dominated by empty rows.
+NvmeHex=(off,len)=>{let s='';for(let k=len-1;k>=0;k--)s+=U(A[F+off+k]*1,1);return s}
+NvmeLE=(off,len)=>{let v=0n;for(let k=len-1;k>=0;k--)v=v*256n+BigInt(A[F+off+k]*1);return v}
+NvmeAllZero=(base,len)=>{for(let k=0;k<len;k++)if(A[F+base+k]*1!=0)return false;return true}
+DpNVMeLog=z=>{
+let isErr=T==26
+,Cx=n=>n.toString().replace(/\B(?=(\d{3})+(?!\d))/g,',')
+,skipped=0
+if(isErr){
+let entSize=64,nEnt=Math.floor(LenT/entSize)
+,qr="<tr class='c4'><th>Entry</th><th>Offset</th><th>Error Count</th><th>SQ/CID</th><th>Status</th><th>LBA</th><th>NSID</th></tr>"
+for(let e=0;e<nEnt;e++){
+let base=e*entSize
+if(NvmeAllZero(base,entSize)){skipped++;continue}
+let ec=NvmeLE(base+0,8),ecStr=NvmeHex(base+0,3)+' ('+Cx(ec)+')'
+,sqCid=NvmeHex(base+8,2)+'/'+NvmeHex(base+10,2)
+,statusRaw=Number(NvmeLE(base+12,2)),sc=(statusRaw>>1)&0xFF,sct=(statusRaw>>9)&0x7
+,statusStr=U(statusRaw,2)+' (SCT='+sct+', SC='+U(sc,1)+')'
+,lbaStr=NvmeHex(base+16,8)
+,nsidStr=NvmeHex(base+24,4)
+qr+="<tr"+(e==0?" class='c0'":'')+"><td>"+(e+1)+"</td><td>"+Cx(base)+"</td><td>"+ecStr+"</td><td>"+sqCid+"</td><td>"+statusStr+"</td><td>"+lbaStr+"</td><td>"+nsidStr+"</td></tr>"
+}
+if(skipped)qr+="<tr><td colspan='7' style='color:#777;font-style:italic'>"+Cx(skipped)+" empty Error Log "+(skipped==1?'entry':'entries')+" (all-zero) not shown</td></tr>"
+W(G('rTab'),qr)
+W(G('ruSide'),`<b>NVMe Error Information Log</b> (NVMe Base Spec \u00a75.14.1.1) \u2014 `+Cx(nEnt)+` entries allocated, `+Cx(nEnt-skipped)+` populated. Each entry is a 64-byte structure describing one internal controller error; the most recent error is generally entry 1. An all-zero entry is an unused slot.`)
+}else{
+let entSize=28,hdrSize=4,nEnt=Math.floor((LenT-hdrSize)/entSize)
+,qr=''
+let opStat=A[F+0]*1,comp=A[F+1]*1
+const opNames={0:'No self-test in progress',1:'Short device self-test in progress',2:'Extended device self-test in progress',0xe:'Vendor specific self-test in progress'}
+qr+="<tr><td colspan='2'>Current Self-test Operation</td><td>0</td><td>"+U(opStat,1)+' ('+(opNames[opStat&0xF]||'Reserved')+')'+"</td></tr>"
+qr+="<tr><td colspan='2'>Current Self-test Completion</td><td>1</td><td>"+U(comp,1)+' ('+(comp&0x7F)+'% complete)'+"</td></tr>"
+qr+="<tr class='c4'><th>Entry</th><th>Offset</th><th>Summary</th><th>POH</th><th>NSID</th><th>LBA</th><th>Status</th></tr>"
+const codeNames={1:'Short',2:'Extended',0xe:'Vendor'}
+for(let e=0;e<nEnt;e++){
+let base=hdrSize+e*entSize
+if(NvmeAllZero(base,entSize)){skipped++;continue}
+let statusByte=Number(NvmeLE(base+0,1)),res=statusByte&0xF,code=(statusByte>>4)&0xF
+,summaryStr=U(statusByte,1)+' ('+(res==0?'No Error':'Error')+', '+(codeNames[code]||('Reserved('+code+')'))+')'
+,poh=NvmeLE(base+4,8),pohStr=NvmeHex(base+4,3)+' ('+Cx(poh/24n)+'d '+(poh%24n)+'h)'
+,nsidStr=NvmeHex(base+12,4)
+,lbaStr=NvmeHex(base+16,8)
+,sct=Number(NvmeLE(base+24,1)),sc=Number(NvmeLE(base+25,1))
+,statusStr=(sct||sc)?('SCT=0x'+U(sct,1)+', SC=0x'+U(sc,1)):'n/a'
+qr+="<tr"+(e==0?" class='c0'":'')+"><td>"+(e+1)+"</td><td>"+Cx(base)+"</td><td>"+summaryStr+"</td><td>"+pohStr+"</td><td>"+nsidStr+"</td><td>"+lbaStr+"</td><td>"+statusStr+"</td></tr>"
+}
+if(skipped)qr+="<tr><td colspan='7' style='color:#777;font-style:italic'>"+Cx(skipped)+" empty Self-test Log "+(skipped==1?'entry':'entries')+" (all-zero) not shown</td></tr>"
+W(G('rTab'),qr)
+W(G('ruSide'),`<b>NVMe Device Self-test Log</b> (NVMe Base Spec \u00a75.14.1.7) \u2014 4-byte header plus up to `+Cx(nEnt)+` 28-byte Self-test Result Data Structures (most-recent-first), `+Cx(nEnt-skipped)+` populated.`)
+}
+ArRange=[]
 Rows=Q('#rTab tr')
 Rows.forEach((e,i)=>{if(i)e.addEventListener('click',z=>{HiLiRow(i);CkItemD(e)})})
 SyncH()
