@@ -58,7 +58,7 @@ td button:not(.nbtn),th button{width:20px;height:20px}
   <span style='display:flex;align-items:center;gap:8px'>
   <span id='scanElapsed' title='Time elapsed since the current scan started (resets on each Scan click)' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
   <span id='lifetimeStats' title='How many times a template has been displayed while stepping/playing through results, across all Scan clicks this session' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
-  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260730d</span>
+  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260730e</span>
   </span>
 </div>
 <input id='local'type='file'style='display:none'onchange='OpFl()'>
@@ -636,6 +636,7 @@ ix=s.indexOf("length:",ix)
 ix1=s.indexOf("\n",ix)
 len=s.substr(ix+8,ix1-ix-8)-0
 ix=s.indexOf("template:",ix)
+if(ix<0)break  // malformed/truncated header — no matching 'template:' after this 'length:'; stop rather than loop forever
 ix1=s.indexOf("\n",ix)
 ArIx.push(s.substr(ix+10,ix1-ix-10)-0)
 ArIx.push(len)
@@ -683,6 +684,7 @@ ix=s.indexOf("length:",ix)
 ix1=s.indexOf("\n",ix)
 let len=s.substr(ix+8,ix1-ix-8)-0
 ix=s.indexOf("template:",ix)
+if(ix<0)break  // malformed/truncated header — stop rather than loop forever
 ix1=s.indexOf("\n",ix)
 ArIx2.push(s.substr(ix+10,ix1-ix-10)-0)
 ArIx2.push(len)
