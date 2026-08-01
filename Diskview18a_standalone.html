@@ -58,7 +58,7 @@ td button:not(.nbtn),th button{width:20px;height:20px}
   <span style='display:flex;align-items:center;gap:8px'>
   <span id='scanElapsed' title='Time elapsed since the current scan started (resets on each Scan click)' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
   <span id='lifetimeStats' title='How many times a template has been displayed while stepping/playing through results, across all Scan clicks this session' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
-  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260730g</span>
+  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260730h</span>
   </span>
 </div>
 <input id='local'type='file'style='display:none'onchange='OpFl()'>
@@ -1538,6 +1538,9 @@ DpNVMeLog=z=>{
 let isErr=T==26
 ,Cx=n=>n.toString().replace(/\B(?=(\d{3})+(?!\d))/g,',')
 ,skipped=0
+,rowIdx=0
+ArRange=[]
+G('rTab').style.tableLayout=''
 if(isErr){
 let entSize=64,nEnt=Math.floor(LenT/entSize)
 ,qr="<tr class='c4'><th>Entry</th><th>Offset</th><th>Error Count</th><th>SQ/CID</th><th>Status</th><th>LBA</th><th>NSID</th></tr>"
@@ -1550,7 +1553,9 @@ let ec=NvmeLE(base+0,8),ecStr=NvmeHex(base+0,3)+' ('+Cx(ec)+')'
 ,statusStr=U(statusRaw,2)+' (SCT='+sct+', SC='+U(sc,1)+')'
 ,lbaStr=NvmeHex(base+16,8)
 ,nsidStr=NvmeHex(base+24,4)
-qr+="<tr"+(e==0?" class='c0'":'')+"><td>"+(e+1)+"</td><td>"+Cx(base)+"</td><td>"+ecStr+"</td><td>"+sqCid+"</td><td>"+statusStr+"</td><td>"+lbaStr+"</td><td>"+nsidStr+"</td></tr>"
+qr+="<tr id='r"+rowIdx+"'"+(e==0?" class='c0'":'')+"><td>"+(e+1)+"</td><td>"+Cx(base)+"</td><td>"+ecStr+"</td><td>"+sqCid+"</td><td>"+statusStr+"</td><td>"+lbaStr+"</td><td>"+nsidStr+"</td></tr>"
+ArRange.push(base+'-'+entSize)
+rowIdx++
 }
 if(skipped)qr+="<tr><td colspan='7' style='color:#777;font-style:italic'>"+Cx(skipped)+" empty Error Log "+(skipped==1?'entry':'entries')+" (all-zero) not shown</td></tr>"
 W(G('rTab'),qr)
@@ -1560,12 +1565,18 @@ Bit 0 = Phase Tag (P); Bits 8:1 = Status Code (SC); Bits 11:9 = Status Code Type
 SCT=1/2/3/7 status codes are command- or vendor-specific \u2014 consult the NVMe Base Spec table for the relevant opcode to interpret SC beyond SCT=0 (Generic).`)
 }else{
 let entSize=28,hdrSize=4,nEnt=Math.floor((LenT-hdrSize)/entSize)
-,qr=''
+,qr="<colgroup><col style='width:40px'><col style='width:55px'><col style='width:80px'><col style='width:75px'><col style='width:150px'><col style='width:80px'><col style='width:110px'><col></colgroup>"
+G('rTab').style.tableLayout='fixed'
 let opStat=A[F+0]*1,comp=A[F+1]*1
 const opNames={0:'No self-test in progress',1:'Short device self-test in progress',2:'Extended device self-test in progress',0xe:'Vendor specific self-test in progress'}
 ,opStr=U(opStat,1)+' ('+(opNames[opStat&0xF]||'Reserved')+')'
 ,compStr=U(comp,1)+' ('+(comp&0x7F)+'% complete)'
-qr+="<tr class='c4'><th>Entry</th><th>Offset</th><th>Result</th><th>Test Type</th><th>POH</th><th>NSID</th><th>LBA</th><th>Status</th></tr>"
+qr+="<tbody>"
+qr+="<tr id='r0'><td colspan='8'>Current Self-test Operation (offset 0): "+opStr+"</td></tr>"
+ArRange.push('0-1');rowIdx++
+qr+="<tr id='r1'><td colspan='8'>Current Self-test Completion (offset 1): "+compStr+"</td></tr>"
+ArRange.push('1-1');rowIdx++
+qr+="</tbody><tbody><tr class='c4'><th>Entry</th><th>Offset</th><th>Result</th><th>Test Type</th><th>POH</th><th>NSID</th><th>LBA</th><th>Status</th></tr>"
 const codeNames={1:'Short',2:'Extended',0xe:'Vendor'}
 for(let e=0;e<nEnt;e++){
 let base=hdrSize+e*entSize
@@ -1578,17 +1589,18 @@ let statusByte=Number(NvmeLE(base+0,1)),res=statusByte&0xF,code=(statusByte>>4)&
 ,lbaStr=NvmeHex(base+16,6)
 ,sct=Number(NvmeLE(base+24,1)),sc=Number(NvmeLE(base+25,1))
 ,statusStr=(sct||sc)?('SCT=0x'+U(sct,1)+', SC=0x'+U(sc,1)):'n/a'
-qr+="<tr"+(e==0?" class='c0'":'')+"><td>"+(e+1)+"</td><td>"+Cx(base)+"</td><td>"+resultStr+"</td><td>"+testStr+"</td><td>"+pohStr+"</td><td>"+nsidStr+"</td><td>"+lbaStr+"</td><td>"+statusStr+"</td></tr>"
+qr+="<tr id='r"+rowIdx+"'"+(e==0?" class='c0'":'')+"><td>"+(e+1)+"</td><td>"+Cx(base)+"</td><td>"+resultStr+"</td><td>"+testStr+"</td><td>"+pohStr+"</td><td>"+nsidStr+"</td><td>"+lbaStr+"</td><td>"+statusStr+"</td></tr>"
+ArRange.push(base+'-'+entSize)
+rowIdx++
 }
 if(skipped)qr+="<tr><td colspan='8' style='color:#777;font-style:italic'>"+Cx(skipped)+" empty Self-test Log "+(skipped==1?'entry':'entries')+" (all-zero) not shown</td></tr>"
+qr+="</tbody>"
 W(G('rTab'),qr)
-W(G('ruSide'),`<b>NVMe Device Self-test Log</b> (NVMe Base Spec \u00a75.14.1.7) \u2014 Current Self-test Operation (offset 0): `+opStr+`. Current Self-test Completion (offset 1): `+compStr+`.<br>
-4-byte header plus up to `+Cx(nEnt)+` 28-byte Self-test Result Data Structures (most-recent-first), `+Cx(nEnt-skipped)+` populated.<br>
+W(G('ruSide'),`<b>NVMe Device Self-test Log</b> (NVMe Base Spec \u00a75.14.1.7) \u2014 4-byte header plus up to `+Cx(nEnt)+` 28-byte Self-test Result Data Structures (most-recent-first), `+Cx(nEnt-skipped)+` populated.<br>
 <b>Result / Test Type columns</b> \u2014 decoded from the Device Self-test Status byte's two nibbles. Result (low nibble, bits 3:0): 0=Completed without error, 1=Aborted by Self-test command, 2=Aborted by Controller Level Reset, 3=Aborted due to namespace removal, 4=Aborted due to Format NVM command, 5=Fatal or unknown error, 6=Completed with segment failure, 7=Completed with segment failure and unknown segment, 8=Aborted for unknown reason, 9=Aborted due to sanitize operation (condensed to "No Error" for 0, "Error" for any other defined value, alongside the raw hex byte). Test Type (high nibble, bits 7:4): 1=Short device self-test, 2=Extended device self-test, 0xE=Vendor specific. A status byte of 0x0F is shown as N/A in both columns (undefined/reserved combination, typically an unused or partially-initialized slot).`)
 }
-ArRange=[]
 Rows=Q('#rTab tr')
-Rows.forEach((e,i)=>{if(i)e.addEventListener('click',z=>{HiLiRow(i);CkItemD(e)})})
+Rows.forEach((e,i)=>{if(e.id&&e.id[0]=='r')e.addEventListener('click',z=>{HiLiRow(i);CkItemD(e)})})
 SyncH()
 }
 
@@ -2601,7 +2613,7 @@ let id1=l.children[0].innerHTML
 Row=l.id.slice(1)*1
 let ar=((T==42||T==49)?l.children[1].innerHTML:ArRange[Row]).split("-"),ar0=ar[0]*1
 SHex=l.children[Math.min(l.children.length-1,(l.children.length>2&&Gp?2:1))].innerHTML
-if(T!=43&&T!=44)if(Gp==2||Gp==3||T>22&&T<54||T==55||T==58)DpIxx(ar)
+if(T!=43&&T!=44&&T!=26&&T!=27)if(Gp==2||Gp==3||T>22&&T<54||T==55||T==58)DpIxx(ar)
 HiLi(id1,ar0,ar[1]*1)
 switch(T){
 case 2:
