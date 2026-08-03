@@ -60,7 +60,7 @@ td button:not(.nbtn),th button{width:20px;height:20px}
   <span style='display:flex;align-items:center;gap:8px'>
   <span id='scanElapsed' title='Time elapsed since the current scan started (resets on each Scan click)' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
   <span id='lifetimeStats' title='How many times a template has been displayed while stepping/playing through results, across all Scan clicks this session' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
-  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260803e</span>
+  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260803f</span>
   </span>
 </div>
 <input id='local'type='file'style='display:none'onchange='OpFl()'>
@@ -2462,7 +2462,7 @@ ScanStop=()=>{
 ScanCollectAbort=true
 _ScanClearTimer()
 if(_ScanElapsedTimer){clearInterval(_ScanElapsedTimer);_ScanElapsedTimer=null}
-ScanActive=false;ScanStepMode=false;ScanBinList=[];ScanEntries=[]
+ScanActive=false;ScanStepMode=false;ScanBinList=[];ScanEntries=[];_PickResumeMode=null
 // Save current dir as hint BEFORE clearing (preserves "last location" for next picker)
 if(ScanDirHandle)_ScanDB.saveDirHint(ScanDirHandle)
 ScanDirHandle=null;_ScanDB.clear()
@@ -2948,15 +2948,21 @@ let match,ex=/template:\s*(\d{3})/g,i=0,items=[],t=SAll.toLowerCase()
 while((match=ex.exec(t))!==null){items.push({idx:i,num:parseInt(match[1],10)});i++}
 items.sort((a,b)=>a.num-b.num)
 let wasScanning=ScanActive||ScanStepMode,wasPlaying=!!RevTimer
-if(wasScanning||wasPlaying){
+if(wasScanning||wasPlaying||_PickResumeMode){
 // Hold whichever playback mode is running (folder scan or single-file template
 // Play) and let the user pick from the templates actually present in the file
 // currently on screen — guaranteed to match here, so no upfront re-filtering
-// of the whole file list is needed (see PickTemplateResume).
-if(wasScanning){ScanActive=false;ScanStepMode=false;_ScanClearTimer();G('scanCtrl').style.display='inline-flex';G('scanBtn').style.display='none';G('s1').style.fontWeight='';G('s3').style.fontWeight=''}
+// of the whole file list is needed (see PickTemplateResume). Once paused this
+// way, every subsequent Template-button click keeps re-showing the picker
+// (using the mode remembered in _PickResumeMode) until the user actually
+// picks a template or manually starts a new scan/Play — rather than falling
+// through to the old plain template list once the live scan/play state is
+// already false from the first pause.
+if(wasScanning){ScanActive=false;ScanStepMode=false;_ScanClearTimer();G('scanCtrl').style.display='inline-flex';G('scanBtn').style.display='none';G('s1').style.fontWeight='';G('s3').style.fontWeight='';W(G('nVer'),'')}
 if(wasPlaying){clearInterval(RevTimer);RevTimer=null;W(G('revBtn'),'Play')}
-_PickResumeMode=wasScanning?'scan':'play'
-let s=`<b>${wasScanning?'Scan':'Play'} paused.</b> Pick a template to resume (found in this file):<br>`
+if(wasScanning||wasPlaying)_PickResumeMode=wasScanning?'scan':'play'
+let modeLabel=_PickResumeMode==='scan'?'Scan':'Play'
+let s=`<b>${modeLabel} paused.</b> Pick a template to resume (found in this file):<br>`
 items.forEach((e,j)=>{
 let pre=j===0?'':(j%3===0?'<br>':' | ')
 s+=pre+`<a onclick="PickTemplateResume(${e.num},${e.idx})">T${e.num} ${TmplNames[e.num]||''}</a>`
