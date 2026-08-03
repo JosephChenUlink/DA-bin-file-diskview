@@ -59,7 +59,7 @@ td button:not(.nbtn),th button{width:20px;height:20px}
   <span style='display:flex;align-items:center;gap:8px'>
   <span id='scanElapsed' title='Time elapsed since the current scan started (resets on each Scan click)' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
   <span id='lifetimeStats' title='How many times a template has been displayed while stepping/playing through results, across all Scan clicks this session' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
-  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260730k</span>
+  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260730l</span>
   </span>
 </div>
 <input id='local'type='file'style='display:none'onchange='OpFl()'>
@@ -2588,6 +2588,16 @@ x=(sv<0?'-'+Cx(-sv):Cx(sv))+' \u00b0C'
 if(c+1==mo)l+=f?0:len}
 
 W(e,x)
+if(T==25&&c+1==mo){
+let nm0=arS[q]||''
+if(nm0=='Percentage Used(%)'||nm0=='Media and Data Integrity Errors'){
+e.parentElement.style.background='#fff3cd'
+if(nm0=='Percentage Used(%)'){
+let mm=x.match(/\((\d+)%\)/)
+if(mm&&parseInt(mm[1])>=100){e.parentElement.style.background='#f8d7da';e.parentElement.style.fontWeight='bold'}
+}
+}
+}
 if(T==1&&!c)e.title=x
 if(T==26&&(i+1)/3*64>=LenT)return 1
 })}
