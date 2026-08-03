@@ -60,7 +60,7 @@ td button:not(.nbtn),th button{width:20px;height:20px}
   <span style='display:flex;align-items:center;gap:8px'>
   <span id='scanElapsed' title='Time elapsed since the current scan started (resets on each Scan click)' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
   <span id='lifetimeStats' title='How many times a template has been displayed while stepping/playing through results, across all Scan clicks this session' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
-  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260803d</span>
+  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260803e</span>
   </span>
 </div>
 <input id='local'type='file'style='display:none'onchange='OpFl()'>
@@ -3278,7 +3278,14 @@ DcFl0(buf)
 // (ArIx) actually contains a usable record with that raw template number.
 // If it doesn't, PrevRawT's lookup above silently leaves Tx wherever it was,
 // which would display an unrelated template's data. Treat that as a miss.
-if(ScanRawT>=0&&(!ArIx||!ArIx.length||ArIx[Tx*2]!==ScanRawT))ok=false
+if(ScanRawT>=0&&(!ArIx||!ArIx.length||ArIx[Tx*2]!==ScanRawT)){
+ok=false
+// DcFl0 already rendered this (wrong) record to the screen as a side effect,
+// before this check could run — clear it immediately so the wrong template
+// doesn't linger on screen for this step's duration while we skip ahead.
+W(G('rTab'),'')
+W(G('ruSide'),'🔍 Skipping a false-positive match\u2026')
+}
 }catch(e){ok=false}
 }
 }finally{_ScanLoading=false}
@@ -3333,46 +3340,49 @@ clearInterval(RevTimer)
 RevTimer=setInterval(()=>Adv(1),Number(G('revSpeed').value)*1000)
 }}
 
-GetTemplatesForInterface=intf=>{
-let u=(intf||'').toUpperCase(),nums=Object.keys(TmplNames).map(Number)
-if(u.includes('NVME'))return nums.filter(n=>(n>=101&&n<=105)||(n>=201&&n<=203))
-if(u.includes('SATA'))return nums.filter(n=>(n>=1&&n<=25)||(n>=201&&n<=203))
-if(u.includes('SAS')||u.includes('SCSI'))return nums.filter(n=>(n>=301&&n<=335)||(n>=201&&n<=203))
-return nums}
-
-ScanPickTemplate=async rawT=>{
-// User picked a new target template from the paused-scan picker. Re-filter using
-// the already-collected file list and already-granted folder access (no re-prompt,
-// no re-walking the directory), then resume scanning for the new target.
+let _PickResumeMode=null
+PickTemplateResume=(rawT,idx)=>{
+if(_PickResumeMode==='scan'){
+// User picked a template known to be present in the file currently on screen, so
+// there's no need to re-check every file's header up front — just change the
+// target and keep stepping through the existing candidate list from here. Any
+// step that doesn't actually have this template gets silently skipped by the
+// per-step verification in _doScanStepDir (which already clears its render
+// immediately rather than letting it flash on screen).
 ScanRawT=rawT
-W(G('ruSide'),`🔍 Switching scan target to Template${('00'+rawT).substr(-3)}…`)
-let ok=await ScanRunPreFilter()
-if(!ok)return
 ScanActive=true;ScanStepMode=false;ScanDirection=1
 G('scanCtrl').style.display='inline-flex';G('scanBtn').style.display='none'
 G('s1').style.fontWeight='';G('s3').style.fontWeight='bold'
-_doScanStepDir(1)}
+_doScanStepDir(1)
+}else if(_PickResumeMode==='play'){
+DpT(idx)
+W(G('revBtn'),'Stop')
+RevTimer=setInterval(()=>Adv(1),Number(G('revSpeed').value)*1000)
+}
+_PickResumeMode=null}
 
 List=z=>{
-if(ScanActive||ScanStepMode){
-// Hold the scan and let the user pick any known template for this interface —
-// not just ones present in the file currently on screen.
-ScanActive=false;ScanStepMode=false;_ScanClearTimer()
-G('scanCtrl').style.display='inline-flex';G('scanBtn').style.display='none'
-G('s1').style.fontWeight='';G('s3').style.fontWeight=''
-let nums=GetTemplatesForInterface(ScanIntf).sort((a,b)=>a-b)
-let s=`<b>Scan paused.</b> Pick a template to resume scanning for (${ScanIntf||'all interfaces'}):<br>`
-nums.forEach((n,j)=>{
+let match,ex=/template:\s*(\d{3})/g,i=0,items=[],t=SAll.toLowerCase()
+while((match=ex.exec(t))!==null){items.push({idx:i,num:parseInt(match[1],10)});i++}
+items.sort((a,b)=>a.num-b.num)
+let wasScanning=ScanActive||ScanStepMode,wasPlaying=!!RevTimer
+if(wasScanning||wasPlaying){
+// Hold whichever playback mode is running (folder scan or single-file template
+// Play) and let the user pick from the templates actually present in the file
+// currently on screen — guaranteed to match here, so no upfront re-filtering
+// of the whole file list is needed (see PickTemplateResume).
+if(wasScanning){ScanActive=false;ScanStepMode=false;_ScanClearTimer();G('scanCtrl').style.display='inline-flex';G('scanBtn').style.display='none';G('s1').style.fontWeight='';G('s3').style.fontWeight=''}
+if(wasPlaying){clearInterval(RevTimer);RevTimer=null;W(G('revBtn'),'Play')}
+_PickResumeMode=wasScanning?'scan':'play'
+let s=`<b>${wasScanning?'Scan':'Play'} paused.</b> Pick a template to resume (found in this file):<br>`
+items.forEach((e,j)=>{
 let pre=j===0?'':(j%3===0?'<br>':' | ')
-s+=pre+`<a onclick="ScanPickTemplate(${n})">T${n} ${TmplNames[n]||''}</a>`
+s+=pre+`<a onclick="PickTemplateResume(${e.num},${e.idx})">T${e.num} ${TmplNames[e.num]||''}</a>`
 })
 W(G('ruSide'),s)
 return}
 if(P())DpT(Tx)
 else{
-let match,ex=/template:\s*(\d{3})/g,i=0,items=[],t=SAll.toLowerCase()
-while((match=ex.exec(t))!==null){items.push({idx:i,num:parseInt(match[1],10)});i++}
-items.sort((a,b)=>a.num-b.num)
 let s=''
 items.forEach((e,j)=>{
 let pre=j===0?'':(j%5===0?'<br>':' | ')
