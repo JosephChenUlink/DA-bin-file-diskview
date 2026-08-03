@@ -59,7 +59,7 @@ td button:not(.nbtn),th button{width:20px;height:20px}
   <span style='display:flex;align-items:center;gap:8px'>
   <span id='scanElapsed' title='Time elapsed since the current scan started (resets on each Scan click)' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
   <span id='lifetimeStats' title='How many times a template has been displayed while stepping/playing through results, across all Scan clicks this session' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
-  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260730l</span>
+  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260730m</span>
   </span>
 </div>
 <input id='local'type='file'style='display:none'onchange='OpFl()'>
@@ -2038,6 +2038,33 @@ else if(nm2=='RAID/Group ID Classifier'){
 let rv=parseInt(x,16);x=x+' ('+(rv==1?'RAID Group ID':rv==0?'RAID ID':'Code '+rv)+')'}
 }
 
+// ── T101: NVMe Identify Controller \u2014 SUBNQN and Power State Descriptors ──────
+if(T==23){
+if(nm2=='NVM Subsystem NVMe Qualified Name'){
+let bytes=[]
+for(let k=0;k<256;k++){let b=A[F+768+k]*1;if(b==0)break;bytes.push(b)}
+let ascii=bytes.map(b=>String.fromCharCode(b)).join('').trim()
+x=ascii?ascii.slice(0,64):'(not set \u2014 all zero/space)'
+}else if(nm2=='Power State Descriptors 1'||/^PSD \d+$/.test(nm2)){
+let n=nm2=='Power State Descriptors 1'?1:parseInt(nm2.match(/\d+/)[0]),base=2048+(n-1)*32
+,rd=(off,len)=>{let v=0;for(let k=len-1;k>=0;k--)v=v*256+(A[F+base+off+k]*1);return v}
+,allZero=(()=>{for(let k=0;k<32;k++)if(A[F+base+k]*1!=0)return false;return true})()
+if(allZero)x='(not used \u2014 all zero)'
+else{
+let mp=rd(0,2),flags=A[F+base+3]*1,mxps=flags&1,nops=(flags>>1)&1
+,enlat=rd(4,4),exlat=rd(8,4)
+,rrt=A[F+base+12]*1&0x1f,rrl=A[F+base+13]*1&0x1f,rwt=A[F+base+14]*1&0x1f,rwl=A[F+base+15]*1&0x1f
+,idlp=rd(16,2),ips=(A[F+base+18]*1>>6)&3
+,actp=rd(20,2),b22=A[F+base+22]*1,apw=b22&0x7,aps=(b22>>6)&3
+,unit=s=>s==1?0.0001:(s==2?0.01:null)
+,pw=(v,u)=>u===null?'n/r':(v*u).toFixed(4)+'W'
+,hdr=['MP','MPS','NOPS','ENLAT(\u00b5s)','EXLAT(\u00b5s)','RRT','RRL','RWT','RWL','IDLP','IPS','ACTP','APS','APW']
+,val=[(mp*(mxps?0.0001:0.01)).toFixed(4)+'W',mxps,nops,enlat,exlat,rrt,rrl,rwt,rwl,pw(idlp,unit(ips)),ips,pw(actp,unit(aps)),aps,apw]
+x="<table style='border-collapse:collapse'><tr>"+hdr.map(h=>"<th style='padding:2px 6px;border:1px solid #ccc;background:#f4f4f4'>"+h+"</th>").join('')+"</tr><tr>"+val.map(v=>"<td style='padding:2px 6px;border:1px solid #ccc'>"+v+"</td>").join('')+"</tr></table>"
+}
+}
+}
+
 // ── T301-T306: Parameter code descriptions handled inside scsiPC&&c==2 block above ────────
 
 
@@ -2183,10 +2210,10 @@ W(e,x)
 if(T==25&&c+1==mo){
 let nm0=arS[q]||''
 if(nm0=='Percentage Used(%)'||nm0=='Media and Data Integrity Errors'){
-e.parentElement.style.background='#fff3cd'
+e.parentElement.style.background='#ffff00'
 if(nm0=='Percentage Used(%)'){
 let mm=x.match(/\((\d+)%\)/)
-if(mm&&parseInt(mm[1])>=100){e.parentElement.style.background='#f8d7da';e.parentElement.style.fontWeight='bold'}
+if(mm&&parseInt(mm[1])>=100){e.parentElement.style.background='#ffa500'}
 }
 }
 }
@@ -2233,6 +2260,15 @@ W(G('ruSide'),`<b>SMART Threshold Data range:</b><br>0x00 always passing - thres
 break
 case 14: case 15:
 W(G('ruSide'),`<b>LBA0: Logical Block Address byte 0.</b><br>Status: Self-test execution status byte.<br>Check: Self-test failure checkpoint byte.<br>Fail FBA: Failing LBA byte 0-3.<br>`)
+break
+case 23:
+W(G('ruSide'),`<b>Power State Descriptor column abbreviations</b> (NVMe Base Spec):<br>
+MP: Maximum Power &mdash; MPS: Max Power Scale (0=0.01W, 1=0.0001W) &mdash; NOPS: Non-Operational State<br>
+ENLAT: Entry Latency (\u00b5s) &mdash; EXLAT: Exit Latency (\u00b5s)<br>
+RRT/RRL: Relative Read Throughput/Latency &mdash; RWT/RWL: Relative Write Throughput/Latency<br>
+IDLP: Idle Power &mdash; IPS: Idle Power Scale (00b=not reported, 01b=0.0001W, 10b=0.01W)<br>
+ACTP: Active Power &mdash; APS: Active Power Scale (00b=not reported, 01b=0.0001W, 10b=0.01W) &mdash; APW: Active Power Workload<br>
+<d class='cyan'>n/r = not reported. A Power State Descriptor entry that's entirely zero is shown as "not used".</d>`)
 break
 case 3:
 if(G('staVal3'))W(G('staVal3'),id1.split('-')[1]=='6'?' = '+l.children[14].innerHTML+' ('+StaName(l.children[14].innerHTML)+')':'')
