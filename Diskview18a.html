@@ -59,7 +59,7 @@ td button:not(.nbtn),th button{width:20px;height:20px}
   <span style='display:flex;align-items:center;gap:8px'>
   <span id='scanElapsed' title='Time elapsed since the current scan started (resets on each Scan click)' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
   <span id='lifetimeStats' title='How many times a template has been displayed while stepping/playing through results, across all Scan clicks this session' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
-  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260803b</span>
+  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260803c</span>
   </span>
 </div>
 <input id='local'type='file'style='display:none'onchange='OpFl()'>
@@ -1079,10 +1079,10 @@ let fq=FarmVal(off),v=Number(fq.dv&0xFFFFn),sv=v>32767?v-65536:v
 val=fq.hex+(fq.sup?' ('+sv+'\u00b0C)':' (not supported)')
 }else if(ty=='gb'){
 let fq=FarmVal(off),by=fq.dv*512n,gi=by/1000000000n,gf=(by%1000000000n)*100n/1000000000n
-val=fq.hex+(fq.sup?' ('+Cx(fq.dv)+' sectors, '+Cx(gi)+'.'+(gf<10n?'0':'')+gf+' GB)':' (not supported)')
+val=fq.hex+(fq.sup?' ('+Cx(fq.dv)+' sectors, '+Cx(gi+(gf>=50n?1n:0n))+' GB)':' (not supported)')
 }else if(ty=='gbbytes'){
 let fq=FarmVal(off),gi=fq.dv/1000000000n,gf=(fq.dv%1000000000n)*100n/1000000000n
-val=fq.hex+(fq.sup?' ('+Cx(gi)+'.'+(gf<10n?'0':'')+gf+' GB)':' (not supported)')
+val=fq.hex+(fq.sup?' ('+Cx(gi+(gf>=50n?1n:0n))+' GB)':' (not supported)')
 }else if(ty=='formfactor'){
 let fq=FarmVal(off),ff=Number(fq.dv&0xFn),ffNames=['Not reported','5.25 inch','3.5 inch','2.5 inch','1.8 inch','Less than 1.8 inch']
 val=fq.hex+(fq.sup?' ('+(ffNames[ff]||'Reserved')+')':' (not supported)')
@@ -1243,7 +1243,7 @@ White = Standard attribute; warning only applies if Normalized value \u2264 Thre
 
 DpEF=z=>{
 W(G('ruSide'),`Status byte (hex): high nibble = Self-test Execution Status, low nibble = Percent Self-Test Remaining (in 10% increments; 0 = complete).<br>
-Self-test Execution Status values (ACS-3 Table 141):<br>
+Self-test Execution Status values (ACS-3 Table 132):<br>
 <brow>0h: Previous self-test completed without error, or no self-test status is available</brow><br>
 <brow>1h: The self-test routine was aborted by the host</brow><br>
 <brow>2h: The self-test routine was interrupted by the host with a hardware or software reset</brow><br>
@@ -1254,28 +1254,38 @@ Self-test Execution Status values (ACS-3 Table 141):<br>
 <brow>7h: The previous self-test completed with the read element of the test failed</brow><br>
 <brow>8h: The previous self-test completed with a failed test element and the device is suspected of having handling damage</brow><br>
 <brow>9h-Eh: Reserved</brow><br>
-<brow>Fh: Self-test routine in progress</brow><br>`)
-let qd,ex=T==15?2:0,qr="<tr><th>LBA0</th><th>Status</th><th>Check</th><th>Fail FBA</th><th>Vendor specific</th><th>TimeStamp</th></tr>"
+<brow>Fh: Self-test routine in progress</brow><br>
+<b>Entry structure</b> (ACS-3 `+(T==15?'Table A.26, Extended Self-test Log, 26 bytes/entry':'Table A.63, Self-test Log, 24 bytes/entry')+`): byte 0=LBA0, byte 1=Status, bytes 2-3=Life Timestamp (hours, word), byte 4=Self-test failure checkpoint, bytes 5-`+(T==15?'10=Failing LBA (48-bit)':'8=Failing LBA (28-bit)')+`, remaining 15 bytes=Vendor specific.`)
+let qd,ex=T==15?2:0,entSize=24+ex,hdrSize=2+ex,qr="<tr><th>LBA0</th><th>Status</th><th>Check</th><th>Fail FBA</th><th>Vendor specific</th><th>TimeStamp</th></tr>"
 for(let j=0;;j++){
-  if(A[F+j*(24+ex)+(2+ex)]==0)break
+  let base=hdrSize+j*entSize
+  if(base+entSize>LenT)break
+  let allZero=true
+  for(let k=0;k<entSize;k++){if(A[F+base+k]*1!=0){allZero=false;break}}
+  if(allZero)break
   qd=""
   for(let i=0;i<6;i++)qd+="<td></td>"
   qr+="<tr id=r"+j+">"+qd+"</tr>"
 }
 W(G('rTab'),qr)
 let j=2+ex,tmp
+const SubCmd={0:'SMART off-line routine (off-line mode)',1:'Short self-test (off-line mode)',2:'Extended self-test (off-line mode)',3:'Conveyance self-test (off-line mode)',4:'Selective self-test (off-line mode)',0x7f:'Abort off-line mode self-test routine',0x81:'Short self-test (captive mode)',0x82:'Extended self-test (captive mode)',0x83:'Conveyance self-test (captive mode)',0x84:'Selective self-test (captive mode)'}
+const StatusDesc={0:'Completed without error / no status',1:'Aborted by host',2:'Interrupted by host reset',3:'Fatal/unknown error',4:'Completed, failed element unknown',5:'Completed, electrical element failed',6:'Completed, servo/seek element failed',7:'Completed, read element failed',8:'Completed, failed element (handling damage suspected)',15:'Self-test in progress'}
 Q('#rTab td').forEach((e,i)=>{
 let c=i%6,x,hr,tday
     switch(c){
 case 0:
 ArRange.push(j+"-2"+(4+ex))
-W(e,A[F+j])
+let lba0=A[F+j]*1
+W(e,U(lba0,1)+' ('+(SubCmd[lba0]!==undefined?SubCmd[lba0]:((lba0>=0x40&&lba0<=0x7e)||lba0>=0x90?'Vendor specific':'Reserved'))+')')
 break
 case 2:
 W(e,U(A[F+j]*1,1))
 break
 case 1:
-W(e,U(A[F+j]*1,1));tmp=A[F+j+2]*256+A[F+j+1]*1;j+=2
+let statusByte=A[F+j]*1,execNibble=(statusByte>>4)&0xf,pctNibble=statusByte&0xf
+W(e,U(statusByte,1)+' ('+(StatusDesc[execNibble]!==undefined?StatusDesc[execNibble]:'Reserved')+'; '+(pctNibble*10)+'% remaining)')
+tmp=A[F+j+2]*256+A[F+j+1]*1;j+=2
 break
 case 3:
 x=""
@@ -1666,10 +1676,10 @@ if([23,24,25,26,27].includes(T)){
 let nm=arS[q]||'',Cx=n=>n.toString().replace(/\B(?=(\d{3})+(?!\d))/g,',')
 if((T==23&&(nm=='Total NVM Capacity'||nm=='Unallocated NVM Capacity'))||(T==24&&nm=='NVM Capacity')){
 let dv=BigInt('0x'+x),gi=dv/1000000000n,gf=(dv%1000000000n)*100n/1000000000n
-extraAnno=' ('+Cx(dv)+' bytes, '+Cx(gi)+'.'+(gf<10n?'0':'')+gf+' GB)'
+extraAnno=' ('+Cx(dv)+' bytes, '+Cx(gi+(gf>=50n?1n:0n))+' GB)'
 }else if(T==24&&['Namespace Size','Namespace Capacity','Namespace Utilization'].includes(nm)){
 let fmtIdx=A[F+0x1A]*1&0xF,lbads=A[F+0x80+fmtIdx*4+2]*1,blkSz=Math.pow(2,lbads),lba=BigInt('0x'+x),by=lba*BigInt(blkSz),gi=by/1000000000n,gf=(by%1000000000n)*100n/1000000000n
-extraAnno=' ('+Cx(gi)+'.'+(gf<10n?'0':'')+gf+' GB)'
+extraAnno=' ('+Cx(gi+(gf>=50n?1n:0n))+' GB)'
 }else if(T==24&&nm=='Namespace Features'){
 let v=parseInt(x,16),flags=[]
 if(v&1)flags.push('Thin Provisioning')
@@ -1865,7 +1875,7 @@ let k=parseInt(x,16)
 if(k>0)extraAnno=' ('+(k-273.15).toFixed(1)+'\u00b0C)'
 }else if(T==25&&(nm=='Data Units Read(KB)'||nm=='Data Units Written(KB)')){
 let dv=BigInt('0x'+x),by=dv*512000n,gi=by/1000000000n,gf=(by%1000000000n)*100n/1000000000n
-extraAnno=' ('+Cx(dv)+' units, '+Cx(gi)+'.'+(gf<10n?'0':'')+gf+' GB)'
+extraAnno=' ('+Cx(dv)+' units, '+Cx(gi+(gf>=50n?1n:0n))+' GB)'
 }else if(T==25&&nm=='Power On Hours'){
 let dv=BigInt('0x'+x)
 extraAnno=' ('+Cx(dv)+'h = '+Cx(dv/24n)+'d '+(dv%24n)+'h)'
@@ -1974,7 +1984,7 @@ let Cx=n=>n.toString().replace(/\B(?=(\d{3})+(?!\d))/g,',')
 let lba48=BigInt(w103)*(2n**48n)+BigInt(w102)*(2n**32n)+BigInt(w101)*(2n**16n)+BigInt(w100)
 let by=lba48*512n,gi=by/1000000000n,gf=(by%1000000000n)*100n/1000000000n
 let l2pValid=((w106>>14)&1)&&!((w106>>15)&1)
-extraAnno=' (Words100-103 Number of User Addressable Logical Sectors (48-bit)='+Cx(lba48)+' ('+Cx(gi)+'.'+(gf<10n?'0':'')+gf+' GB); Word105 Max Pages per DSM Command='+w105+'; Word106 Logical-to-Physical Sector ratio='+(l2pValid?(2**(w106&0xf))+' logical sectors per physical sector':'not valid')+'; Word107 Inter-seek delay='+w107+' \u00b5s)'
+extraAnno=' (Words100-103 Number of User Addressable Logical Sectors (48-bit)='+Cx(lba48)+' ('+Cx(gi+(gf>=50n?1n:0n))+' GB); Word105 Max Pages per DSM Command='+w105+'; Word106 Logical-to-Physical Sector ratio='+(l2pValid?(2**(w106&0xf))+' logical sectors per physical sector':'not valid')+'; Word107 Inter-seek delay='+w107+' \u00b5s)'
 }else if(T==1&&arS[q]=='NAA IEEE OUI UniqueID'&&x.length==16){
 let wwn=BigInt('0x'+x),naa=Number(wwn>>60n&0xFn),oui=(wwn>>36n&0xFFFFFFn).toString(16),uid=(wwn&0xFFFFFFFFFn).toString(16)
 extraAnno=naa==0?' (NAA type=0 \u2014 World Wide Name not set by this drive)':' (NAA type='+naa+', IEEE OUI='+oui+', Unique ID='+uid+')'
@@ -1989,7 +1999,7 @@ let w69=A[F+69*2]*1+A[F+69*2+1]*256,valid=(w69>>3)&1
 let Cx=n=>n.toString().replace(/\B(?=(\d{3})+(?!\d))/g,',')
 if(valid){
 let lba=BigInt('0x'+x.slice(8,24)),by=lba*512n,gi=by/1000000000n,gf=(by%1000000000n)*100n/1000000000n
-extraAnno=' (Words230-233='+Cx(lba)+' sectors, '+Cx(gi)+'.'+(gf<10n?'0':'')+gf+' GB)'
+extraAnno=' (Words230-233='+Cx(lba)+' sectors, '+Cx(gi+(gf>=50n?1n:0n))+' GB)'
 }else extraAnno=' (not valid \u2014 Word69 bit3 not set)'
 }else if(T==1&&arS[q]=='CFA power mode 1'){
 extraAnno=' (Words160-167 are reserved for CFA \u2014 not applicable to standard ATA/SATA hard drives)'
@@ -2030,7 +2040,7 @@ let rv=parseInt(x,16);x=x+' ('+(rt[rv]||'RAID type '+rv)+')'}
 else if(nm2=='RAID CAPACITY'){
 try{let raw=x.replace(/\s*\(.*\)$/,'').replace(/[^0-9a-fA-F]/g,'')
 let dv=BigInt('0x'+(raw||'0')),by=dv,gi=by/1000000000n,gf=(by%1000000000n)*100n/1000000000n,Cx=n=>n.toString().replace(/\B(?=(\d{3})+(?!\d))/g,',')
-x=x+' ('+Cx(gi)+'.'+(gf<10n?'0':'')+gf+' GB)'}catch(e){}}
+x=x+' ('+Cx(gi+(gf>=50n?1n:0n))+' GB)'}catch(e){}}
 else if(nm2.startsWith('RAID STATUS')){
 let rs={0:'Not Defined',1:'Active — Healthy',2:'Degraded — 1+ drive failed, still operational',3:'Rebuilding',4:'Error / Inactive',5:'Partially Active'}
 let rv=parseInt(x,16);x=x+' ('+(rs[rv]||'Status '+rv)+')'}
@@ -2166,11 +2176,26 @@ if(!isNaN(v))x=x+' (last LBA; total capacity = '+(v+1).toLocaleString()+' blocks
 }
 if(T==17&&arS[q]=='Device Capacity'){
 let dv=BigInt('0x'+x),by=dv*BigInt(GetLSS()),gi=by/1000000000n,gf=(by%1000000000n)*100n/1000000000n,Cx=n=>n.toString().replace(/\B(?=(\d{3})+(?!\d))/g,',')
-x=x+' ('+Cx(gi)+'.'+(gf<10n?'0':'')+gf+' GB)'
+x=x+' ('+Cx(gi+(gf>=50n?1n:0n))+' GB)'
+}
+if(T==17&&arS[q]=='Physical/Logical Sector Size'){
+let w=parseInt(x,16),multi=(w>>13)&1,longSize=(w>>12)&1,exp=w&0xf
+x=x+' (Physical sector = '+(multi?(Math.pow(2,exp)+' logical sectors'):'1 logical sector')+'; logical sector size '+(longSize?'> 256 words, see Logical Sector Size field':'= 256 words / 512 bytes')+')'
+}
+if(T==17&&arS[q]=='Logical Sector Size'){
+let words=parseInt(x,16),Cx=n=>n.toString().replace(/\B(?=(\d{3})+(?!\d))/g,',')
+x=words?(x+' ('+Cx(words*2)+' bytes per logical sector)'):(x+' (not used \u2014 default 512-byte logical sector)')
+}
+if(T==17&&arS[q]=='Nominal Buffer Size'){
+let by=BigInt('0x'+x),Cx=n=>n.toString().replace(/\B(?=(\d{3})+(?!\d))/g,',')
+if(by>0n){
+let gi=by/1000000000n,gf=(by%1000000000n)*100n/1000000000n
+x=x+' ('+Cx(by)+' bytes = '+Cx(gi+(gf>=50n?1n:0n))+' GB)'
+}else x=x+' (0 bytes)'
 }
 if(T==55&&q==0){
 let lba=BigInt('0x'+x),blk=BigInt((A[F+8]*1)*16777216+(A[F+9]*1)*65536+(A[F+10]*1)*256+(A[F+11]*1)),by=(lba+1n)*blk,gi=by/1000000000n,gf=(by%1000000000n)*100n/1000000000n,Cx=n=>n.toString().replace(/\B(?=(\d{3})+(?!\d))/g,',')
-x=x.replace(/^0+(?=.)/,'')+' ('+Cx(gi)+'.'+(gf<10n?'0':'')+gf+' GB)'
+x=x.replace(/^0+(?=.)/,'')+' ('+Cx(gi+(gf>=50n?1n:0n))+' GB)'
 }
 if(T==53&&q==0){
 let rr=parseInt(x,16)
@@ -2196,7 +2221,7 @@ let ms=dv,s=ms/1000n,d=s/86400n,rem=s%86400n,h=rem/3600n,rem2=rem%3600n,mi=rem2/
 x=Cx(dv)+' ('+Cx(d)+'d '+h+'h '+mi+'m '+se+'s)'
 }else if(T==4&&(nm.indexOf('Logical Sectors Written')==0||nm.indexOf('Logical Sectors Read')==0)){
 let by=dv*BigInt(GetLSS()),gi=by/1000000000n,gf=(by%1000000000n)*100n/1000000000n
-x=Cx(dv)+' ('+Cx(gi)+'.'+(gf<10n?'0':'')+gf+' GB)'
+x=Cx(dv)+' ('+Cx(gi+(gf>=50n?1n:0n))+' GB)'
 }else if(T==4&&nm.indexOf('Power-on Hours')==0){
 x=Cx(dv)+' ('+Cx(dv/24n)+'d '+(dv%24n)+'h)'
 }else if(T==6&&(nm.indexOf('Spindle Motor Power-on Hours')==0||nm.indexOf('Head Flying Hours')==0)){
@@ -2815,13 +2840,23 @@ CurFile2=entry.name;DcFl0_2(buf)
 }else{
 CurFile=entry.name;W(G('fileLabel'),entry.name)
 if(ScanRawT>=0)PrevRawT=ScanRawT
-try{DcFl0(buf)}catch(e){ok=false}
+try{
+DcFl0(buf)
+// The pre-filter pass only checks the file's header TEXT for a "template: N"
+// mention — a fast approximation, not a guarantee the parsed record list
+// (ArIx) actually contains a usable record with that raw template number.
+// If it doesn't, PrevRawT's lookup above silently leaves Tx wherever it was,
+// which would display an unrelated template's data. Treat that as a miss.
+if(ScanRawT>=0&&(!ArIx||!ArIx.length||ArIx[Tx*2]!==ScanRawT))ok=false
+}catch(e){ok=false}
 }
 }finally{_ScanLoading=false}
 }
 if(!ok){
 // Rare: a previously-matched file became unreadable mid-session (removed,
-// permission revoked, etc). Skip it and move on rather than getting stuck.
+// permission revoked, etc), or the pre-filter matched on header text but the
+// target template couldn't actually be located in this file. Skip it and
+// move on rather than getting stuck or showing the wrong template's data.
 ScanIdx=k+1;if(ScanIdx>=ScanTotal)ScanIdx=0
 if(ScanActive)_ScanScheduleNext()
 return
