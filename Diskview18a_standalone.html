@@ -23,6 +23,7 @@
 .white{color:#fff}
 g{background:#90EE90}
 .cyan,#adv button,#host{background:#e3f3fd}
+#rTab tr.latestEntry td{background:#fff3cd}
 #tmpl{display:inline-block;min-width:140px;text-align:center}
 #cmpBtn{display:inline-block;min-width:78px;text-align:center}
 #scanWrap{display:inline-flex;align-items:center;min-width:172px}
@@ -59,7 +60,7 @@ td button:not(.nbtn),th button{width:20px;height:20px}
   <span style='display:flex;align-items:center;gap:8px'>
   <span id='scanElapsed' title='Time elapsed since the current scan started (resets on each Scan click)' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
   <span id='lifetimeStats' title='How many times a template has been displayed while stepping/playing through results, across all Scan clicks this session' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
-  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260803c</span>
+  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260803d</span>
   </span>
 </div>
 <input id='local'type='file'style='display:none'onchange='OpFl()'>
@@ -1664,16 +1665,21 @@ Self-test Execution Status values (ACS-3 Table 132):<br>
 <brow>9h-Eh: Reserved</brow><br>
 <brow>Fh: Self-test routine in progress</brow><br>
 <b>Entry structure</b> (ACS-3 `+(T==15?'Table A.26, Extended Self-test Log, 26 bytes/entry':'Table A.63, Self-test Log, 24 bytes/entry')+`): byte 0=LBA0, byte 1=Status, bytes 2-3=Life Timestamp (hours, word), byte 4=Self-test failure checkpoint, bytes 5-`+(T==15?'10=Failing LBA (48-bit)':'8=Failing LBA (28-bit)')+`, remaining 15 bytes=Vendor specific.`)
-let qd,ex=T==15?2:0,entSize=24+ex,hdrSize=2+ex,qr="<tr><th>LBA0</th><th>Status</th><th>Check</th><th>Fail FBA</th><th>Vendor specific</th><th>TimeStamp</th></tr>"
+let qd,ex=T==15?2:0,entSize=24+ex,hdrSize=2+ex,qr="<tr><th>LBA0</th><th>Status</th><th>Check</th><th>Fail FBA</th><th>Vendor specific</th><th>TimeStamp</th></tr>",maxTs=-1,maxIdx=-1,nEntries=0
 for(let j=0;;j++){
   let base=hdrSize+j*entSize
   if(base+entSize>LenT)break
   let allZero=true
   for(let k=0;k<entSize;k++){if(A[F+base+k]*1!=0){allZero=false;break}}
   if(allZero)break
+  let ts=(A[F+base+3]*1)*256+(A[F+base+2]*1)
+  if(ts>maxTs){maxTs=ts;maxIdx=j}
+  nEntries=j+1
+}
+for(let j=0;j<nEntries;j++){
   qd=""
   for(let i=0;i<6;i++)qd+="<td></td>"
-  qr+="<tr id=r"+j+">"+qd+"</tr>"
+  qr+="<tr id=r"+j+(j==maxIdx?" class='latestEntry'":'')+">"+qd+"</tr>"
 }
 W(G('rTab'),qr)
 let j=2+ex,tmp
@@ -3081,6 +3087,8 @@ W(G('nVer'),'');if(G('scanFolderLabel'))W(G('scanFolderLabel'),'');ScanDirHandle
 ScanRawT=ArIx&&ArIx.length>0?ArIx[Tx*2]:-1
 let im=SAll.match(/Interface:\s*([^\n]+)/)
 ScanIntf=im?im[1].trim():''
+return await ScanRunPreFilter()
+}
 
 // ── Pre-filter pass ──────────────────────────────────────────────────────────
 // Check each file's header ONCE, up front, instead of re-searching from the
@@ -3089,6 +3097,11 @@ ScanIntf=im?im[1].trim():''
 // could mean re-scanning most or all of the folder just to find "the next" match,
 // repeated every step — this builds the match list once so stepping becomes a
 // simple, instant index lookup.
+// Pulled out as its own function (reusing the already-collected ScanBinList and
+// the already-granted folder handle) so a user picking a different target
+// template mid-scan can re-filter instantly without re-walking the directory or
+// re-prompting for folder access.
+ScanRunPreFilter=async()=>{
 ScanCollectAbort=false
 let _fList=[],_fN=0,_fMatched=0,_fTotal=ScanBinList.length
 let _fT=setInterval(()=>{W(G('nVer'),`🔍 Filtering… ${_fN.toLocaleString()}/${_fTotal.toLocaleString()} checked, ${_fMatched.toLocaleString()} matched`)},250)
@@ -3320,7 +3333,41 @@ clearInterval(RevTimer)
 RevTimer=setInterval(()=>Adv(1),Number(G('revSpeed').value)*1000)
 }}
 
+GetTemplatesForInterface=intf=>{
+let u=(intf||'').toUpperCase(),nums=Object.keys(TmplNames).map(Number)
+if(u.includes('NVME'))return nums.filter(n=>(n>=101&&n<=105)||(n>=201&&n<=203))
+if(u.includes('SATA'))return nums.filter(n=>(n>=1&&n<=25)||(n>=201&&n<=203))
+if(u.includes('SAS')||u.includes('SCSI'))return nums.filter(n=>(n>=301&&n<=335)||(n>=201&&n<=203))
+return nums}
+
+ScanPickTemplate=async rawT=>{
+// User picked a new target template from the paused-scan picker. Re-filter using
+// the already-collected file list and already-granted folder access (no re-prompt,
+// no re-walking the directory), then resume scanning for the new target.
+ScanRawT=rawT
+W(G('ruSide'),`🔍 Switching scan target to Template${('00'+rawT).substr(-3)}…`)
+let ok=await ScanRunPreFilter()
+if(!ok)return
+ScanActive=true;ScanStepMode=false;ScanDirection=1
+G('scanCtrl').style.display='inline-flex';G('scanBtn').style.display='none'
+G('s1').style.fontWeight='';G('s3').style.fontWeight='bold'
+_doScanStepDir(1)}
+
 List=z=>{
+if(ScanActive||ScanStepMode){
+// Hold the scan and let the user pick any known template for this interface —
+// not just ones present in the file currently on screen.
+ScanActive=false;ScanStepMode=false;_ScanClearTimer()
+G('scanCtrl').style.display='inline-flex';G('scanBtn').style.display='none'
+G('s1').style.fontWeight='';G('s3').style.fontWeight=''
+let nums=GetTemplatesForInterface(ScanIntf).sort((a,b)=>a-b)
+let s=`<b>Scan paused.</b> Pick a template to resume scanning for (${ScanIntf||'all interfaces'}):<br>`
+nums.forEach((n,j)=>{
+let pre=j===0?'':(j%3===0?'<br>':' | ')
+s+=pre+`<a onclick="ScanPickTemplate(${n})">T${n} ${TmplNames[n]||''}</a>`
+})
+W(G('ruSide'),s)
+return}
 if(P())DpT(Tx)
 else{
 let match,ex=/template:\s*(\d{3})/g,i=0,items=[],t=SAll.toLowerCase()
@@ -3525,8 +3572,7 @@ let n=parseInt(hex,16)%16
 let names=['Unknown','Sleep','Standby','Active/Idle','Executing SMART off-line or self-test','Reserved','Reserved','Reserved','Reserved','Reserved','Reserved','Vendor specific','Vendor specific','Vendor specific','Vendor specific','Vendor specific']
 return names[n]}
 G=x=>{return D.getElementById(x)}
-DpT=i=>{Tx=i;DcFl();G('rdSide').scrollTop=0;try{localStorage.setItem('dv_lastTx',Tx)}catch(e){}
-if((ScanActive||ScanStepMode)&&!_ScanLoading)ScanRawT=ArIx[Tx*2]}
+DpT=i=>{Tx=i;DcFl();G('rdSide').scrollTop=0;try{localStorage.setItem('dv_lastTx',Tx)}catch(e){}}
 SaveFl=z=>{saveAs(new Blob([SAll],{type: "text/plain;charset=utf-8"}),G('file').value+".csv")}
 H2D=(ix,y)=>{return A[ix+y]*256+A[ix]*1}
 U=(x,y)=>{return (['','00','0000',,,,'000000000000'][y]+x.toString(16).toUpperCase()).substr(0-y*2)}
