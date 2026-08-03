@@ -59,7 +59,7 @@ td button:not(.nbtn),th button{width:20px;height:20px}
   <span style='display:flex;align-items:center;gap:8px'>
   <span id='scanElapsed' title='Time elapsed since the current scan started (resets on each Scan click)' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
   <span id='lifetimeStats' title='How many times a template has been displayed while stepping/playing through results, across all Scan clicks this session' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
-  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260730i</span>
+  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260730j</span>
   </span>
 </div>
 <input id='local'type='file'style='display:none'onchange='OpFl()'>
@@ -1171,17 +1171,18 @@ qr+="<tr id='r1'><td colspan='8'>Current Self-test Completion (offset 1): "+comp
 ArRange.push('1-1');rowIdx++
 qr+="</tbody><tbody><tr class='c4'><th>Entry</th><th>Offset</th><th>Result</th><th>Test Type</th><th>POH</th><th>NSID</th><th>LBA</th><th>Status</th></tr>"
 const codeNames={1:'Short',2:'Extended',0xe:'Vendor'}
+const resNames={0:'Completed without error',1:'Aborted by Self-test command',2:'Aborted by Controller Level Reset',3:'Aborted due to namespace removal',4:'Aborted due to Format NVM command',5:'Fatal or unknown error',6:'Completed with segment failure',7:'Completed with segment failure and unknown segment',8:'Aborted for unknown reason',9:'Aborted due to sanitize operation'}
 for(let e=0;e<nEnt;e++){
 let base=hdrSize+e*entSize
 if(NvmeAllZero(base,entSize)){skipped++;continue}
 let statusByte=Number(NvmeLE(base+0,1)),res=statusByte&0xF,code=(statusByte>>4)&0xF
-,resultStr=statusByte==0x0F?'N/A':(U(statusByte,1)+' ('+(res==0?'No Error':'Error')+')')
-,testStr=statusByte==0x0F?'N/A':(codeNames[code]||('Reserved('+code+')'))
+,resultStr=res==0xF?(U(statusByte,1)+' (Entry not used)'):(U(statusByte,1)+' ('+(resNames[res]!==undefined?resNames[res]:'Reserved')+')')
+,testStr=res==0xF?'N/A':(codeNames[code]||('Reserved('+code+')'))
 ,poh=NvmeLE(base+4,8),pohStr=NvmeHex(base+4,3)+' ('+Cx(poh/24n)+'d '+(poh%24n)+'h)'
 ,nsidStr=NvmeHex(base+12,4)
 ,lbaStr=NvmeHex(base+16,6)
 ,sct=Number(NvmeLE(base+24,1)),sc=Number(NvmeLE(base+25,1))
-,statusStr=(sct||sc)?('SCT=0x'+U(sct,1)+', SC=0x'+U(sc,1)):'n/a'
+,statusStr='SCT=0x'+U(sct,1)+', SC=0x'+U(sc,1)
 qr+="<tr id='r"+rowIdx+"'"+(e==0?" class='c0'":'')+"><td>"+(e+1)+"</td><td>"+Cx(base)+"</td><td>"+resultStr+"</td><td>"+testStr+"</td><td>"+pohStr+"</td><td>"+nsidStr+"</td><td>"+lbaStr+"</td><td>"+statusStr+"</td></tr>"
 ArRange.push(base+'-'+entSize)
 rowIdx++
@@ -1190,7 +1191,7 @@ if(skipped)qr+="<tr><td colspan='8' style='color:#777;font-style:italic'>"+Cx(sk
 qr+="</tbody>"
 W(G('rTab'),qr)
 W(G('ruSide'),`<b>NVMe Device Self-test Log</b> (NVMe Base Spec \u00a75.14.1.7) \u2014 4-byte header plus up to `+Cx(nEnt)+` 28-byte Self-test Result Data Structures (most-recent-first), `+Cx(nEnt-skipped)+` populated.<br>
-<b>Result / Test Type columns</b> \u2014 decoded from the Device Self-test Status byte's two nibbles. Result (low nibble, bits 3:0): 0=Completed without error, 1=Aborted by Self-test command, 2=Aborted by Controller Level Reset, 3=Aborted due to namespace removal, 4=Aborted due to Format NVM command, 5=Fatal or unknown error, 6=Completed with segment failure, 7=Completed with segment failure and unknown segment, 8=Aborted for unknown reason, 9=Aborted due to sanitize operation (condensed to "No Error" for 0, "Error" for any other defined value, alongside the raw hex byte). Test Type (high nibble, bits 7:4): 1=Short device self-test, 2=Extended device self-test, 0xE=Vendor specific. A status byte of 0x0F is shown as N/A in both columns (undefined/reserved combination, typically an unused or partially-initialized slot).`)
+<b>Result / Test Type columns</b> \u2014 decoded from the Device Self-test Status byte's two nibbles. Result (low nibble, bits 3:0): 0=Completed without error, 1=Aborted by Self-test command, 2=Aborted by Controller Level Reset, 3=Aborted due to namespace removal, 4=Aborted due to Format NVM command, 5=Fatal or unknown error, 6=Completed with segment failure, 7=Completed with segment failure and unknown segment, 8=Aborted for unknown reason, 9=Aborted due to sanitize operation, 0xF=Entry not used (per spec, this Self-test Result Data Structure slot doesn't contain a result). Test Type (high nibble, bits 7:4): 1=Short device self-test, 2=Extended device self-test, 0xE=Vendor specific; shown as N/A when Result=0xF since the entry has no associated test.`)
 }
 Rows=Q('#rTab tr')
 Rows.forEach((e,i)=>{if(e.id&&e.id[0]=='r')e.addEventListener('click',z=>{HiLiRow(i);CkItemD(e)})})
