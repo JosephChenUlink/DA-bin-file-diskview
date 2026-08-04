@@ -60,7 +60,7 @@ td button:not(.nbtn),th button{width:20px;height:20px}
   <span style='display:flex;align-items:center;gap:8px'>
   <span id='scanElapsed' title='Time elapsed since the current scan started (resets on each Scan click)' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
   <span id='lifetimeStats' title='How many times a template has been displayed while stepping/playing through results, across all Scan clicks this session' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
-  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260803h</span>
+  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260803i</span>
   </span>
 </div>
 <input id='local'type='file'style='display:none'onchange='OpFl()'>
@@ -1010,6 +1010,7 @@ r.readAsArrayBuffer(f)}
 // faster for large files, which was the actual cause of multi-second freezes.
 _DecodeBin=x=>{
 let ar=new Uint8Array(x),asc=['\n'],end=0,size=0,i,j
+TrueFileSize=ar.length
 let headerLimit=Math.min(ar.length,1<<20) // 1MB — far beyond any real header (~3KB)
 for(i=0;i<headerLimit;i++){
 asc.push(String.fromCharCode(ar[i]))
@@ -1265,7 +1266,7 @@ if(F+ArIx[ii*2+1]>A.length){
 // with a clear explanation instead of showing that garbage.
 W(G('lTab'),'')
 W(G('rTab'),'')
-W(G('ruSide'),'<b style=\"color:#c0392b\">Incomplete data \u2014 this record is missing from the file.</b><br>The header declares this record at file offset '+Fx.toLocaleString()+' ('+ArIx[Tx*2+1].toLocaleString()+' bytes), but the file itself is only '+(A.length+From).toLocaleString()+' bytes long \u2014 the source capture appears to have been cut off before this record (and any records after it) were written.')
+W(G('ruSide'),'<b style=\"color:#c0392b\">Incomplete data \u2014 this record is missing from the file.</b><br>The header declares this record at file offset '+Fx.toLocaleString()+' ('+ArIx[Tx*2+1].toLocaleString()+' bytes), but the file itself is only '+(TrueFileSize||(A.length+From)).toLocaleString()+' bytes long \u2014 the source capture appears to have been cut off before this record (and any records after it) were written.')
 ArRange=[]
 for(j=0;j<ArT.length;j++){if(ArT[j]==ArIx[ii*2])break}
 T=j+1
@@ -2911,7 +2912,7 @@ let ScanEntries=[],ScanIdx=0,ScanTimer=null,ScanTimerRAF=false,ScanActive=false,
     ScanRawT=-1,ScanIntf='',ScanDirHandle=null,ScanFileHandle=null,ScanTotal=0,
     _ScanLoading=false,ScanOrigBuf=null,ScanOrigName='',ScanLastBuf=null,ScanLastName='',ScanDirection=1,ScanCollectAbort=false,ScanMatchedCount=0,ScanExaminedCount=0,_ScanDirsVisited=0,_ScanFilesSeen=0,_ScanWalkErrors=[],_ScanExtCounts={},_ScanSampleNames=[],ScanExcludedFiles=[],
     _ScanLifetimeDisplayed=(()=>{try{return parseInt(localStorage.getItem('dv_lifetimeDisplayed'))||0}catch(e){return 0}})(),_ScanLifetimeRuns=(()=>{try{return parseInt(localStorage.getItem('dv_lifetimeRuns'))||0}catch(e){return 0}})(),
-    _ScanStartTime=0,_ScanElapsedTimer=null,_ScanWalkLastYield=0
+    _ScanStartTime=0,_ScanElapsedTimer=null,_ScanWalkLastYield=0,_ScanLastStepTime=0,TrueFileSize=0
 _ScanClearTimer=()=>{if(ScanTimer!==null){if(ScanTimerRAF)cancelAnimationFrame(ScanTimer);else clearTimeout(ScanTimer);ScanTimer=null;ScanTimerRAF=false}}
 // Clearly highlights whichever scan-navigation button (s0-s4) is currently the
 // active direction, clearing it from all the others. Pass null/undefined when
@@ -3260,6 +3261,7 @@ _doScanStepDir(1)
 
 // ── Unified directional scan step (dir=+1 forward, dir=-1 backward) ─────────
 _doScanStepDir=async(dir=1)=>{
+_ScanLastStepTime=Date.now()
 if(!ScanActive&&!ScanStepMode)return
 if(!ScanEntries.length)return
 // ScanEntries is pre-filtered (see the filtering pass in ScanEnsureReady) — every
@@ -3316,17 +3318,39 @@ let dvt=G('dvTitle');if(dvt)dvt.innerHTML=(dvt.innerHTML||'').replace(/\s*<span[
 if(ScanActive)_ScanScheduleNext()
 }
 
+let _ScanStepCount=0
 _ScanScheduleNext=()=>{
 let delayMs=Number(G('revSpeed').value)*1000
 if(delayMs<=150){
 // Full speed: pace to the browser's paint cycle instead of a fixed timer.
 // This always yields for input/rendering, so it can't freeze the tab, but runs
 // as fast as this machine can decode+render each file — usually well under 0.1s/file.
+_ScanStepCount++
+if(_ScanStepCount%20===0){
+// Every so often, force a genuine macrotask-level yield (setTimeout) instead
+// of requestAnimationFrame. A run of many very-fast steps (e.g. a cluster of
+// tiny/truncated files) can resolve quickly enough that RAF callbacks chain
+// back-to-back without the browser ever getting an actual paint in between —
+// which looks exactly like a frozen display even though the scan is
+// genuinely still progressing underneath.
+ScanTimerRAF=false
+ScanTimer=setTimeout(()=>_doScanStepDir(ScanDirection),0)
+}else{
 ScanTimerRAF=true;ScanTimer=requestAnimationFrame(()=>_doScanStepDir(ScanDirection))
+}
 }else{
 ScanTimerRAF=false;ScanTimer=setTimeout(()=>_doScanStepDir(ScanDirection),delayMs)
 }
 }
+// Watchdog: if a scan is marked active but hasn't actually stepped in a while,
+// the RAF/setTimeout scheduling chain has silently broken somewhere — force a
+// recovery step rather than leaving the scan looking permanently stalled with
+// no way to tell the display simply isn't going to update again on its own.
+setInterval(()=>{
+if(ScanActive&&!ScanStepMode&&!_ScanLoading&&_ScanLastStepTime&&Date.now()-_ScanLastStepTime>3000){
+_doScanStepDir(ScanDirection)
+}
+},3000)
 
 ScanStepBackClick=async()=>{
 if(RevTimer){clearInterval(RevTimer);RevTimer=null;W(G('revBtn'),'Play')}
