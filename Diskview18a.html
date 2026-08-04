@@ -60,7 +60,7 @@ td button:not(.nbtn),th button{width:20px;height:20px}
   <span style='display:flex;align-items:center;gap:8px'>
   <span id='scanElapsed' title='Time elapsed since the current scan started (resets on each Scan click)' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
   <span id='lifetimeStats' title='How many times a template has been displayed while stepping/playing through results, across all Scan clicks this session' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
-  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260803j</span>
+  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260803k</span>
   </span>
 </div>
 <input id='local'type='file'style='display:none'onchange='OpFl()'>
@@ -2503,7 +2503,7 @@ RevTimer=setInterval(()=>Adv(1),Number(G('revSpeed').value)*1000)
 // ── Scan: crawl folder, same template & interface, step or auto ──────────────
 let ScanEntries=[],ScanIdx=0,ScanTimer=null,ScanTimerRAF=false,ScanActive=false,ScanStepMode=false,
     ScanRawT=-1,ScanIntf='',ScanDirHandle=null,ScanFileHandle=null,ScanTotal=0,
-    _ScanLoading=false,ScanOrigBuf=null,ScanOrigName='',ScanLastBuf=null,ScanLastName='',ScanDirection=1,ScanCollectAbort=false,ScanMatchedCount=0,ScanExaminedCount=0,_ScanDirsVisited=0,_ScanFilesSeen=0,_ScanWalkErrors=[],_ScanExtCounts={},_ScanSampleNames=[],ScanExcludedFiles=[],
+    _ScanLoading=false,ScanOrigBuf=null,ScanOrigName='',ScanLastBuf=null,ScanLastName='',ScanDirection=1,ScanCollectAbort=false,ScanMatchedCount=0,ScanExaminedCount=0,_ScanDirsVisited=0,_ScanFilesSeen=0,_ScanWalkErrors=[],_ScanExtCounts={},_ScanSampleNames=[],
     _ScanLifetimeDisplayed=0,_ScanLifetimeRuns=0,
     _ScanStartTime=0,_ScanElapsedTimer=null,_ScanWalkLastYield=0,_ScanLastStepTime=0,TrueFileSize=0
 _ScanClearTimer=()=>{if(ScanTimer!==null){if(ScanTimerRAF)cancelAnimationFrame(ScanTimer);else clearTimeout(ScanTimer);ScanTimer=null;ScanTimerRAF=false}}
@@ -2711,12 +2711,12 @@ return await ScanRunPreFilter()
 // re-prompting for folder access.
 ScanRunPreFilter=async()=>{
 ScanCollectAbort=false
-ScanExcludedFiles=[]
 let _fList=[],_fN=0,_fMatched=0,_fTotal=ScanBinList.length
 let _fT=setInterval(()=>{W(G('nVer'),`🔍 Filtering… ${_fN.toLocaleString()}/${_fTotal.toLocaleString()} checked, ${_fMatched.toLocaleString()} matched`)},250)
-// Checks a header byte buffer against the current interface/template target.
-// Returns {ok:true} on a match, or {ok:false,reason:'...'} explaining exactly
-// why not — this reason is what ends up in the downloadable exclusion report.
+// Checks a header byte buffer against the current interface target. Matching
+// is interface-only — a file belongs to an interface regardless of which
+// specific templates it happens to contain. Which template to actually
+// display for a match is handled separately, per step, in _doScanStepDir.
 let _CheckHeaderMatch=(headerBytes)=>{
 let txt='',j=0
 while(j<headerBytes.length&&j<8000){let c=headerBytes[j++];if(c>0&&c<128)txt+=String.fromCharCode(c);if(txt.endsWith('END'))break}
@@ -2724,13 +2724,8 @@ let im2=txt.match(/Interface:\s*([^\n]+)/);let fIntf=im2?im2[1].trim():''
 // Case-insensitive comparison — different DA tool/firmware versions report
 // interface names with inconsistent capitalization (e.g. 'NVMe' vs 'NVME'),
 // which an exact string match would silently and incorrectly reject.
-if(ScanIntf&&fIntf&&fIntf.toUpperCase()!==ScanIntf.toUpperCase())return{ok:false,reason:`Interface mismatch (found "${fIntf}", wanted "${ScanIntf}")`}
-// Matching is interface-only — a file belongs to an interface regardless of
-// which specific templates it happens to contain. Which template to actually
-// display for a match is a separate, non-exclusionary preference (see
-// PrevRawT in DcFl(), which falls back to the first available record when
-// the preferred template isn't present in a given file).
-return{ok:true}
+if(ScanIntf&&fIntf&&fIntf.toUpperCase()!==ScanIntf.toUpperCase())return false
+return true
 }
 try{
 // Group entries by their source zip so each zip is opened and parsed exactly once,
@@ -2760,12 +2755,11 @@ if(ScanCollectAbort){clearInterval(_fT);W(G('nVer'),'');return false}
 _fN++
 await _maybeYield()
 let file
-try{file=entry.file||(await entry.handle.getFile())}catch(e){ScanExcludedFiles.push({name:entry.name,reason:'Failed to open file: '+e.message});continue}
-if(file.size>8*1024*1024){ScanExcludedFiles.push({name:entry.name,reason:`File too large (${file.size.toLocaleString()} bytes > 8MB outlier guard) \u2014 skipped without reading`});continue}
+try{file=entry.file||(await entry.handle.getFile())}catch(e){continue}
+if(file.size>8*1024*1024)continue  // outlier guard
 let headerBytes
-try{headerBytes=new Uint8Array(await file.slice(0,Math.min(file.size,8192)).arrayBuffer())}catch(e){ScanExcludedFiles.push({name:entry.name,reason:'Failed to read header: '+e.message});continue}
-let chk=_CheckHeaderMatch(headerBytes)
-if(chk.ok){_fList.push(entry);_fMatched++}else ScanExcludedFiles.push({name:entry.name,reason:chk.reason})
+try{headerBytes=new Uint8Array(await file.slice(0,Math.min(file.size,8192)).arrayBuffer())}catch(e){continue}
+if(_CheckHeaderMatch(headerBytes)){_fList.push(entry);_fMatched++}
 }
 // Zip-contained entries — one read+decompress pass per ZIP, not per entry
 for(const[zipHandle,groupEntries]of zipGroups){
@@ -2775,21 +2769,20 @@ let zipBuf
 try{
 let zipFile=await zipHandle.getFile()
 zipBuf=new Uint8Array(await zipFile.arrayBuffer())
-}catch(e){for(const entry of groupEntries)ScanExcludedFiles.push({name:entry.name,reason:'Failed to open source zip: '+e.message});_fN+=groupEntries.length;continue}
+}catch(e){_fN+=groupEntries.length;continue}
 let wantedNames=new Set(groupEntries.map(e=>e.entryName))
 let decompressed
 try{
 decompressed=fflate.unzipSync(zipBuf,{filter:f=>wantedNames.has(f.name)})
-}catch(e){for(const entry of groupEntries)ScanExcludedFiles.push({name:entry.name,reason:'Failed to decompress zip entry: '+e.message});_fN+=groupEntries.length;continue}
+}catch(e){_fN+=groupEntries.length;continue}
 for(const entry of groupEntries){
 _fN++
 await _maybeYield()
 let full=decompressed[entry.entryName]
-if(!full){ScanExcludedFiles.push({name:entry.name,reason:'Entry not found in zip after decompression'});continue}
-if(full.length>8*1024*1024){ScanExcludedFiles.push({name:entry.name,reason:`File too large (${full.length.toLocaleString()} bytes > 8MB outlier guard) \u2014 skipped without reading`});continue}
+if(!full)continue
+if(full.length>8*1024*1024)continue  // outlier guard
 let headerBytes=full.subarray(0,Math.min(full.length,8192))
-let chk=_CheckHeaderMatch(headerBytes)
-if(chk.ok){_fList.push(entry);_fMatched++}else ScanExcludedFiles.push({name:entry.name,reason:chk.reason})
+if(_CheckHeaderMatch(headerBytes)){_fList.push(entry);_fMatched++}
 }
 }
 clearInterval(_fT)
@@ -2798,7 +2791,7 @@ clearInterval(_fT)
 if(!_fList.length){
 _ScanLifetimeRuns++;_SaveLifetimeStats()
 W(G('lifetimeStats'),`Displayed: ${_ScanLifetimeDisplayed.toLocaleString()} (${_ScanLifetimeRuns} scan${_ScanLifetimeRuns===1?'':'s'})`)
-W(G('nVer'),`No files matching this interface (checked ${ScanBinList.length.toLocaleString()} files). Click Scan again to choose a different folder.${ScanExcludedFiles.length?` <a onclick="DownloadScanExclusionReport()" style="cursor:pointer">(download report of why)</a>`:''}`);return false}
+W(G('nVer'),`No files matching this interface (checked ${ScanBinList.length.toLocaleString()} files). Click Scan again to choose a different folder.`);return false}
 
 _ScanLifetimeRuns++;_SaveLifetimeStats()
 W(G('lifetimeStats'),`Displayed: ${_ScanLifetimeDisplayed.toLocaleString()} (${_ScanLifetimeRuns} scan${_ScanLifetimeRuns===1?'':'s'})`)
@@ -2877,6 +2870,12 @@ buf=await file.arrayBuffer()
 }
 ok=true
 }catch(e){}
+// Matching is interface-only, so many files legitimately won't have the
+// specific template being searched for. Check the header text for its
+// presence BEFORE touching the display at all — skip those completely
+// silently (no render, no flicker to a different template) rather than
+// falling back to showing whatever else happens to be in the file.
+if(ok&&ScanRawT>=0&&!A2&&!_QuickCheckTemplate(buf,ScanRawT))ok=false
 if(ok){
 _ScanLoading=true
 try{
@@ -2891,10 +2890,8 @@ try{DcFl0(buf)}catch(e){ok=false}
 }finally{_ScanLoading=false}
 }
 if(!ok){
-// Rare: a previously-matched file became unreadable mid-session (removed,
-// permission revoked, etc), or the pre-filter matched on header text but the
-// target template couldn't actually be located in this file. Skip it and
-// move on rather than getting stuck or showing the wrong template's data.
+// Doesn't have the target template (or became unreadable) — skip silently
+// without touching the display, and move to the next candidate.
 ScanIdx=k+1;if(ScanIdx>=ScanTotal)ScanIdx=0
 if(ScanActive)_ScanScheduleNext()
 return
@@ -2906,9 +2903,21 @@ W(G('lifetimeStats'),`Displayed: ${_ScanLifetimeDisplayed.toLocaleString()} (${_
 ScanIdx=k+1;if(ScanIdx>=ScanTotal)ScanIdx=0
 let modeLabel=(ScanStepMode?(dir<0?' ◀ Back':' ▶ Step'):'')
 let speedNote=(ScanActive&&ScanTimerRAF)?' ⚡full speed':''
-W(G('nVer'),`▶ [${seqNum.toLocaleString()}/${ScanTotal.toLocaleString()} matches, ${ScanExaminedCount.toLocaleString()} scanned]${ScanIntf?' '+ScanIntf:''}${modeLabel}${speedNote}${ScanExcludedFiles.length?` <a onclick="DownloadScanExclusionReport()" style="cursor:pointer">(${ScanExcludedFiles.length.toLocaleString()} excluded \u2014 download report)</a>`:''}`)
-let dvt=G('dvTitle');if(dvt)dvt.innerHTML=(dvt.innerHTML||'').replace(/\s*<span[^>]*>\[\d+.*?\]<\/span>/,'')+` <span style='color:#1a5fa8;font-size:12px'>[${seqNum}/${ScanTotal}: ${entry.name}]</span>`
+W(G('nVer'),`▶ [${seqNum.toLocaleString()}/${ScanTotal.toLocaleString()} matches, ${ScanExaminedCount.toLocaleString()} scanned]${ScanIntf?' '+ScanIntf:''}${modeLabel}${speedNote}`)
 if(ScanActive)_ScanScheduleNext()
+}
+
+// Lightweight check of a raw file buffer's header text for a specific
+// template's presence, without going through the full decode/render
+// pipeline — lets the scan loop decide whether to display a file *before*
+// touching any part of the screen.
+_QuickCheckTemplate=(buf,targetT)=>{
+let bytes=buf instanceof Uint8Array?buf:new Uint8Array(buf)
+let limit=Math.min(bytes.length,8192)
+let txt='',j=0
+while(j<limit&&j<8000){let c=bytes[j++];if(c>0&&c<128)txt+=String.fromCharCode(c);if(txt.endsWith('END'))break}
+let templateNums=[...txt.matchAll(/template:\s*(\d+)/gi)].map(m=>parseInt(m[1],10))
+return templateNums.includes(targetT)
 }
 
 let _ScanStepCount=0
@@ -2963,14 +2972,20 @@ RevTimer=setInterval(()=>Adv(1),Number(G('revSpeed').value)*1000)
 }}
 
 let _PickResumeMode=null
+GetTemplatesForInterface=intf=>{
+let u=(intf||'').toUpperCase(),nums=Object.keys(TmplNames).map(Number)
+if(u.includes('NVME'))return nums.filter(n=>(n>=101&&n<=105)||(n>=201&&n<=203))
+if(u.includes('SATA'))return nums.filter(n=>(n>=1&&n<=25)||(n>=201&&n<=203))
+if(u.includes('SAS')||u.includes('SCSI'))return nums.filter(n=>(n>=301&&n<=335)||(n>=201&&n<=203))
+return nums}
+
 PickTemplateResume=(rawT,idx)=>{
 if(_PickResumeMode==='scan'){
-// User picked a template known to be present in the file currently on screen, so
-// there's no need to re-check every file's header up front — just change the
-// target and keep stepping through the existing candidate list from here. Any
-// step that doesn't actually have this template gets silently skipped by the
-// per-step verification in _doScanStepDir (which already clears its render
-// immediately rather than letting it flash on screen).
+// Matching is interface-only now, so any template valid for this interface is
+// a legitimate thing to search for — not just ones present in the file
+// currently on screen. No re-filtering needed either way: ScanEntries already
+// covers every interface-matching file; the per-step check in _doScanStepDir
+// only updates the display when a given file actually has this template.
 ScanRawT=rawT
 ScanActive=true;ScanStepMode=false;ScanDirection=1
 G('scanCtrl').style.display='inline-flex';G('scanBtn').style.display='none'
@@ -2990,23 +3005,32 @@ items.sort((a,b)=>a.num-b.num)
 let wasScanning=ScanActive||ScanStepMode,wasPlaying=!!RevTimer
 if(wasScanning||wasPlaying||_PickResumeMode){
 // Hold whichever playback mode is running (folder scan or single-file template
-// Play) and let the user pick from the templates actually present in the file
-// currently on screen — guaranteed to match here, so no upfront re-filtering
-// of the whole file list is needed (see PickTemplateResume). Once paused this
-// way, every subsequent Template-button click keeps re-showing the picker
-// (using the mode remembered in _PickResumeMode) until the user actually
-// picks a template or manually starts a new scan/Play — rather than falling
-// through to the old plain template list once the live scan/play state is
-// already false from the first pause.
+// Play). For Scan, offer every template valid for the current interface —
+// matching is interface-only, so any of them is a legitimate target, not just
+// ones in this specific file. For Play, keep it scoped to templates actually
+// in the current file, since Play navigates within that one file. Once paused
+// this way, every subsequent Template-button click keeps re-showing the
+// picker (using the mode remembered in _PickResumeMode) until the user
+// actually picks a template or manually starts a new scan/Play.
 if(wasScanning){ScanActive=false;ScanStepMode=false;_ScanClearTimer();G('scanCtrl').style.display='inline-flex';G('scanBtn').style.display='none';_SetScanBtn(null);W(G('nVer'),'')}
 if(wasPlaying){clearInterval(RevTimer);RevTimer=null;W(G('revBtn'),'Play')}
 if(wasScanning||wasPlaying)_PickResumeMode=wasScanning?'scan':'play'
 let modeLabel=_PickResumeMode==='scan'?'Scan':'Play'
-let s=`<b>${modeLabel} paused.</b> Pick a template to resume (found in this file):<br>`
+let s
+if(_PickResumeMode==='scan'){
+let nums=GetTemplatesForInterface(ScanIntf).sort((a,b)=>a-b)
+s=`<b>${modeLabel} paused.</b> Pick a template to resume scanning for (${ScanIntf||'all interfaces'}):<br>`
+nums.forEach((n,j)=>{
+let pre=j===0?'':(j%3===0?'<br>':' | ')
+s+=pre+`<a onclick="PickTemplateResume(${n},-1)">T${n} ${TmplNames[n]||''}</a>`
+})
+}else{
+s=`<b>${modeLabel} paused.</b> Pick a template to resume (found in this file):<br>`
 items.forEach((e,j)=>{
 let pre=j===0?'':(j%3===0?'<br>':' | ')
 s+=pre+`<a onclick="PickTemplateResume(${e.num},${e.idx})">T${e.num} ${TmplNames[e.num]||''}</a>`
 })
+}
 W(G('ruSide'),s)
 return}
 if(P())DpT(Tx)
@@ -3213,11 +3237,6 @@ G=x=>{return D.getElementById(x)}
 DpT=i=>{Tx=i;DcFl();G('rdSide').scrollTop=0;try{localStorage.setItem('dv_lastTx',Tx)}catch(e){}}
 SaveFl=z=>{saveAs(new Blob([SAll],{type: "text/plain;charset=utf-8"}),G('file').value+".csv")}
 
-DownloadScanExclusionReport=()=>{
-let rows=[['File name','Reason excluded']]
-ScanExcludedFiles.forEach(e=>rows.push([e.name,e.reason]))
-let csv=rows.map(r=>r.map(v=>'"'+String(v).replace(/"/g,'""')+'"').join(',')).join('\r\n')
-saveAs(new Blob([csv],{type:'text/csv;charset=utf-8'}),'scan_excluded_files_'+(ScanIntf||'all')+'.csv')}
 H2D=(ix,y)=>{return A[ix+y]*256+A[ix]*1}
 U=(x,y)=>{return (['','00','0000',,,,'000000000000'][y]+x.toString(16).toUpperCase()).substr(0-y*2)}
 Q=x=>{return D.querySelectorAll(x)}
