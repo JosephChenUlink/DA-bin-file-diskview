@@ -28,7 +28,7 @@ g{background:#90EE90}
 #cmpBtn{display:inline-block;min-width:78px;text-align:center}
 #scanWrap{display:inline-flex;align-items:center;min-width:172px}
 #scanBtn{width:172px;text-align:center}
-#scanCtrl button{width:26px;height:24px;text-align:center;box-sizing:border-box}
+#scanCtrl button{width:26px;height:24px;box-sizing:border-box;display:flex;align-items:center;justify-content:center;padding:0}
 h{background:magenta}
 hr,c{background:#fefa2a}
 .g1{font-size:16px;height:32px;margin-top:10px}
@@ -60,7 +60,7 @@ td button:not(.nbtn),th button{width:20px;height:20px}
   <span style='display:flex;align-items:center;gap:8px'>
   <span id='scanElapsed' title='Time elapsed since the current scan started (resets on each Scan click)' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
   <span id='lifetimeStats' title='How many times a template has been displayed while stepping/playing through results, across all Scan clicks this session' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
-  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260803f</span>
+  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260803g</span>
   </span>
 </div>
 <input id='local'type='file'style='display:none'onchange='OpFl()'>
@@ -554,7 +554,7 @@ ScanFileHandle=fh  // remember for startIn next time
 _ScanDB.saveFileHint(fh)  // persist file location across sessions
 // Stop scan/play
 if(RevTimer){clearInterval(RevTimer);RevTimer=null;W(G('revBtn'),'Play')}
-if(ScanActive||ScanStepMode){ScanActive=false;ScanStepMode=false;_ScanClearTimer();G('scanCtrl').style.display='inline-flex';G('scanBtn').style.display='none';G('s1').style.fontWeight='';G('s3').style.fontWeight='';W(G('nVer'),'')}
+if(ScanActive||ScanStepMode){ScanActive=false;ScanStepMode=false;_ScanClearTimer();G('scanCtrl').style.display='inline-flex';G('scanBtn').style.display='none';_SetScanBtn(null);W(G('nVer'),'')}
 // Load the selected file (no folder dialog)
 let file=await fh.getFile()
 let fname=file.name
@@ -846,6 +846,21 @@ W(G('offset'),U(Fx,2))
 F=Fx-From
 LenT=T>29?Math.min(ArIx[ii*2+1],H2D(F+3,-1)+4):ArIx[ii*2+1]
 Cpage=Math.ceil(ArIx[ii*2+1]/512)
+if(F+ArIx[ii*2+1]>A.length){
+// This record's declared byte range extends past the actual data in this file —
+// the source capture was cut off before this record was written (header still
+// claims it exists, but zero of its bytes are actually present). Reading past
+// the end of A[] returns undefined, and undefined*1 is NaN, which the hex/decode
+// formatters render as the misleading text 'AN' (the tail of 'NaN'). Stop here
+// with a clear explanation instead of showing that garbage.
+W(G('lTab'),'')
+W(G('rTab'),'')
+W(G('ruSide'),'<b style=\"color:#c0392b\">Incomplete data \u2014 this record is missing from the file.</b><br>The header declares this record at file offset '+Fx.toLocaleString()+' ('+ArIx[Tx*2+1].toLocaleString()+' bytes), but the file itself is only '+(A.length+From).toLocaleString()+' bytes long \u2014 the source capture appears to have been cut off before this record (and any records after it) were written.')
+ArRange=[]
+for(j=0;j<ArT.length;j++){if(ArT[j]==ArIx[ii*2])break}
+T=j+1
+return
+}
 Q('#lTab td:not(.adr)').forEach((e,i)=>{
 W(e,U(A[F+i]*1,1))
 if(((x==11||x==12)&&(i-i%2)==452||x==3&&(i-i%2)==500||x==101&&i==262))W(e,'<c>'+e.innerHTML+'</c>')
@@ -2424,7 +2439,7 @@ G('scanCtrl').style.display='none';G('scanBtn').style.display='inline'
 return
 }
 ScanActive=true;ScanStepMode=false;ScanDirection=1
-G('s1').style.fontWeight='';G('s3').style.fontWeight='bold'
+_SetScanBtn('s3')
 _doScanStepDir(1)
 }
 
@@ -2439,7 +2454,7 @@ if(!ready)return
 }
 _ScanClearTimer()
 ScanActive=true;ScanStepMode=false;ScanDirection=1
-G('scanCtrl').style.display='inline-flex';G('scanBtn').style.display='none';G('s1').style.fontWeight='';G('s3').style.fontWeight='bold'
+G('scanCtrl').style.display='inline-flex';G('scanBtn').style.display='none';_SetScanBtn('s3')
 _doScanStepDir(1)
 }
 
@@ -2454,7 +2469,7 @@ if(!ready)return
 }
 _ScanClearTimer()
 ScanActive=true;ScanStepMode=false;ScanDirection=-1
-G('scanCtrl').style.display='inline-flex';G('scanBtn').style.display='none';G('s3').style.fontWeight='';G('s1').style.fontWeight='bold'
+G('scanCtrl').style.display='inline-flex';G('scanBtn').style.display='none';_SetScanBtn('s1')
 _doScanStepDir(-1)
 }
 
@@ -2472,7 +2487,7 @@ W(G('nVer'),'')
 
 ToggleReview=()=>{
 // Stop scan if running — keep scan icons visible
-if(ScanActive){ScanActive=false;_ScanClearTimer();G('scanCtrl').style.display='inline-flex';G('scanBtn').style.display='none';G('s1').style.fontWeight='';G('s3').style.fontWeight=''}
+if(ScanActive){ScanActive=false;_ScanClearTimer();G('scanCtrl').style.display='inline-flex';G('scanBtn').style.display='none';_SetScanBtn(null)}
 if(RevTimer){
 clearInterval(RevTimer);RevTimer=null
 W(G('revBtn'),'Play')
@@ -2484,10 +2499,17 @@ RevTimer=setInterval(()=>Adv(1),Number(G('revSpeed').value)*1000)
 // ── Scan: crawl folder, same template & interface, step or auto ──────────────
 let ScanEntries=[],ScanIdx=0,ScanTimer=null,ScanTimerRAF=false,ScanActive=false,ScanStepMode=false,
     ScanRawT=-1,ScanIntf='',ScanDirHandle=null,ScanFileHandle=null,ScanTotal=0,
-    _ScanLoading=false,ScanOrigBuf=null,ScanOrigName='',ScanLastBuf=null,ScanLastName='',ScanDirection=1,ScanCollectAbort=false,ScanMatchedCount=0,ScanExaminedCount=0,_ScanDirsVisited=0,_ScanFilesSeen=0,_ScanWalkErrors=[],_ScanExtCounts={},_ScanSampleNames=[],
+    _ScanLoading=false,ScanOrigBuf=null,ScanOrigName='',ScanLastBuf=null,ScanLastName='',ScanDirection=1,ScanCollectAbort=false,ScanMatchedCount=0,ScanExaminedCount=0,_ScanDirsVisited=0,_ScanFilesSeen=0,_ScanWalkErrors=[],_ScanExtCounts={},_ScanSampleNames=[],ScanExcludedFiles=[],
     _ScanLifetimeDisplayed=(()=>{try{return parseInt(localStorage.getItem('dv_lifetimeDisplayed'))||0}catch(e){return 0}})(),_ScanLifetimeRuns=(()=>{try{return parseInt(localStorage.getItem('dv_lifetimeRuns'))||0}catch(e){return 0}})(),
     _ScanStartTime=0,_ScanElapsedTimer=null,_ScanWalkLastYield=0
 _ScanClearTimer=()=>{if(ScanTimer!==null){if(ScanTimerRAF)cancelAnimationFrame(ScanTimer);else clearTimeout(ScanTimer);ScanTimer=null;ScanTimerRAF=false}}
+// Clearly highlights whichever scan-navigation button (s0-s4) is currently the
+// active direction, clearing it from all the others. Pass null/undefined when
+// nothing is actively auto-playing (paused, stopped, or single-stepped).
+_SetScanBtn=id=>{
+['s0','s1','s2','s3','s4'].forEach(b=>{let el=G(b);if(el){el.style.fontWeight='';el.style.background='';el.style.borderRadius=''}})
+if(id){let el=G(id);if(el){el.style.fontWeight='bold';el.style.background='#ffd966';el.style.borderRadius='3px'}}
+}
 _SaveLifetimeStats=()=>{try{localStorage.setItem('dv_lifetimeDisplayed',_ScanLifetimeDisplayed);localStorage.setItem('dv_lifetimeRuns',_ScanLifetimeRuns)}catch(e){}}
 _UpdateScanElapsed=()=>{
 if(!_ScanStartTime)return
@@ -2685,9 +2707,12 @@ return await ScanRunPreFilter()
 // re-prompting for folder access.
 ScanRunPreFilter=async()=>{
 ScanCollectAbort=false
+ScanExcludedFiles=[]
 let _fList=[],_fN=0,_fMatched=0,_fTotal=ScanBinList.length
 let _fT=setInterval(()=>{W(G('nVer'),`🔍 Filtering… ${_fN.toLocaleString()}/${_fTotal.toLocaleString()} checked, ${_fMatched.toLocaleString()} matched`)},250)
 // Checks a header byte buffer against the current interface/template target.
+// Returns {ok:true} on a match, or {ok:false,reason:'...'} explaining exactly
+// why not — this reason is what ends up in the downloadable exclusion report.
 let _CheckHeaderMatch=(headerBytes)=>{
 let txt='',j=0
 while(j<headerBytes.length&&j<8000){let c=headerBytes[j++];if(c>0&&c<128)txt+=String.fromCharCode(c);if(txt.endsWith('END'))break}
@@ -2695,12 +2720,12 @@ let im2=txt.match(/Interface:\s*([^\n]+)/);let fIntf=im2?im2[1].trim():''
 // Case-insensitive comparison — different DA tool/firmware versions report
 // interface names with inconsistent capitalization (e.g. 'NVMe' vs 'NVME'),
 // which an exact string match would silently and incorrectly reject.
-if(ScanIntf&&fIntf&&fIntf.toUpperCase()!==ScanIntf.toUpperCase())return false
+if(ScanIntf&&fIntf&&fIntf.toUpperCase()!==ScanIntf.toUpperCase())return{ok:false,reason:`Interface mismatch (found "${fIntf}", wanted "${ScanIntf}")`}
 if(ScanRawT>=0){
 let templateNums=[...txt.matchAll(/template:\s*(\d+)/gi)].map(m=>parseInt(m[1],10))
-if(!templateNums.includes(ScanRawT))return false
+if(!templateNums.includes(ScanRawT))return{ok:false,reason:`Template ${ScanRawT} not found in header (templates present: ${templateNums.length?templateNums.join(','):'none/unparseable'})`}
 }
-return true
+return{ok:true}
 }
 try{
 // Group entries by their source zip so each zip is opened and parsed exactly once,
@@ -2730,11 +2755,12 @@ if(ScanCollectAbort){clearInterval(_fT);W(G('nVer'),'');return false}
 _fN++
 await _maybeYield()
 let file
-try{file=entry.file||(await entry.handle.getFile())}catch(e){continue}
-if(file.size>8*1024*1024)continue  // outlier guard
+try{file=entry.file||(await entry.handle.getFile())}catch(e){ScanExcludedFiles.push({name:entry.name,reason:'Failed to open file: '+e.message});continue}
+if(file.size>8*1024*1024){ScanExcludedFiles.push({name:entry.name,reason:`File too large (${file.size.toLocaleString()} bytes > 8MB outlier guard) \u2014 skipped without reading`});continue}
 let headerBytes
-try{headerBytes=new Uint8Array(await file.slice(0,Math.min(file.size,8192)).arrayBuffer())}catch(e){continue}
-if(_CheckHeaderMatch(headerBytes)){_fList.push(entry);_fMatched++}
+try{headerBytes=new Uint8Array(await file.slice(0,Math.min(file.size,8192)).arrayBuffer())}catch(e){ScanExcludedFiles.push({name:entry.name,reason:'Failed to read header: '+e.message});continue}
+let chk=_CheckHeaderMatch(headerBytes)
+if(chk.ok){_fList.push(entry);_fMatched++}else ScanExcludedFiles.push({name:entry.name,reason:chk.reason})
 }
 // Zip-contained entries — one read+decompress pass per ZIP, not per entry
 for(const[zipHandle,groupEntries]of zipGroups){
@@ -2744,20 +2770,21 @@ let zipBuf
 try{
 let zipFile=await zipHandle.getFile()
 zipBuf=new Uint8Array(await zipFile.arrayBuffer())
-}catch(e){_fN+=groupEntries.length;continue}
+}catch(e){for(const entry of groupEntries)ScanExcludedFiles.push({name:entry.name,reason:'Failed to open source zip: '+e.message});_fN+=groupEntries.length;continue}
 let wantedNames=new Set(groupEntries.map(e=>e.entryName))
 let decompressed
 try{
 decompressed=fflate.unzipSync(zipBuf,{filter:f=>wantedNames.has(f.name)})
-}catch(e){_fN+=groupEntries.length;continue}
+}catch(e){for(const entry of groupEntries)ScanExcludedFiles.push({name:entry.name,reason:'Failed to decompress zip entry: '+e.message});_fN+=groupEntries.length;continue}
 for(const entry of groupEntries){
 _fN++
 await _maybeYield()
 let full=decompressed[entry.entryName]
-if(!full)continue
-if(full.length>8*1024*1024)continue  // outlier guard
+if(!full){ScanExcludedFiles.push({name:entry.name,reason:'Entry not found in zip after decompression'});continue}
+if(full.length>8*1024*1024){ScanExcludedFiles.push({name:entry.name,reason:`File too large (${full.length.toLocaleString()} bytes > 8MB outlier guard) \u2014 skipped without reading`});continue}
 let headerBytes=full.subarray(0,Math.min(full.length,8192))
-if(_CheckHeaderMatch(headerBytes)){_fList.push(entry);_fMatched++}
+let chk=_CheckHeaderMatch(headerBytes)
+if(chk.ok){_fList.push(entry);_fMatched++}else ScanExcludedFiles.push({name:entry.name,reason:chk.reason})
 }
 }
 clearInterval(_fT)
@@ -2766,7 +2793,7 @@ clearInterval(_fT)
 if(!_fList.length){
 _ScanLifetimeRuns++;_SaveLifetimeStats()
 W(G('lifetimeStats'),`Displayed: ${_ScanLifetimeDisplayed.toLocaleString()} (${_ScanLifetimeRuns} scan${_ScanLifetimeRuns===1?'':'s'})`)
-W(G('nVer'),`No files matching this template/interface (checked ${ScanBinList.length.toLocaleString()} files). Try a different template, or click Scan again to choose a different folder.`);return false}
+W(G('nVer'),`No files matching this template/interface (checked ${ScanBinList.length.toLocaleString()} files). Try a different template, or click Scan again to choose a different folder.${ScanExcludedFiles.length?` <a onclick="DownloadScanExclusionReport()" style="cursor:pointer">(download report of why)</a>`:''}`);return false}
 
 _ScanLifetimeRuns++;_SaveLifetimeStats()
 W(G('lifetimeStats'),`Displayed: ${_ScanLifetimeDisplayed.toLocaleString()} (${_ScanLifetimeRuns} scan${_ScanLifetimeRuns===1?'':'s'})`)
@@ -2781,7 +2808,7 @@ ScanClick=async()=>{
 if(ScanActive){
 // Stop auto scan
 ScanActive=false;_ScanClearTimer()
-G('scanCtrl').style.display='inline-flex';G('scanBtn').style.display='none';G('s1').style.fontWeight='';G('s3').style.fontWeight=''
+G('scanCtrl').style.display='inline-flex';G('scanBtn').style.display='none';_SetScanBtn(null)
 W(G('nVer'),'Scan stopped — use icons to resume')
 ScanStepMode=false;return
 }
@@ -2789,14 +2816,14 @@ if(ScanStepMode){
 // Resume auto from step mode
 if(RevTimer){clearInterval(RevTimer);RevTimer=null;W(G('revBtn'),'Play')}
 ScanActive=true;ScanStepMode=false
-G('scanCtrl').style.display='inline-flex';G('scanBtn').style.display='none';G('s1').style.fontWeight='';G('s3').style.fontWeight='bold'
+G('scanCtrl').style.display='inline-flex';G('scanBtn').style.display='none';_SetScanBtn('s3')
 _doScanStepDir(1);return
 }
 if(RevTimer){clearInterval(RevTimer);RevTimer=null;W(G('revBtn'),'Play')}
 let ready=await ScanEnsureReady()
 if(!ready)return
 ScanActive=true;ScanStepMode=false
-G('scanCtrl').style.display='inline-flex';G('scanBtn').style.display='none';G('s1').style.fontWeight='';G('s3').style.fontWeight='bold'
+G('scanCtrl').style.display='inline-flex';G('scanBtn').style.display='none';_SetScanBtn('s3')
 // Compare mode determined by whether user clicked Compare (A2 set)
 _doScanStepDir(1)
 }
@@ -2806,7 +2833,7 @@ ScanStepClick=async()=>{
 if(ScanActive){
 _ScanClearTimer()
 ScanActive=false;ScanStepMode=true
-G('scanCtrl').style.display='inline-flex';G('scanBtn').style.display='none';G('s1').style.fontWeight='';G('s3').style.fontWeight=''
+G('scanCtrl').style.display='inline-flex';G('scanBtn').style.display='none';_SetScanBtn(null)
 _doScanStepDir(1);return
 }
 // If not initialized yet, set up first
@@ -2816,7 +2843,7 @@ let ready=await ScanEnsureReady()
 if(!ready)return
 }
 ScanStepMode=true
-G('scanCtrl').style.display='inline-flex';G('scanBtn').style.display='none';G('s1').style.fontWeight='';G('s3').style.fontWeight=''
+G('scanCtrl').style.display='inline-flex';G('scanBtn').style.display='none';_SetScanBtn(null)
 _doScanStepDir(1)
 }
 
@@ -2865,8 +2892,16 @@ ok=false
 // DcFl0 already rendered this (wrong) record to the screen as a side effect,
 // before this check could run — clear it immediately so the wrong template
 // doesn't linger on screen for this step's duration while we skip ahead.
+// This includes the LEFT panel's title + hex dump and the small err/defectSum
+// notice areas some templates populate, not just the main decode table.
 W(G('rTab'),'')
 W(G('ruSide'),'🔍 Skipping a false-positive match\u2026')
+W(G('tmplName'),'')
+W(G('lTab'),'')
+W(G('err'),'')
+W(G('defectSum'),'')
+W(G('dvTitle'),'')
+W(G('dvTitle2'),'')
 }
 }catch(e){ok=false}
 }
@@ -2888,7 +2923,7 @@ W(G('lifetimeStats'),`Displayed: ${_ScanLifetimeDisplayed.toLocaleString()} (${_
 ScanIdx=k+1;if(ScanIdx>=ScanTotal)ScanIdx=0
 let modeLabel=(ScanStepMode?(dir<0?' ◀ Back':' ▶ Step'):'')
 let speedNote=(ScanActive&&ScanTimerRAF)?' ⚡full speed':''
-W(G('nVer'),`▶ [${seqNum.toLocaleString()}/${ScanTotal.toLocaleString()} matches, ${ScanExaminedCount.toLocaleString()} scanned]${ScanIntf?' '+ScanIntf:''}${modeLabel}${speedNote}`)
+W(G('nVer'),`▶ [${seqNum.toLocaleString()}/${ScanTotal.toLocaleString()} matches, ${ScanExaminedCount.toLocaleString()} scanned]${ScanIntf?' '+ScanIntf:''}${modeLabel}${speedNote}${ScanExcludedFiles.length?` <a onclick="DownloadScanExclusionReport()" style="cursor:pointer">(${ScanExcludedFiles.length.toLocaleString()} excluded \u2014 download report)</a>`:''}`)
 let dvt=G('dvTitle');if(dvt)dvt.innerHTML=(dvt.innerHTML||'').replace(/\s*<span[^>]*>\[\d+.*?\]<\/span>/,'')+` <span style='color:#1a5fa8;font-size:12px'>[${seqNum}/${ScanTotal}: ${entry.name}]</span>`
 if(ScanActive)_ScanScheduleNext()
 }
@@ -2910,7 +2945,7 @@ if(RevTimer){clearInterval(RevTimer);RevTimer=null;W(G('revBtn'),'Play')}
 if(!ScanEntries.length){if(RevTimer){clearInterval(RevTimer);RevTimer=null;W(G('revBtn'),'Play')}
 let ready=await ScanEnsureReady();if(!ready)return}
 _ScanClearTimer()
-ScanActive=false;ScanStepMode=true;G('scanCtrl').style.display='inline-flex';G('scanBtn').style.display='none';G('s1').style.fontWeight='';G('s3').style.fontWeight=''
+ScanActive=false;ScanStepMode=true;G('scanCtrl').style.display='inline-flex';G('scanBtn').style.display='none';_SetScanBtn(null)
 await _doScanStepDir(-1)
 }
 
@@ -2934,7 +2969,7 @@ if(_PickResumeMode==='scan'){
 ScanRawT=rawT
 ScanActive=true;ScanStepMode=false;ScanDirection=1
 G('scanCtrl').style.display='inline-flex';G('scanBtn').style.display='none'
-G('s1').style.fontWeight='';G('s3').style.fontWeight='bold'
+_SetScanBtn('s3')
 _doScanStepDir(1)
 }else if(_PickResumeMode==='play'){
 DpT(idx)
@@ -2958,7 +2993,7 @@ if(wasScanning||wasPlaying||_PickResumeMode){
 // picks a template or manually starts a new scan/Play — rather than falling
 // through to the old plain template list once the live scan/play state is
 // already false from the first pause.
-if(wasScanning){ScanActive=false;ScanStepMode=false;_ScanClearTimer();G('scanCtrl').style.display='inline-flex';G('scanBtn').style.display='none';G('s1').style.fontWeight='';G('s3').style.fontWeight='';W(G('nVer'),'')}
+if(wasScanning){ScanActive=false;ScanStepMode=false;_ScanClearTimer();G('scanCtrl').style.display='inline-flex';G('scanBtn').style.display='none';_SetScanBtn(null);W(G('nVer'),'')}
 if(wasPlaying){clearInterval(RevTimer);RevTimer=null;W(G('revBtn'),'Play')}
 if(wasScanning||wasPlaying)_PickResumeMode=wasScanning?'scan':'play'
 let modeLabel=_PickResumeMode==='scan'?'Scan':'Play'
@@ -3172,6 +3207,12 @@ return names[n]}
 G=x=>{return D.getElementById(x)}
 DpT=i=>{Tx=i;DcFl();G('rdSide').scrollTop=0;try{localStorage.setItem('dv_lastTx',Tx)}catch(e){}}
 SaveFl=z=>{saveAs(new Blob([SAll],{type: "text/plain;charset=utf-8"}),G('file').value+".csv")}
+
+DownloadScanExclusionReport=()=>{
+let rows=[['File name','Reason excluded']]
+ScanExcludedFiles.forEach(e=>rows.push([e.name,e.reason]))
+let csv=rows.map(r=>r.map(v=>'"'+String(v).replace(/"/g,'""')+'"').join(',')).join('\r\n')
+saveAs(new Blob([csv],{type:'text/csv;charset=utf-8'}),'scan_excluded_files_'+(ScanIntf||'all')+'_T'+ScanRawT+'.csv')}
 H2D=(ix,y)=>{return A[ix+y]*256+A[ix]*1}
 U=(x,y)=>{return (['','00','0000',,,,'000000000000'][y]+x.toString(16).toUpperCase()).substr(0-y*2)}
 Q=x=>{return D.querySelectorAll(x)}
