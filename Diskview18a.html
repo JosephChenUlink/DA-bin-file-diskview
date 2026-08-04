@@ -63,7 +63,7 @@ td button:not(.nbtn),th button{width:20px;height:20px}
   <span style='display:flex;align-items:center;gap:8px'>
   <span id='scanElapsed' title='Time elapsed since the current scan started (resets on each Scan click)' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
   <span id='lifetimeStats' title='How many times a template has been displayed while stepping/playing through results, across all Scan clicks this session' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
-  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260804a</span>
+  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260804b</span>
   </span>
 </div>
 <input id='local'type='file'style='display:none'onchange='OpFl()'>
@@ -2556,11 +2556,17 @@ async loadFileHint(){return this._get('fileHint')}
 _ReadZipEntryBytes=async(zipHandle,entryName)=>{
 if(zipHandle!==_ZipCacheHandle){
 let zipFile=zipHandle.getFile?await zipHandle.getFile():zipHandle
-let zipBuf=new Uint8Array(await zipFile.arrayBuffer())
-_ZipCacheData=fflate.unzipSync(zipBuf,{filter:f=>_IsBinLike(f.name)})
+_ZipCacheRawBuf=new Uint8Array(await zipFile.arrayBuffer())
 _ZipCacheHandle=zipHandle
 }
-return _ZipCacheData[entryName]||null
+// Decompress only the one entry actually needed for this step. Decompressing
+// every bin-like entry in the whole zip up front (the old behavior) could
+// take minutes on zips containing hundreds of thousands of entries — freezing
+// the tab for that entire time just to display a single file. Parsing the
+// central directory to find this one entry is cheap; full decompression of
+// everything else was the expensive part, and is no longer done.
+let out=fflate.unzipSync(_ZipCacheRawBuf,{filter:f=>f.name===entryName})
+return out[entryName]||null
 }
 
 _IsBinLike=(name)=>{
