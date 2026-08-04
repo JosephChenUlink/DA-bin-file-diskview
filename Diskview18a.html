@@ -63,7 +63,7 @@ td button:not(.nbtn),th button{width:20px;height:20px}
   <span style='display:flex;align-items:center;gap:8px'>
   <span id='scanElapsed' title='Time elapsed since the current scan started (resets on each Scan click)' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
   <span id='lifetimeStats' title='How many times a template has been displayed while stepping/playing through results, across all Scan clicks this session' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
-  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260804b</span>
+  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260804c</span>
   </span>
 </div>
 <input id='local'type='file'style='display:none'onchange='OpFl()'>
@@ -2768,17 +2768,28 @@ zipGroups.get(entry.zipHandle).push(entry)
 // that potential per-yield cost.
 let _lastYield=performance.now()
 let _maybeYield=async()=>{if(performance.now()-_lastYield>50){await new Promise(r=>setTimeout(r,0));_lastYield=performance.now()}}
-// Plain files — one read per file, same as before
-for(const entry of plainEntries){
+// Plain files — read in concurrent batches rather than one at a time. Each
+// file needs its own filesystem-access-API call (getFile + slice +
+// arrayBuffer), which is dominated by I/O latency rather than CPU work —
+// unlike zip entries, there's no shared cached read to amortize across many
+// files, so keeping several reads in flight at once lets the OS/browser
+// overlap that per-call latency instead of paying it fully serially for
+// every single file.
+const _PLAIN_BATCH=24
+for(let bi=0;bi<plainEntries.length;bi+=_PLAIN_BATCH){
 if(ScanCollectAbort){clearInterval(_fT);W(G('nVer'),'');return false}
-_fN++
 await _maybeYield()
+let batch=plainEntries.slice(bi,bi+_PLAIN_BATCH)
+let results=await Promise.all(batch.map(async entry=>{
 let file
-try{file=entry.file||(await entry.handle.getFile())}catch(e){continue}
-if(file.size>8*1024*1024)continue  // outlier guard
+try{file=entry.file||(await entry.handle.getFile())}catch(e){return false}
+if(file.size>8*1024*1024)return false  // outlier guard
 let headerBytes
-try{headerBytes=new Uint8Array(await file.slice(0,Math.min(file.size,8192)).arrayBuffer())}catch(e){continue}
-if(_CheckHeaderMatch(headerBytes)){_fList.push(entry);_fMatched++}
+try{headerBytes=new Uint8Array(await file.slice(0,Math.min(file.size,8192)).arrayBuffer())}catch(e){return false}
+return _CheckHeaderMatch(headerBytes)
+}))
+_fN+=batch.length
+for(let bj=0;bj<batch.length;bj++){if(results[bj]){_fList.push(batch[bj]);_fMatched++}}
 }
 // Zip-contained entries — one read+decompress pass per ZIP, not per entry
 for(const[zipHandle,groupEntries]of zipGroups){
