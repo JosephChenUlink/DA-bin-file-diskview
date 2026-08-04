@@ -63,7 +63,7 @@ td button:not(.nbtn),th button{width:20px;height:20px}
   <span style='display:flex;align-items:center;gap:8px'>
   <span id='scanElapsed' title='Time elapsed since the current scan started (resets on each Scan click)' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
   <span id='lifetimeStats' title='How many times a template has been displayed while stepping/playing through results, across all Scan clicks this session' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
-  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260804c</span>
+  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260804d</span>
   </span>
 </div>
 <input id='local'type='file'style='display:none'onchange='OpFl()'>
@@ -954,7 +954,21 @@ qr+="<tr id=r"+(j*28+k)+(kr<5?">":(kr==5?" class='c0'>":" class='c1'>"))+qd+"</t
 W(G('rTab'),qr)
 Dp3BC(4)}
 
-}else DpGp234()
+}else{
+DpGp234()
+if(T==10){
+// Percentage Used Endurance Indicator is a direct decimal percentage —
+// decode the raw hex value and show it alongside, e.g. '0000000B (11%)'.
+Array.from(Q('#rTab tr')).forEach(tr=>{
+let cells=tr.querySelectorAll('td')
+if(cells.length>=3&&cells[0].innerHTML.includes('Percentage Used Endurance Indicator')){
+let hexVal=cells[2].innerHTML.trim()
+let dec=parseInt(hexVal,16)
+if(!isNaN(dec))cells[2].innerHTML=hexVal+' ('+dec+'%)'
+}
+})
+}
+}
 
 Rows=Q('#rTab tr')
 Rows.forEach((e,i)=>{
@@ -1538,7 +1552,7 @@ Number of Free-Fall Events Detected &#916;>0,Number of Shock Events Detected
 Number of Reported Uncorrectable Errors,Number of Resets Between Command Acceptance and Command Completion,Physical Element Status Changed &#916;>0
 Current Temperature=>T2.194 231,Average Short Term Temperature,Average Long Term Temperature,Highest Temperature,Lowest Temperature,Highest Average Short Term Temperature,Lowest Average Short Term Temperature,Highest Average Long Term Temperature,Lowest Average Long Term Temperature,Time in Over-Temperature,Specified Maximum Operating Temperature,Time in Under-Temperature,Specified Minimum Operating Temperature
 Number of hardware resets,Number of ASR Events,Number of Interface CRC Errors &#916;>0
-Percentage Used Endurance Indicator(%)=>T2.232
+Percentage Used Endurance Indicator(%)
 Interface CRC Error (ICRC) Count >0,Uncorrectable Error (UNC) Count >0,ID Not Found (IDNF) Count >0,Command Aborted (ABRT) Count,Address Mark Not Found (AMNF) Count >0,SATA Handshake Error (H) (Bit 22) Count,SATA CRC Error (C) (Bit 21) Count >0,SATA Disparity Error (D) (Bit 20) Count,SATA 10B to 8B Decode Error (B) (Bit 19) Count,SATA Internal Error (E) (Bit 11) Count,SATA Protocol Error (P) (Bit 10) Count,SATA Persistent Communication Error (C) (Bit 9) Count,SATA Transient Data Integrity Error (T) (Bit 8) Count,SATA Recovered Communications Error (M) (Bit 1) Count,SATA Recovered Data Integrity Error (I) (Bit 0) Count
 Write Retry Count,Read Retry Count,Other Command Retry Count,Read IOPS,Write IOPS,Long Latency Write Count (4K Random),Long Latency Read Count (4K Random),,,Host Software Command Timeout Count
 Drive Not Ready Failure,Drive Write Operation Failure >0,Drive Read and Write Operation Failure >0,IDENTIFY Failure >0,Other Drive Failure
