@@ -13,7 +13,10 @@
      process this page's content during live updates (e.g. Scan mode). -->
 
 <style>
-.cell{border:1px solid #ddd}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;margin:0;background:#eef2f7;color:#222}
+button{font-family:inherit;border-radius:3px}
+input,select{font-family:inherit}
+.cell{border:1px solid #ddd;background:#fff}
 .hili{background:gold;color:blue}
 .hilig{background:#ddd}
 .c0,.c4,b,a{color:blue}
@@ -51,22 +54,22 @@ td button:not(.nbtn),th button{width:20px;height:20px}
 <title>Disk Viewer</title>
 </head>
 <body>
-<div style='background:#1a5fa8;padding:6px 16px;display:flex;align-items:center;gap:10px'>
-  <img src='data:image/png;base64,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' style='height:46px;width:46px;display:block' alt='ULINK Drive Analyzer logo'>
-  <span style='color:#fff;font-size:16px;font-weight:500;letter-spacing:0.3px'>DA Drive Analyzer Bin File Viewer</span>
+<div style='background:#1a5fa8;padding:1px 16px;display:flex;align-items:center;gap:12px'>
+  <img src='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAC4AAAAuCAYAAABXuSs3AAAGrElEQVR42u2YW2xcVxmFv3/vM2d8jWMncZSG1hWiQTRBFQQlrRRIAioPfSOpTXmgwBNCXKqqUqgQkmuEhFoeykUIVcADpA9o3FZUQgURtbarlgTUqlITJ21uTRynjm9jj8czZ+acs/fPw9iNc6Gx4yBUaZZ0HvbMPmevWXvt9f9zoI466qijjjrqWD5k1U9QNSuZjYh+NKVSFQY0QHVVogWr5dHx7tSnTLahkThR0uS6ZJJMBiNBHDa3TIyLTAApADm19Ij7v1il7fjUMdPStlVL82DMf/EHiPcoFMTYE1Z4sTmt/HHk7s4xetXwxMottHx/5nIWVXv1FptEEokSlapzEiV6zVVJ1ESJSuwwjjYjmXtpbPnZTDn7tvnL1A+kTzwiulLrBMv2pSzZ0tpYAUzqxaQqmnpB5MMXT1PVSlGlVPRaDdb7prZf2hcn7/tkdfwbx58gRZXlKh8sk7SueXdqh6xr22zz772cF5lb/NykOHGa4vDI9RNGVC1iBFRQRMBIVFWmotSt63zonWoayk/Mft3qLaiHG5M3NyBtEdHW0/lH3Nq2f6UmeKEadh7pPFPcuDjFpr4909gcZLKtYaahLbjeZSUUk3hMCiYFm4LGCI4MU+Oxb+rYZw+e/zE94sgtz75yI6XvPnYsPN+w6ZxmGzZSqVSks6MpmJx9tPCJ9l+gaj72+uRPbbbpDl8uKeYqqwiCol51F0HYpUlVERFjYHo8JZrzYFQx1osYF/pka/Xh28/Qi9An/uasIgKqshXc+TMzMzQ1bSKuZjEwH9pzAAwPB6O7tv3oRup0vTz2rDY2dfkodkhtzbTswSl4BE1VW9rDtDz7GMh3YMAC/mY9roDpF3Ftpya/66rV37kg6FxzKX9k31Q+exBg27Z4cfL2NzTz5nY8g4OXVY82WxovOpNISOIhVYyBOFbS8tL4Vsv8HN65BzsOnvxh/utb5pYGwMoPp4gHpHDXhsGugYFPl7buaR/vkjE5cvLLDx8++a1CJTNQallzXzw7/c6rn5O3UBX27r28WE6VB7Y4eemSSgqagrVCtZiisUesoLpgqTT2ZJvXF+bndwKH6McAbjVxqKia8yIVYGy3avAnkX/sO/zeA8UwPKYizba1zX/x1XNffUXkue6cWoCJ4UG5OHbKbu4dkPdTFRJFnSJemZ9NwYH6pYKq1zAjkshngEMMf3hxXF6Oi/gPCsQg9Pb2mlcqbMm0tzan+elisGZNU1rhEeC5/m50YacA0tPAlhdGY+PAeKVU9lTnk9oZuibnnajzXSwudEt6lQW/deZU+/r6dO/eb46YJMFkMq1BUyu+WDwJ0N0/HJx4fux+L2GTurh2xJ3/OFEVcUh+qgqpR8yCTa4g7iE/H9y6yrmA7pzaszNvGsCdCu3fOmbzQxva2tvTmckTjTZ8HCBqaA+0rM/a1pa1mlRBBF+NsFGZ2Xlny4WkRtrplTlgDBTKcGH80i0n3l/r5BwDA0Fxuvj4aJp+n/vvOrp0zrrp2I8E4awvFFpxiVdVY0WMU+TSpTI4vdLbuhC9PhHysxBwdBlOWRZxWXi67v75hQeNzZq35iY2etxrfOWeo9uf0UzUXjtIG4bx5dJEYFqcFcRqqgJirIGRsTJJtCRJFlmL1E5pftZKpRKFDc3/jAD2DHqGVkG8O6emv0fc5588/6Rt7jiAWLacLb/070fv/PXuXg2Gvi3JVbfMf/YPo15RfKpkrHBhskKhmFzrazGgHsnPOMhYCdJD0W92vU93ztLX41aleP8Hjb4+lEbFxPtUs0523JsbaRzqkWjnM6OPSaZhk8aRqiBGNUhi7cAkNIBcLFQYn6nWSF/RJQkkKcwW0MQh2VDCjDxVuVVtbXdObY28/DloXHMAEeK58b8e6bmjAuBi/71sy9o7vQYgFkWx0RzWeUZKsVycWyRdqzS1GFQoRzBfAu9jWteHJpr+feW3X3id7pylv8fdfJN1HY/veerCfjUmpHhb/1CfpAA7nx55Q8KGe3wcecBYEbyqPVuKZTJKLiu9mNtxjJQjSBJAPU0dRqpzh2/LbP7S6OiRmP7uZbW1y6ucC79v8MDtz1/9pU00a4IgcM5gjGE+9ZwuVymlHgmCGmlVSBKkUoE4qY2NAZs1kpT+3morXxt9+o7oRv3JqnJ8YnhQhvr2uEVVjLH7NU4arUc1qcrxUokkgUwGksUNTxKYnUFjIAwhA7hAsaC/2vF2AaC31yypuB+ZdxYr/tO++hdCvWp6lwz7Vnp/n+hCGaqjjjrqqKOOOv5n+A/fxYSM+yehAwAAAABJRU5ErkJggg==' style='height:56px;width:56px;display:block' alt='ULINK Drive Analyzer logo'>
+  <span style='color:#fff;font-size:20px;font-weight:600;letter-spacing:0.3px'>DA Drive Analyzer Bin File Viewer</span>
 </div>
 <div style='background:#e8f2fb;border-bottom:1px solid #1a5fa8;padding:5px 12px;font-size:11px;color:#0d3d6e;display:flex;align-items:center;justify-content:space-between'>
   <span>&#128274; <b>Privacy:</b> All processing is performed locally in your browser. No file data is transmitted to any server. &copy; 2026 <a href='https://ulinktech.com' target='_blank' style='color:#0d3d6e'>ULINK Technology, Inc.</a></span>
   <span style='display:flex;align-items:center;gap:8px'>
   <span id='scanElapsed' title='Time elapsed since the current scan started (resets on each Scan click)' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
   <span id='lifetimeStats' title='How many times a template has been displayed while stepping/playing through results, across all Scan clicks this session' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
-  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260803k</span>
+  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260803l</span>
   </span>
 </div>
 <input id='local'type='file'style='display:none'onchange='OpFl()'>
 <input id='local2'type='file'style='display:none'onchange='OpFl2()'>
 <div style='display:flex;align-items:center;gap:4px;padding:3px 6px;flex-wrap:nowrap;min-width:0'>
-<button onclick="OpFlPick()" title="Select File to View" style='flex-shrink:0;background:#1a5fa8;color:#fff;border:1px solid #0d3d6e;padding:3px 10px;font-size:13px;cursor:pointer;border-radius:3px'>File</button><span id='fileLabel' style='flex:0 0 450px;padding:2px 8px;border:1px solid #999;background:#fff;font-size:12px;color:#555;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:middle'>No file chosen</span>
+<button onclick="OpFlPick()" title="Select File to View" style='flex-shrink:0;background:#1a5fa8;color:#fff;border:1px solid #0d3d6e;padding:3px 10px;font-size:13px;cursor:pointer;border-radius:3px'>File</button><span id='fileLabel' style='flex:0 0 220px;padding:2px 8px;border:1px solid #999;background:#fff;font-size:12px;color:#555;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:middle'>No file chosen</span>
 <span id='adv'style='display:none;flex-shrink:0;align-items:center;gap:2px'><button onclick='Adv(-1)' title="Previous Template">-</button><button id='tmpl'onclick='List()'></button><button onclick='Adv(1)' title="Next Template">+</button>&nbsp;<button id='revBtn'onclick='ToggleReview()' title="Play Templates">Play</button><span id='revSpeedWrap'>&nbsp;Speed:&nbsp;<input type='range'id='revSpeed'min='0.05'max='5'step='0.05'value='1'oninput='RevSpeedChange()'style='vertical-align:middle;width:90px'>&nbsp;<span id='revSpeedLbl'>1.0s</span></span>&nbsp;<span id='scanWrap'><span id='scanCtrl' style='display:none;gap:1px'><button id='s0'onclick='ScanStepBackClick()' title="Step backward">&#9198;</button><button id='s1'onclick='ScanPlayBack()' title="Play backward">&#9194;</button><button id='s2'onclick='ScanStop()' title="Stop">&#9209;</button><button id='s3'onclick='ScanPlayFwd()' title="Play forward">&#9193;</button><button id='s4'onclick='ScanStepClick()' title="Step forward">&#9197;</button></span><button id='scanBtn'onclick='ScanSetup()' title="Scan all .bin files in the selected folder and its subfolders" style='display:inline'>Scan</button></span>&nbsp;<button id='cmpBtn' onclick='CmpToggle()' title="Compare the Templates">Compare</button>&nbsp;<button onclick='GetPDF()' title="Download PDF File">PDF</button><button onclick='SaveFl()'id='btn8'hidden>&#11015;</button></span>
 <button id='host'hidden></button>&nbsp;<span id='nVer'style='font-size:12px;font-weight:bold;color:#1a5fa8'></span>&nbsp;<span id='scanFolderLabel'style='font-size:11px;color:#555'></span>
 </div>
@@ -152,7 +155,7 @@ td button:not(.nbtn),th button{width:20px;height:20px}
 @-32Number of ASR Events
 @-32Number of Interface CRC Errors
 </div>
-<div id='I10'>-8Percentage Used Endurance Indicator
+<div id='I10'>-8Percentage Used Endurance Indicator(%)
 </div>
 <div id='I16'>16,-1,(1) data is a new count,(0) data is accumulated value,32,-64Value
 @+0@+0@+0@+0@+0@+0@+0@+0@+0@+0@+0@+0@+0@+0@+0
@@ -251,7 +254,7 @@ td button:not(.nbtn),th button{width:20px;height:20px}
 <div id='I36'>@@@@@</div>
 <div id='I37'>32,-2016ParameterValue</div>
 <div id='I38'>32,-4Self-Test Results,37,-3Self-Test Code,40,-8Self-Test Number,48,-16 Accumulated Power On Hours,64,-64Address of First Failure,128,-4Sense Key,136,-8Additional Sense Code,144,-8Additional Sense Code Qualifier,152,-8Vendor Specific</div>
-<div id='I39'>56,-8Percentage Used Endurance Indicator</div>
+<div id='I39'>56,-8Percentage Used Endurance Indicator(%)</div>
 <div id='I40'>32,-32Accumulated Power On Minutes,64,-16Background Scan Status,80,-16Number of Background Scans performed,96,-16Background Scan Progress,112,-16Number of Background Medium Scans performed</div>
 <div id='I40A'>32,-32Accumulated Power On Minutes,64,-2Sense Keys,68,-1Reassign Status,72,-8Additional Sense Code,80,-8Additional Sense Code Qualifier,88,-40Vendor Specific,128,-64Logic Block Address</div>
 <div id='I41'>40,-24Maximum Nonvilatile Time(min)</div>
@@ -558,7 +561,7 @@ if(ScanActive||ScanStepMode){ScanActive=false;ScanStepMode=false;_ScanClearTimer
 // Load the selected file (no folder dialog)
 let file=await fh.getFile()
 let fname=file.name
-CurFile=fname;W(G('fileLabel'),fname)
+CurFile=fname;_SetFileLabel(fname)
 PrevRawT=(ArIx&&ArIx.length>0&&Tx>=0)?ArIx[Tx*2]:-1;Tx=0
 let buf=await file.arrayBuffer()
 try{localStorage.setItem('dv_lastFile',Buf2B64(buf));localStorage.setItem('dv_lastFileName',fname);localStorage.setItem('dv_lastTx',0)}catch(e){}
@@ -572,7 +575,7 @@ _LoadBinEntry=async(entry)=>{
 let buf
 try{let file=entry.file||(await entry.handle.getFile());buf=await file.arrayBuffer()}catch(e){return}
 ScanFileHandle=entry.handle||null
-CurFile=entry.name;W(G('fileLabel'),entry.name)
+CurFile=entry.name;_SetFileLabel(entry.name)
 PrevRawT=(ArIx&&ArIx.length>0&&Tx>=0)?ArIx[Tx*2]:-1;Tx=0
 try{localStorage.setItem('dv_lastFile',Buf2B64(buf));localStorage.setItem('dv_lastFileName',entry.name);localStorage.setItem('dv_lastTx',0)}catch(e){}
 W(G('nVer'),'')
@@ -586,7 +589,7 @@ OpFl=z=>{
 if(RevTimer){clearInterval(RevTimer);RevTimer=null;W(G('revBtn'),'Play')}
 if(ScanActive||ScanStepMode){ScanActive=false;ScanStepMode=false;ScanEntries=[];_ScanClearTimer();W(G('scanBtn'),'Scan');G('scanCtrl').style.display='none';G('scanBtn').style.display='inline';W(G('nVer'),'')}
 let f=G('local').files[0],r=new FileReader()
-CurFile=f.name;W(G('fileLabel'),f.name)
+CurFile=f.name;_SetFileLabel(f.name)
 PrevRawT=(ArIx&&ArIx.length>0&&Tx>=0)?ArIx[Tx*2]:-1;Tx=0
 r.onload=e=>{
 try{localStorage.setItem('dv_lastFile',Buf2B64(e.target.result));localStorage.setItem('dv_lastFileName',f.name);localStorage.setItem('dv_lastTx',Tx)}catch(err){}
@@ -717,7 +720,7 @@ if((ScanActive||ScanStepMode)&&ScanOrigBuf){
 // During scan: compare original (File 1) vs scanned (File 2) — no file picker needed
 // Restore original file as File 1 (it may have been replaced by scan)
 if(CurFile!==ScanOrigName){
-CurFile=ScanOrigName;W(G('fileLabel'),ScanOrigName)
+CurFile=ScanOrigName;_SetFileLabel(ScanOrigName)
 DcFl0(ScanOrigBuf)}
 // Use last scanned file as File 2 (or wait for first scan step if none yet)
 if(ScanLastBuf&&ScanLastName){
@@ -1457,9 +1460,13 @@ BuildTitle=()=>{
 let g=(re)=>{let m=SAll.match(re);return m?m[1].trim():''}
 let dt=g(/Date:\s*([^\n]+)/),tm=g(/Time:\s*([^\n]+)/),intf=g(/Interface:\s*([^\n]+)/),cap=g(/Capacity:\s*(\d+)/)
 let model=GetModel()
-let capGB=cap?(Number(cap)/1e9).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})+' GB':''
+let capNum=cap?Math.round(Number(cap)/1e9).toLocaleString('en-US'):''
+// Right-align the number to the width of '999,999' (7 chars) using &nbsp; —
+// plain spaces collapse in HTML, so real padding needs non-breaking spaces.
+let capGB=capNum?'&nbsp;'.repeat(Math.max(0,7-capNum.length))+capNum+' GB':''
+let dtTm=[dt,tm].filter(x=>x).join(' ')
 W(G('dvTitle2'),'DA Drive Analyzer Bin File: "'+CurFile+'"')
-W(G('dvTitle'),[model,intf,capGB,dt,tm].filter(x=>x).join(' '))}
+W(G('dvTitle'),[intf,dtTm,capGB,model].filter(x=>x).join(', '))}
 
 DpGp234=z=>{
 let arYM=',31,,,40,41,32,42,43,44,45,,,,,,46,33,34,35,47,48,36,37,38,39,0,1'.split(',')
@@ -1531,7 +1538,7 @@ Number of Free-Fall Events Detected &#916;>0,Number of Shock Events Detected
 Number of Reported Uncorrectable Errors,Number of Resets Between Command Acceptance and Command Completion,Physical Element Status Changed &#916;>0
 Current Temperature=>T2.194 231,Average Short Term Temperature,Average Long Term Temperature,Highest Temperature,Lowest Temperature,Highest Average Short Term Temperature,Lowest Average Short Term Temperature,Highest Average Long Term Temperature,Lowest Average Long Term Temperature,Time in Over-Temperature,Specified Maximum Operating Temperature,Time in Under-Temperature,Specified Minimum Operating Temperature
 Number of hardware resets,Number of ASR Events,Number of Interface CRC Errors &#916;>0
-Percentage Used Endurance Indicator=>T2.232
+Percentage Used Endurance Indicator(%)=>T2.232
 Interface CRC Error (ICRC) Count >0,Uncorrectable Error (UNC) Count >0,ID Not Found (IDNF) Count >0,Command Aborted (ABRT) Count,Address Mark Not Found (AMNF) Count >0,SATA Handshake Error (H) (Bit 22) Count,SATA CRC Error (C) (Bit 21) Count >0,SATA Disparity Error (D) (Bit 20) Count,SATA 10B to 8B Decode Error (B) (Bit 19) Count,SATA Internal Error (E) (Bit 11) Count,SATA Protocol Error (P) (Bit 10) Count,SATA Persistent Communication Error (C) (Bit 9) Count,SATA Transient Data Integrity Error (T) (Bit 8) Count,SATA Recovered Communications Error (M) (Bit 1) Count,SATA Recovered Data Integrity Error (I) (Bit 0) Count
 Write Retry Count,Read Retry Count,Other Command Retry Count,Read IOPS,Write IOPS,Long Latency Write Count (4K Random),Long Latency Read Count (4K Random),,,Host Software Command Timeout Count
 Drive Not Ready Failure,Drive Write Operation Failure >0,Drive Read and Write Operation Failure >0,IDENTIFY Failure >0,Other Drive Failure
@@ -1606,7 +1613,7 @@ n=f2?Math.min(H2D(F+5,-1)*8192+(H2D(F+7,-1)>>3),ArIx[Tx*2+1]/8-1,nRow):0
 a=arL
 qr=(T>29&&T<54?`<tr class='c4'onclick='CkHead()'>`:`<tr class='c0'>`)+`<th>Item</th><th>Index</th><th>`+(M>14&&(M<21||M>23)?(M==18?`Designator`:`Value`):
 (`Error Count,Power On Hours,Write Error Count,Read Error Count,Verify Error Count,Non-Medium Error Count,Format Data Out,Temperature,Value,Parameter Value`+
-`,SelfTest</th><th>PowerOnHour</th><th>FailAddr</th><th>SenseKey</th><th>Vendor,Percentage Used Endurance Indicator,AccPowerOnMinute</th><th>BackgroundScan_Status</th><th>No.BS_Performed</th><th>BS_Progress</th><th>No.BMS_Performed</th></tr>`+
+`,SelfTest</th><th>PowerOnHour</th><th>FailAddr</th><th>SenseKey</th><th>Vendor,Percentage Used Endurance Indicator(%),AccPowerOnMinute</th><th>BackgroundScan_Status</th><th>No.BS_Performed</th><th>BS_Progress</th><th>No.BMS_Performed</th></tr>`+
 `<tr><th></th><th></th><th>AccPowerOnMinute</th><th>SenseKey ReAssignStatus</th><th>AdditionalSenseCode&Qualifier</th><th>Vendor</th><th>LogicBlockAddr,Maximum Nonvilatile Time(min)`+
 `,Generation Code</th><th>Number Of Phys</th><th>Phy Identifier</th><th>SAS Phy Lo Descriptor Length</th><th></th></tr>`+
 `<tr class='c1'><th>.1</th><th></th><th>Attached Reason & Device Type</th><th>Negotiated Logical LinkRate & Reason</th><th>Attch Initiator & Target</th><th>SAS Address</th><th></th></tr>`+
@@ -2883,7 +2890,7 @@ ScanLastBuf=buf;ScanLastName=entry.name
 if(A2){
 CurFile2=entry.name;DcFl0_2(buf)
 }else{
-CurFile=entry.name;W(G('fileLabel'),entry.name)
+CurFile=entry.name;_SetFileLabel(entry.name)
 if(ScanRawT>=0)PrevRawT=ScanRawT
 try{DcFl0(buf)}catch(e){ok=false}
 }
@@ -3228,6 +3235,17 @@ W(G('nVer'),'PDF ready \u2014 '+fl+'.pdf')
 MO=async(e,fl)=>{}
 
 W=(x,y)=>{if(x)x.innerHTML=y}
+// Shows just the filename in the File box, and the containing folder (if any)
+// in the folder-display area on the right — keeps the File box itself short
+// and shows which subfolder the current file actually came from instead of a
+// static '(+ subfolders)' placeholder.
+_SetFileLabel=name=>{
+let parts=(name||'').split('/')
+let fname=parts.pop()
+let folder=parts.join('/')
+W(G('fileLabel'),fname)
+if(folder&&G('scanFolderLabel'))G('scanFolderLabel').innerHTML=`📁 ${folder}`
+}
 HiliRange=(off,len)=>{NoHiLi(1);HiLi(1,off,len)}
 StaName=hex=>{
 let n=parseInt(hex,16)%16
@@ -3267,7 +3285,7 @@ if(!b64)return
 if(isNaN(tx)||tx<0)tx=0
 Tx=tx
 CurFile=name||''
-if(name&&G('fileLabel'))W(G('fileLabel'),name)
+if(name)_SetFileLabel(name)
 DcFl0(B642Buf(b64))
 if(Tx*2>=ArIx.length){Tx=0;DcFl()}
 W(G('nVer'),'')}
