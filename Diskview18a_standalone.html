@@ -60,7 +60,7 @@ td button:not(.nbtn),th button{width:20px;height:20px}
   <span style='display:flex;align-items:center;gap:8px'>
   <span id='scanElapsed' title='Time elapsed since the current scan started (resets on each Scan click)' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
   <span id='lifetimeStats' title='How many times a template has been displayed while stepping/playing through results, across all Scan clicks this session' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
-  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260803g</span>
+  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260803h</span>
   </span>
 </div>
 <input id='local'type='file'style='display:none'onchange='OpFl()'>
@@ -1060,7 +1060,10 @@ if(!ArIx.length){W(G('tmpl'),'(no templates)');W(G('tmplName'),'');PrevRawT=-1;r
 if(Tx*2>=ArIx.length||Tx<0)Tx=0
 if(PrevRawT>=0){
 let fi=ArIx.findIndex((v,i)=>i%2===0&&v===PrevRawT)
-if(fi>=0)Tx=fi/2
+// Show the preferred template if this file has it; otherwise fall back to the
+// first available record rather than leaving Tx at a stale index left over
+// from whatever the previously-displayed file happened to have.
+Tx=fi>=0?fi/2:0
 PrevRawT=-1
 }
 DpFl()
@@ -1547,7 +1550,6 @@ SyncH()
 // field per entry). This renders every named sub-field per entry, one row each, skipping
 // entries whose 64/28-byte block is entirely zero (unused Error Log slots on a healthy
 // drive, or unwritten Self-test Log slots) so the table isn't dominated by empty rows.
-NvmeErrFields=[[0,'Error Count',8],[8,'Submission Queue ID',2],[10,'Command ID',2],[12,'Status Field',2],[14,'Parameter Error Location',2],[16,'LBA',8],[24,'Namespace ID',4],[28,'Vendor Specific Info Available',1],[29,'Transport Type',1],[32,'Command Specific Information',8],[40,'Transport Type Specific Info',2]]
 NvmeHex=(off,len)=>{let s='';for(let k=len-1;k>=0;k--)s+=U(A[F+off+k]*1,1);return s}
 NvmeLE=(off,len)=>{let v=0n;for(let k=len-1;k>=0;k--)v=v*256n+BigInt(A[F+off+k]*1);return v}
 NvmeAllZero=(base,len)=>{for(let k=0;k<len;k++)if(A[F+base+k]*1!=0)return false;return true}
@@ -2668,10 +2670,10 @@ W(e,x)
 if(T==25&&c+1==mo){
 let nm0=arS[q]||''
 if(nm0=='Percentage Used(%)'||nm0=='Media and Data Integrity Errors'){
-e.parentElement.style.background='#fff3cd'
+e.parentElement.style.background='#ffff00'
 if(nm0=='Percentage Used(%)'){
 let mm=x.match(/\((\d+)%\)/)
-if(mm&&parseInt(mm[1])>=100){e.parentElement.style.background='#f8d7da';e.parentElement.style.fontWeight='bold'}
+if(mm&&parseInt(mm[1])>=100){e.parentElement.style.background='#ffa500'}
 }
 }
 }
@@ -2950,13 +2952,6 @@ async loadFileHint(){return this._get('fileHint')}
 // Ensure scan folder is set up; returns true if ready
 // Recursively walk a directory and all subdirectories, yielding {name, handle} for each .bin file found.
 // 'name' includes the relative subfolder path (e.g. "sub/deeper/file.bin") so sorting and display stay meaningful.
-// Read one specific entry's decompressed bytes out of a .zip file. Caches the
-// last-accessed zip's fully-decompressed .bin-like entries — during sequential
-// stepping/Play, consecutive matches very often come from the same zip (entries
-// are sorted, so same-zip entries are grouped together), so this avoids repeatedly
-// re-opening and re-parsing the same zip file for every single entry within it.
-// Only one zip's worth of data is cached at a time, so memory stays bounded.
-_ZipCacheHandle=null,_ZipCacheData=null
 _ReadZipEntryBytes=async(zipHandle,entryName)=>{
 if(zipHandle!==_ZipCacheHandle){
 let zipFile=zipHandle.getFile?await zipHandle.getFile():zipHandle
@@ -2967,9 +2962,6 @@ _ZipCacheHandle=zipHandle
 return _ZipCacheData[entryName]||null
 }
 
-// A file counts as a scan candidate if it's named *.bin, OR has no extension at
-// all (some DA Drive Analyzer exports omit the extension). The later header-check
-// pass still verifies actual content, so being permissive here is safe.
 _IsBinLike=(name)=>{
 if(name.endsWith('/'))return false  // directory marker (relevant for zip entries)
 let n=name.toLowerCase()
@@ -3139,10 +3131,11 @@ let im2=txt.match(/Interface:\s*([^\n]+)/);let fIntf=im2?im2[1].trim():''
 // interface names with inconsistent capitalization (e.g. 'NVMe' vs 'NVME'),
 // which an exact string match would silently and incorrectly reject.
 if(ScanIntf&&fIntf&&fIntf.toUpperCase()!==ScanIntf.toUpperCase())return{ok:false,reason:`Interface mismatch (found "${fIntf}", wanted "${ScanIntf}")`}
-if(ScanRawT>=0){
-let templateNums=[...txt.matchAll(/template:\s*(\d+)/gi)].map(m=>parseInt(m[1],10))
-if(!templateNums.includes(ScanRawT))return{ok:false,reason:`Template ${ScanRawT} not found in header (templates present: ${templateNums.length?templateNums.join(','):'none/unparseable'})`}
-}
+// Matching is interface-only — a file belongs to an interface regardless of
+// which specific templates it happens to contain. Which template to actually
+// display for a match is a separate, non-exclusionary preference (see
+// PrevRawT in DcFl(), which falls back to the first available record when
+// the preferred template isn't present in a given file).
 return{ok:true}
 }
 try{
@@ -3211,7 +3204,7 @@ clearInterval(_fT)
 if(!_fList.length){
 _ScanLifetimeRuns++;_SaveLifetimeStats()
 W(G('lifetimeStats'),`Displayed: ${_ScanLifetimeDisplayed.toLocaleString()} (${_ScanLifetimeRuns} scan${_ScanLifetimeRuns===1?'':'s'})`)
-W(G('nVer'),`No files matching this template/interface (checked ${ScanBinList.length.toLocaleString()} files). Try a different template, or click Scan again to choose a different folder.${ScanExcludedFiles.length?` <a onclick="DownloadScanExclusionReport()" style="cursor:pointer">(download report of why)</a>`:''}`);return false}
+W(G('nVer'),`No files matching this interface (checked ${ScanBinList.length.toLocaleString()} files). Click Scan again to choose a different folder.${ScanExcludedFiles.length?` <a onclick="DownloadScanExclusionReport()" style="cursor:pointer">(download report of why)</a>`:''}`);return false}
 
 _ScanLifetimeRuns++;_SaveLifetimeStats()
 W(G('lifetimeStats'),`Displayed: ${_ScanLifetimeDisplayed.toLocaleString()} (${_ScanLifetimeRuns} scan${_ScanLifetimeRuns===1?'':'s'})`)
@@ -3298,30 +3291,7 @@ CurFile2=entry.name;DcFl0_2(buf)
 }else{
 CurFile=entry.name;W(G('fileLabel'),entry.name)
 if(ScanRawT>=0)PrevRawT=ScanRawT
-try{
-DcFl0(buf)
-// The pre-filter pass only checks the file's header TEXT for a "template: N"
-// mention — a fast approximation, not a guarantee the parsed record list
-// (ArIx) actually contains a usable record with that raw template number.
-// If it doesn't, PrevRawT's lookup above silently leaves Tx wherever it was,
-// which would display an unrelated template's data. Treat that as a miss.
-if(ScanRawT>=0&&(!ArIx||!ArIx.length||ArIx[Tx*2]!==ScanRawT)){
-ok=false
-// DcFl0 already rendered this (wrong) record to the screen as a side effect,
-// before this check could run — clear it immediately so the wrong template
-// doesn't linger on screen for this step's duration while we skip ahead.
-// This includes the LEFT panel's title + hex dump and the small err/defectSum
-// notice areas some templates populate, not just the main decode table.
-W(G('rTab'),'')
-W(G('ruSide'),'🔍 Skipping a false-positive match\u2026')
-W(G('tmplName'),'')
-W(G('lTab'),'')
-W(G('err'),'')
-W(G('defectSum'),'')
-W(G('dvTitle'),'')
-W(G('dvTitle2'),'')
-}
-}catch(e){ok=false}
+try{DcFl0(buf)}catch(e){ok=false}
 }
 }finally{_ScanLoading=false}
 }
@@ -3630,7 +3600,7 @@ DownloadScanExclusionReport=()=>{
 let rows=[['File name','Reason excluded']]
 ScanExcludedFiles.forEach(e=>rows.push([e.name,e.reason]))
 let csv=rows.map(r=>r.map(v=>'"'+String(v).replace(/"/g,'""')+'"').join(',')).join('\r\n')
-saveAs(new Blob([csv],{type:'text/csv;charset=utf-8'}),'scan_excluded_files_'+(ScanIntf||'all')+'_T'+ScanRawT+'.csv')}
+saveAs(new Blob([csv],{type:'text/csv;charset=utf-8'}),'scan_excluded_files_'+(ScanIntf||'all')+'.csv')}
 H2D=(ix,y)=>{return A[ix+y]*256+A[ix]*1}
 U=(x,y)=>{return (['','00','0000',,,,'000000000000'][y]+x.toString(16).toUpperCase()).substr(0-y*2)}
 Q=x=>{return D.querySelectorAll(x)}
