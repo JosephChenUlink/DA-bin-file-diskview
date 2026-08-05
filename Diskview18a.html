@@ -63,7 +63,7 @@ td button:not(.nbtn),th button{width:20px;height:20px}
   <span style='display:flex;align-items:center;gap:8px'>
   <span id='scanElapsed' title='Time elapsed since the current scan started (resets on each Scan click)' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
   <span id='lifetimeStats' title='How many times a template has been displayed while stepping/playing through results, across all Scan clicks this session' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
-  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260804k</span>
+  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260804l</span>
   </span>
 </div>
 <input id='local'type='file'style='display:none'onchange='OpFl()'>
@@ -616,10 +616,17 @@ for(j=0;j<4;j++)size=size*10+asc[14+j].toString(10)*1
 break
 }
 }
-if(end>0&&ar.length>end+1){
-let start=Math.max(end+1,size)
-if(start<ar.length)asc.push(','+Array.prototype.join.call(ar.subarray(start),','))
-}
+// Remember the raw bytes and the data section's start offset instead of
+// converting every remaining byte to a decimal string and joining with
+// commas (previously undone again immediately by splitting it back into an
+// array of string tokens in DcFl()). For a file with thousands of data
+// bytes this conversion created one huge intermediate string plus
+// thousands of small string objects — all garbage moments later, on every
+// single file processed. A[idx]*1 (used throughout the app for numeric
+// reads) and string-concatenation contexts both work identically whether
+// A[idx] holds a string token or a raw numeric byte value.
+_LastRawBytes=ar
+_LastDataStart=(end>0&&ar.length>end+1)?Math.max(end+1,size):-1
 return asc.join('')}
 
 DcFl0=x=>{SAll=_DecodeBin(x);DcFl()}
@@ -632,7 +639,7 @@ W(G('offset'),'0000')
 NoHiLi(1)
 Gp=0;Fx=0
 arS=SAll.split("h\n")
-A=arS.length==2?arS[1].slice(1).split(","):[]
+A=(arS.length==2&&_LastDataStart>=0)?_LastRawBytes.subarray(_LastDataStart):[]
 ix=arS[0].indexOf("Size:"),ix1=arS[0].indexOf("\n",ix)
 From=arS[0].substr(ix+6,ix1-ix-6)-0
 ArIx=Array()
