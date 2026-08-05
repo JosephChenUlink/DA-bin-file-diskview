@@ -63,7 +63,7 @@ td button:not(.nbtn),th button{width:20px;height:20px}
   <span style='display:flex;align-items:center;gap:8px'>
   <span id='scanElapsed' title='Time elapsed since the current scan started (resets on each Scan click)' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
   <span id='lifetimeStats' title='How many times a template has been displayed while stepping/playing through results, across all Scan clicks this session' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
-  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260805b</span>
+  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260805c</span>
   </span>
 </div>
 <input id='local'type='file'style='display:none'onchange='OpFl()'>
@@ -1126,7 +1126,7 @@ if(G('cmpBtn'))W(G('cmpBtn'),'Compare')
 let ds2=G('defectSum2');if(ds2)ds2.remove()
 Q('#rTab td.cmpCol').forEach(e=>e.remove())
 Q('#rTab th.cmpCol').forEach(e=>e.remove())
-Q('#rTab tr').forEach(e=>e.classList.remove('cmpDiff'))}
+Q('#rTab>tbody>tr').forEach(e=>e.classList.remove('cmpDiff'))}
 
 CmpToggle=()=>{
 if(A2){ClearCmp();return}
@@ -1189,7 +1189,7 @@ Tx=fi2/2
 let _ts=G('tmpl').innerHTML,_tn=G('tmplName').innerHTML
 DpFl()
 W(G('tmpl'),_ts);W(G('tmplName'),_tn)  // restore immediately
-vals2=Array.from(Q('#rTab tr')).map(e=>Array.from(e.children).map(c=>c.innerText))
+vals2=Array.from(Q('#rTab>tbody>tr')).map(e=>Array.from(e.children).map(c=>c.innerText))
 // Capture File 2 defect summary (for T332/T333 GList/PList)
 let ds2=G('defectSum');if(ds2&&ds2.innerHTML)defectSum2=ds2.innerHTML
 }
@@ -1207,18 +1207,29 @@ let existing=G('defectSum2');if(existing)existing.remove()
 ds.parentNode.insertBefore(wrap,ds.nextSibling)
 }
 }
-let rows=Q('#rTab tr')
+let rows=Q('#rTab>tbody>tr')
 rows.forEach((e,i)=>{
 let v1cells=Array.from(e.children).slice(1) // skip the first cell (Item/No/label column)
 let v2row=vals2[i]
-if(i==0){
+// A row is a column-header row if its first cell is a <th> — this can happen
+// anywhere in the table, not just at index 0. Some templates (e.g. NVMe's
+// self-test log, T105) start with plain descriptive/data rows before the
+// real column-header row appears further down.
+let isHeaderRow=e.children.length>0&&e.children[0].tagName==='TH'
+if(isHeaderRow){
 // Header row: one 'File 2' header spanning all of File 2's columns, matching
 // however many columns File 1's row actually has — rather than a single
-// generic header cell regardless of column count.
+// generic header cell regardless of column count. If the label cell itself
+// has its own colspan (multi-level nested headers, e.g. a sub-header whose
+// label cell visually absorbs what would otherwise be a separate data
+// column), account for that so this row's total width still matches the
+// top-level header and the data rows below it.
 let th=document.createElement('th')
 th.className='cmpCol'
 th.innerText='File 2'
-if(v1cells.length>1)th.colSpan=v1cells.length
+let labelColspan=e.children[0].colSpan||1
+let file2Colspan=v1cells.length+(labelColspan-1)
+if(file2Colspan>1)th.colSpan=file2Colspan
 e.appendChild(th)
 return
 }
