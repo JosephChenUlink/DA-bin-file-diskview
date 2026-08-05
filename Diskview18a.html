@@ -63,7 +63,7 @@ td button:not(.nbtn),th button{width:20px;height:20px}
   <span style='display:flex;align-items:center;gap:8px'>
   <span id='scanElapsed' title='Time elapsed since the current scan started (resets on each Scan click)' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
   <span id='lifetimeStats' title='How many times a template has been displayed while stepping/playing through results, across all Scan clicks this session' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
-  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260804l</span>
+  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260805a</span>
   </span>
 </div>
 <input id='local'type='file'style='display:none'onchange='OpFl()'>
@@ -690,7 +690,7 @@ return hdr.substr(ix+name.length+1,ix1-ix-name.length-1).trim()
 
 DcFl2=z=>{
 let arS2=SAll2.split("h\n")
-A2=arS2.length==2?arS2[1].slice(1).split(","):[]
+A2=(arS2.length==2&&_LastDataStart>=0)?_LastRawBytes.subarray(_LastDataStart):[]
 let ix=arS2[0].indexOf("Size:"),ix1=arS2[0].indexOf("\n",ix)
 From2=arS2[0].substr(ix+6,ix1-ix-6)-0
 ArIx2=Array()
@@ -802,19 +802,41 @@ ds.parentNode.insertBefore(wrap,ds.nextSibling)
 }
 let rows=Q('#rTab tr')
 rows.forEach((e,i)=>{
-let th=document.createElement(i==0?'th':'td')
-th.className='cmpCol'
+let v1cells=Array.from(e.children).slice(1) // skip the first cell (Item/No/label column)
 let v2row=vals2[i]
-if(v2row){
-let v2rest=v2row.slice(1).join(' | ')
-th.innerText=i==0?'File 2':v2rest
-let v1rest=Array.from(e.children).slice(1).map(c=>c.innerText).join(' | ')
-if(i>0&&v1rest!=v2rest){e.classList.add('cmpDiff');th.style.background='#ffe0e0'}
-}else{
-th.innerText=i==0?'File 2':'N/A'
-th.style.color='#aaa'
-}
+if(i==0){
+// Header row: one 'File 2' header spanning all of File 2's columns, matching
+// however many columns File 1's row actually has — rather than a single
+// generic header cell regardless of column count.
+let th=document.createElement('th')
+th.className='cmpCol'
+th.innerText='File 2'
+if(v1cells.length>1)th.colSpan=v1cells.length
 e.appendChild(th)
+return
+}
+if(v2row){
+let v2cells=v2row.slice(1) // corresponding values, skip the first (Item/No/label)
+v1cells.forEach((c1,ci)=>{
+let td=document.createElement('td')
+td.className='cmpCol'
+let v2val=ci<v2cells.length?v2cells[ci]:''
+td.innerText=v2val
+if(c1.innerText!=v2val){c1.classList.add('cmpDiff');td.style.background='#ffe0e0'}
+e.appendChild(td)
+})
+}else{
+// No corresponding row in File 2 — one N/A cell per File-1 column, matching
+// column count instead of a single cell regardless of how many columns
+// File 1's row has.
+v1cells.forEach(()=>{
+let td=document.createElement('td')
+td.className='cmpCol'
+td.innerText='N/A'
+td.style.color='#aaa'
+e.appendChild(td)
+})
+}
 })}
 
 SetTH=(x,j,len)=>{
