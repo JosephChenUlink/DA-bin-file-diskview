@@ -63,7 +63,7 @@ td button:not(.nbtn),th button{width:20px;height:20px}
   <span style='display:flex;align-items:center;gap:8px'>
   <span id='scanElapsed' title='Time elapsed since the current scan started (resets on each Scan click)' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
   <span id='lifetimeStats' title='How many times a template has been displayed while stepping/playing through results, across all Scan clicks this session' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
-  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260804i</span>
+  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260804j</span>
   </span>
 </div>
 <input id='local'type='file'style='display:none'onchange='OpFl()'>
@@ -2444,7 +2444,7 @@ if(RevTimer){clearInterval(RevTimer);RevTimer=null;W(G('revBtn'),'Play')}
 // Reset the display counter on every fresh Scan click (per user preference — this
 // counter tracks "how many templates displayed since I last clicked Scan", not a
 // true lifetime total).
-_ScanLifetimeDisplayed=0;_SaveLifetimeStats()
+_ScanLifetimeDisplayed=0;_SaveLifetimeStats(true)
 W(G('lifetimeStats'),`Displayed: 0 (${_ScanLifetimeRuns} scan${_ScanLifetimeRuns===1?'':'s'})`)
 // Reset and (re)start the elapsed-time clock for this scan
 _ScanStartTime=Date.now()
@@ -2503,6 +2503,7 @@ ScanCollectAbort=true
 _ScanClearTimer()
 if(_ScanElapsedTimer){clearInterval(_ScanElapsedTimer);_ScanElapsedTimer=null}
 ScanActive=false;ScanStepMode=false;ScanBinList=[];ScanEntries=[];_PickResumeMode=null
+_SaveLifetimeStats(true)
 // Save current dir as hint BEFORE clearing (preserves "last location" for next picker)
 if(ScanDirHandle)_ScanDB.saveDirHint(ScanDirHandle)
 ScanDirHandle=null;_ScanDB.clear()
@@ -2536,7 +2537,19 @@ _SetScanBtn=id=>{
 ['s0','s1','s2','s3','s4'].forEach(b=>{let el=G(b);if(el){el.style.fontWeight='';el.style.background='';el.style.borderRadius=''}})
 if(id){let el=G(id);if(el){el.style.fontWeight='bold';el.style.background='#ffd966';el.style.borderRadius='3px'}}
 }
-_SaveLifetimeStats=()=>{try{localStorage.setItem('dv_lifetimeDisplayed',_ScanLifetimeDisplayed);localStorage.setItem('dv_lifetimeRuns',_ScanLifetimeRuns)}catch(e){}}
+let _lastStatsSave=0
+_SaveLifetimeStats=(force)=>{
+let now=Date.now()
+// Throttle to at most once per second — this used to run on every single
+// match, which during a fast-matching scan (many matches per second) meant
+// dozens of synchronous localStorage writes per second for no real benefit,
+// since the displayed counter only needs to look current, not be persisted
+// that often. Session-start/reset calls pass force=true to persist
+// immediately instead of waiting for the next throttle window.
+if(!force&&now-_lastStatsSave<1000)return
+_lastStatsSave=now
+try{localStorage.setItem('dv_lifetimeDisplayed',_ScanLifetimeDisplayed);localStorage.setItem('dv_lifetimeRuns',_ScanLifetimeRuns)}catch(e){}
+}
 _UpdateScanElapsed=()=>{
 if(!_ScanStartTime)return
 let s=Math.floor((Date.now()-_ScanStartTime)/1000)
@@ -2924,11 +2937,11 @@ clearInterval(_fT)
 }catch(e){clearInterval(_fT);W(G('nVer'),'Error while filtering. Try Scan again.');return false}
 
 if(!_fList.length){
-_ScanLifetimeRuns++;_SaveLifetimeStats()
+_ScanLifetimeRuns++;_SaveLifetimeStats(true)
 W(G('lifetimeStats'),`Displayed: ${_ScanLifetimeDisplayed.toLocaleString()} (${_ScanLifetimeRuns} scan${_ScanLifetimeRuns===1?'':'s'})`)
 W(G('nVer'),`No files matching this interface (checked ${ScanBinList.length.toLocaleString()} files). Click Scan again to choose a different folder.`);return false}
 
-_ScanLifetimeRuns++;_SaveLifetimeStats()
+_ScanLifetimeRuns++;_SaveLifetimeStats(true)
 W(G('lifetimeStats'),`Displayed: ${_ScanLifetimeDisplayed.toLocaleString()} (${_ScanLifetimeRuns} scan${_ScanLifetimeRuns===1?'':'s'})`)
 ScanEntries=_fList
 ScanTotal=ScanEntries.length;ScanIdx=0;ScanMatchedCount=0;ScanExaminedCount=ScanBinList.length
