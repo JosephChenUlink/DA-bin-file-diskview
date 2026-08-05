@@ -63,7 +63,7 @@ td button:not(.nbtn),th button{width:20px;height:20px}
   <span style='display:flex;align-items:center;gap:8px'>
   <span id='scanElapsed' title='Time elapsed since the current scan started (resets on each Scan click)' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
   <span id='lifetimeStats' title='How many times a template has been displayed while stepping/playing through results, across all Scan clicks this session' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
-  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260805c</span>
+  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260805d</span>
   </span>
 </div>
 <input id='local'type='file'style='display:none'onchange='OpFl()'>
@@ -3537,6 +3537,11 @@ return templateNums.includes(targetT)
 
 let _ScanStepCount=0
 _ScanScheduleNext=()=>{
+// Defensively clear any existing timer first — guarantees only one timer
+// chain can ever be active no matter what triggered this call, preventing
+// parallel chains from ever forming (see the watchdog below, which used to
+// be able to spawn a second chain without cancelling the first).
+_ScanClearTimer()
 let delayMs=Number(G('revSpeed').value)*1000
 if(delayMs<=150){
 // Full speed: pace to the browser's paint cycle instead of a fixed timer.
@@ -3563,8 +3568,14 @@ ScanTimerRAF=false;ScanTimer=setTimeout(()=>_doScanStepDir(ScanDirection),delayM
 // the RAF/setTimeout scheduling chain has silently broken somewhere — force a
 // recovery step rather than leaving the scan looking permanently stalled with
 // no way to tell the display simply isn't going to update again on its own.
+// The threshold scales with the user's chosen speed (with a generous buffer)
+// instead of a fixed 3s, so a deliberately slow setting never gets silently
+// overridden by the watchdog mistaking it for a genuine stall.
 setInterval(()=>{
-if(ScanActive&&!ScanStepMode&&!_ScanLoading&&_ScanLastStepTime&&Date.now()-_ScanLastStepTime>3000){
+let chosenDelayMs=Number(G('revSpeed').value)*1000
+let stallThreshold=Math.max(3000,chosenDelayMs*2+1000)
+if(ScanActive&&!ScanStepMode&&!_ScanLoading&&_ScanLastStepTime&&Date.now()-_ScanLastStepTime>stallThreshold){
+_ScanClearTimer()
 _doScanStepDir(ScanDirection)
 }
 },3000)
