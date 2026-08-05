@@ -63,7 +63,7 @@ td button:not(.nbtn),th button{width:20px;height:20px}
   <span style='display:flex;align-items:center;gap:8px'>
   <span id='scanElapsed' title='Time elapsed since the current scan started (resets on each Scan click)' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
   <span id='lifetimeStats' title='How many times a template has been displayed while stepping/playing through results, across all Scan clicks this session' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
-  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260805d</span>
+  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260805e</span>
   </span>
 </div>
 <input id='local'type='file'style='display:none'onchange='OpFl()'>
@@ -3467,7 +3467,9 @@ ScanIdx=k+1;if(ScanIdx>=ScanTotal)ScanIdx=0
 if(ScanActive)_ScanScheduleNext()
 return
 }
+let loadingTextTimer=setTimeout(()=>{
 W(G('nVer'),`⏳ Loading ${seqNum.toLocaleString()}/${ScanTotal.toLocaleString()}…`)
+},250)
 let buf,ok=false
 try{
 if(entry.zipHandle){
@@ -3479,6 +3481,7 @@ buf=await file.arrayBuffer()
 }
 ok=true
 }catch(e){}
+clearTimeout(loadingTextTimer)
 // Fallback safety net for the rare case entry.templates is missing (should
 // always be present after filtering, but this keeps behavior correct if
 // not) — uses the buffer already read above rather than reading again.
