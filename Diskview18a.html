@@ -63,14 +63,14 @@ td button:not(.nbtn),th button{width:20px;height:20px}
   <span style='display:flex;align-items:center;gap:8px'>
   <span id='scanElapsed' title='Time elapsed since the current scan started (resets on each Scan click)' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
   <span id='lifetimeStats' title='How many times a template has been displayed while stepping/playing through results, across all Scan clicks this session' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
-  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260805f</span>
+  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260805g</span>
   </span>
 </div>
 <input id='local'type='file'style='display:none'onchange='OpFl()'>
 <input id='local2'type='file'style='display:none'onchange='OpFl2()'>
 <div style='display:flex;align-items:center;gap:4px;padding:3px 6px;flex-wrap:nowrap;min-width:0'>
 <button onclick="OpFlPick()" title="Select File to View" style='flex-shrink:0;background:#1a5fa8;color:#fff;border:1px solid #0d3d6e;padding:3px 10px;font-size:13px;cursor:pointer;border-radius:3px'>File</button><span id='fileLabel' style='flex:0 0 260px;padding:2px 8px;border:1px solid #999;background:#fff;font-size:12px;color:#555;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:middle'>No file chosen</span>
-<span id='adv'style='display:none;flex-shrink:0;align-items:center;gap:2px'><button onclick='Adv(-1)' title="Previous Template">-</button><button id='tmpl'onclick='List()'></button><button onclick='Adv(1)' title="Next Template">+</button>&nbsp;<button id='revBtn'onclick='ToggleReview()' title="Play Templates">Play</button><span id='revSpeedWrap'>&nbsp;Speed:&nbsp;<input type='range'id='revSpeed'min='0.05'max='5'step='0.05'value='1'oninput='RevSpeedChange()'style='vertical-align:middle;width:90px'>&nbsp;<span id='revSpeedLbl'>1.0s</span></span>&nbsp;<span id='scanWrap'><span id='scanCtrl' style='display:none;gap:1px'><button id='s0'onclick='ScanStepBackClick()' title="Step backward">&#9198;</button><button id='s1'onclick='ScanPlayBack()' title="Play backward">&#9194;</button><button id='s2'onclick='ScanStop()' title="Stop">&#9209;</button><button id='s3'onclick='ScanPlayFwd()' title="Play forward">&#9193;</button><button id='s4'onclick='ScanStepClick()' title="Step forward">&#9197;</button></span><button id='scanBtn'onclick='ScanSetup()' title="Scan all .bin files in the selected folder and its subfolders" style='display:inline'>Scan</button></span>&nbsp;<button id='cmpBtn' onclick='CmpToggle()' title="Compare the Templates">Compare</button>&nbsp;<button onclick='GetPDF()' title="Download PDF File">PDF</button><button onclick='SaveFl()'id='btn8'hidden>&#11015;</button></span>
+<span id='adv'style='display:none;flex-shrink:0;align-items:center;gap:2px'><button onclick='Adv(-1)' title="Previous Template">-</button><button id='tmpl'onclick='List()'></button><button onclick='Adv(1)' title="Next Template">+</button>&nbsp;<button id='revBtn'onclick='ToggleReview()' title="Play Templates">Play</button><span id='revSpeedWrap'>&nbsp;Speed:&nbsp;<input type='range'id='revSpeed'min='0.05'max='5'step='0.05'value='1'oninput='RevSpeedChange()'style='vertical-align:middle;width:90px'>&nbsp;<span id='revSpeedLbl'style='display:inline-block;width:30px'>1.0s</span></span>&nbsp;<span id='scanWrap'><span id='scanCtrl' style='display:none;gap:1px'><button id='s0'onclick='ScanStepBackClick()' title="Step backward">&#9198;</button><button id='s1'onclick='ScanPlayBack()' title="Play backward">&#9194;</button><button id='s2'onclick='ScanStop()' title="Stop">&#9209;</button><button id='s3'onclick='ScanPlayFwd()' title="Play forward">&#9193;</button><button id='s4'onclick='ScanStepClick()' title="Step forward">&#9197;</button></span><button id='scanBtn'onclick='ScanSetup()' title="Scan all .bin files in the selected folder and its subfolders" style='display:inline'>Scan</button></span>&nbsp;<button id='cmpBtn' onclick='CmpToggle()' title="Compare the Templates">Compare</button>&nbsp;<button onclick='GetPDF()' title="Download PDF File">PDF</button><button onclick='SaveFl()'id='btn8'hidden>&#11015;</button></span>
 <button id='host'hidden></button>&nbsp;<span id='nVer'style='font-size:12px;font-weight:bold;color:#1a5fa8'></span>&nbsp;<span id='scanFolderLabel'style='font-size:11px;color:#555'></span>
 </div>
 <div id='cmpSummary'style='margin:6px 0'></div>
@@ -2834,8 +2834,8 @@ if(document.getElementById('scanFolderLabel'))document.getElementById('scanFolde
 // Collect .bin files from the folder and all subfolders
 if(!ScanBinList.length){
 _ScanDirsVisited=0;_ScanFilesSeen=0;_ScanWalkErrors=[];_ScanExtCounts={};_ScanSampleNames=[]
-let _dotN=0,_collectN=0
-let _dotT=setInterval(()=>{_dotN=(_dotN+1)%4;W(G('nVer'),'⟳ Collecting'+'.'.repeat(_dotN+1)+' '+_collectN.toLocaleString()+' bin files found ('+_ScanDirsVisited.toLocaleString()+' folders checked)')},250)
+let _collectN=0
+let _dotT=setInterval(()=>{W(G('nVer'),'⟳ Collecting... '+_collectN.toLocaleString()+' bin files found ('+_ScanDirsVisited.toLocaleString()+' folders checked)')},250)
 try{
 for await(const entry of _ScanWalkDir(ScanDirHandle)){
 if(ScanCollectAbort)break
@@ -3188,7 +3188,8 @@ await _doScanStepDir(-1)
 
 RevSpeedChange=()=>{
 let v=Number(G('revSpeed').value)
-W(G('revSpeedLbl'),v<=0.15?'⚡ Full Speed':v.toFixed(1)+'s')
+W(G('revSpeedLbl'),v<=0.15?'⚡':v.toFixed(1)+'s')
+G('revSpeedLbl').title=v<=0.15?'Full Speed':''
 try{localStorage.setItem('dv_scanSpeed',G('revSpeed').value)}catch(e){}
 if(RevTimer){
 clearInterval(RevTimer)
@@ -3456,13 +3457,17 @@ W=(x,y)=>{if(x)x.innerHTML=y}
 // in the folder-display area on the right — keeps the File box itself short
 // and shows which subfolder the current file actually came from instead of a
 // static '(+ subfolders)' placeholder.
+let _lastScanFolder=null
 _SetFileLabel=name=>{
 let parts=(name||'').split('/')
 let fname=parts.pop()
 let folder=parts.join('/')
 W(G('fileLabel'),fname)
 if(G('fileLabel'))G('fileLabel').title=fname
-if(folder&&G('scanFolderLabel'))G('scanFolderLabel').innerHTML=`📁 ${folder}`
+if(folder&&folder!==_lastScanFolder&&G('scanFolderLabel')){
+_lastScanFolder=folder
+G('scanFolderLabel').innerHTML=`📁 ${folder}`
+}
 }
 HiliRange=(off,len)=>{NoHiLi(1);HiLi(1,off,len)}
 StaName=hex=>{
@@ -3514,7 +3519,8 @@ let savedSpeed=localStorage.getItem('dv_scanSpeed')
 if(savedSpeed&&G('revSpeed')){
 G('revSpeed').value=savedSpeed
 let v=Number(savedSpeed)
-W(G('revSpeedLbl'),v<=0.15?'⚡ Full Speed':v.toFixed(1)+'s')
+W(G('revSpeedLbl'),v<=0.15?'⚡':v.toFixed(1)+'s')
+G('revSpeedLbl').title=v<=0.15?'Full Speed':''
 }
 }catch(e){}
 // Restore last-used file and folder locations from IndexedDB (for picker startIn)
