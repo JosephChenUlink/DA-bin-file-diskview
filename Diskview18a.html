@@ -63,7 +63,7 @@ td button:not(.nbtn),th button{width:20px;height:20px}
   <span style='display:flex;align-items:center;gap:8px'>
   <span id='scanElapsed' title='Time elapsed since the current scan started (resets on each Scan click)' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
   <span id='lifetimeStats' title='How many times a template has been displayed while stepping/playing through results, across all Scan clicks this session' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
-  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260805g</span>
+  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260805h</span>
   </span>
 </div>
 <input id='local'type='file'style='display:none'onchange='OpFl()'>
@@ -826,12 +826,35 @@ if(file2Colspan>1)th.colSpan=file2Colspan
 e.appendChild(th)
 return
 }
+// Copies the relevant layout style properties from a File-1 cell to its
+// matching File-2 cell, so File 2 always wraps/sizes exactly like File 1
+// does — some templates set specific cells to nowrap (e.g. the SMART error
+// log's hex-dump 'Ext' row) while others rely on default wrapping, and this
+// stays correct for either case without needing to special-case templates.
+let _cmpCopyLayoutStyle=(src,dst)=>{
+let cs=getComputedStyle(src)
+dst.style.whiteSpace=cs.whiteSpace
+dst.style.overflow=cs.overflow
+dst.style.textOverflow=cs.textOverflow
+dst.style.wordBreak=cs.wordBreak
+if(cs.whiteSpace!=='nowrap'){
+// Cap width for cells that aren't intentionally kept on one line (e.g. hex
+// dumps use nowrap on purpose), so long descriptive text wraps within a
+// reasonable width instead of letting the whole comparison table keep
+// growing wider as more columns are added.
+src.style.maxWidth='400px'
+dst.style.maxWidth='400px'
+}else{
+dst.style.maxWidth=cs.maxWidth
+}
+}
 if(v2row){
 let v2cells=v2row.slice(1) // corresponding values, skip the first (Item/No/label)
 v1cells.forEach((c1,ci)=>{
 let td=document.createElement('td')
 td.className='cmpCol'
 if(c1.colSpan>1)td.colSpan=c1.colSpan
+_cmpCopyLayoutStyle(c1,td)
 let v2val=ci<v2cells.length?v2cells[ci]:''
 td.innerText=v2val
 if(c1.innerText!=v2val){c1.classList.add('cmpDiff');td.style.background='#ffe0e0'}
@@ -845,6 +868,7 @@ v1cells.forEach(c1=>{
 let td=document.createElement('td')
 td.className='cmpCol'
 if(c1.colSpan>1)td.colSpan=c1.colSpan
+_cmpCopyLayoutStyle(c1,td)
 td.innerText='N/A'
 td.style.color='#aaa'
 e.appendChild(td)
@@ -2569,7 +2593,7 @@ let ScanEntries=[],ScanIdx=0,ScanTimer=null,ScanTimerRAF=false,ScanActive=false,
     ScanRawT=-1,ScanIntf='',ScanDirHandle=null,ScanFileHandle=null,ScanTotal=0,
     _ScanLoading=false,ScanOrigBuf=null,ScanOrigName='',ScanLastBuf=null,ScanLastName='',ScanDirection=1,ScanCollectAbort=false,ScanMatchedCount=0,ScanExaminedCount=0,_ScanDirsVisited=0,_ScanFilesSeen=0,_ScanWalkErrors=[],_ScanExtCounts={},_ScanSampleNames=[],
     _ScanLifetimeDisplayed=0,_ScanLifetimeRuns=0,
-    _ScanStartTime=0,_ScanElapsedTimer=null,_ScanWalkLastYield=0,_ScanLastStepTime=0,TrueFileSize=0,
+    _ScanStartTime=0,_ScanElapsedTimer=null,_ScanWalkLastYield=0,_ScanLastStepTime=0,TrueFileSize=0,_lastStatusUpdate=0,
     _ZipCacheHandle=null,_ZipCacheFile=null,_ZipCacheDir=null
 _ScanClearTimer=()=>{if(ScanTimer!==null){if(ScanTimerRAF)cancelAnimationFrame(ScanTimer);else clearTimeout(ScanTimer);ScanTimer=null;ScanTimerRAF=false}}
 // Clearly highlights whichever scan-navigation button (s0-s4) is currently the
@@ -3106,7 +3130,11 @@ W(G('lifetimeStats'),`Displayed: ${_ScanLifetimeDisplayed.toLocaleString()} (${_
 ScanIdx=k+1;if(ScanIdx>=ScanTotal)ScanIdx=0
 let modeLabel=(ScanStepMode?(dir<0?' ◀ Back':' ▶ Step'):'')
 let speedNote=(ScanActive&&ScanTimerRAF)?' ⚡full speed':''
+let _now=Date.now()
+if(!ScanActive||_now-_lastStatusUpdate>=100){
+_lastStatusUpdate=_now
 W(G('nVer'),`▶ [${seqNum.toLocaleString()}/${ScanTotal.toLocaleString()} matches, ${ScanExaminedCount.toLocaleString()} scanned]${ScanIntf?' '+ScanIntf:''}${modeLabel}${speedNote}`)
+}
 if(ScanActive)_ScanScheduleNext()
 }
 
