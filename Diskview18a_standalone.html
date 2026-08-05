@@ -63,7 +63,7 @@ td button:not(.nbtn),th button{width:20px;height:20px}
   <span style='display:flex;align-items:center;gap:8px'>
   <span id='scanElapsed' title='Time elapsed since the current scan started (resets on each Scan click)' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
   <span id='lifetimeStats' title='How many times a template has been displayed while stepping/playing through results, across all Scan clicks this session' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
-  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260805a</span>
+  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260805b</span>
   </span>
 </div>
 <input id='local'type='file'style='display:none'onchange='OpFl()'>
@@ -1227,6 +1227,7 @@ let v2cells=v2row.slice(1) // corresponding values, skip the first (Item/No/labe
 v1cells.forEach((c1,ci)=>{
 let td=document.createElement('td')
 td.className='cmpCol'
+if(c1.colSpan>1)td.colSpan=c1.colSpan
 let v2val=ci<v2cells.length?v2cells[ci]:''
 td.innerText=v2val
 if(c1.innerText!=v2val){c1.classList.add('cmpDiff');td.style.background='#ffe0e0'}
@@ -1236,9 +1237,10 @@ e.appendChild(td)
 // No corresponding row in File 2 — one N/A cell per File-1 column, matching
 // column count instead of a single cell regardless of how many columns
 // File 1's row has.
-v1cells.forEach(()=>{
+v1cells.forEach(c1=>{
 let td=document.createElement('td')
 td.className='cmpCol'
+if(c1.colSpan>1)td.colSpan=c1.colSpan
 td.innerText='N/A'
 td.style.color='#aaa'
 e.appendChild(td)
