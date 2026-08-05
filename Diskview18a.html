@@ -63,7 +63,7 @@ td button:not(.nbtn),th button{width:20px;height:20px}
   <span style='display:flex;align-items:center;gap:8px'>
   <span id='scanElapsed' title='Time elapsed since the current scan started (resets on each Scan click)' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
   <span id='lifetimeStats' title='How many times a template has been displayed while stepping/playing through results, across all Scan clicks this session' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
-  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260804f</span>
+  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260804g</span>
   </span>
 </div>
 <input id='local'type='file'style='display:none'onchange='OpFl()'>
@@ -2757,8 +2757,14 @@ let im2=txt.match(/Interface:\s*([^\n]+)/);let fIntf=im2?im2[1].trim():''
 // Case-insensitive comparison — different DA tool/firmware versions report
 // interface names with inconsistent capitalization (e.g. 'NVMe' vs 'NVME'),
 // which an exact string match would silently and incorrectly reject.
-if(ScanIntf&&fIntf&&fIntf.toUpperCase()!==ScanIntf.toUpperCase())return false
-return true
+if(ScanIntf&&fIntf&&fIntf.toUpperCase()!==ScanIntf.toUpperCase())return null
+// Also extract the list of templates this file declares. Caching this now
+// (the header text is already decoded in hand) lets scan-stepping check
+// template presence later with zero file I/O, instead of re-reading and
+// re-decompressing the entire file's contents just to check — which
+// previously dominated stepping time whenever files were bigger than the
+// ~8KB actually needed for the check.
+return[...txt.matchAll(/template:\s*(\d+)/gi)].map(m=>parseInt(m[1],10))
 }
 try{
 // Group entries by their source zip so each zip is opened and parsed exactly once,
@@ -2796,14 +2802,14 @@ await _maybeYield()
 let batch=plainEntries.slice(bi,bi+_PLAIN_BATCH)
 let results=await Promise.all(batch.map(async entry=>{
 let file
-try{file=entry.file||(await entry.handle.getFile())}catch(e){return false}
-if(file.size>8*1024*1024)return false  // outlier guard
+try{file=entry.file||(await entry.handle.getFile())}catch(e){return null}
+if(file.size>8*1024*1024)return null  // outlier guard
 let headerBytes
-try{headerBytes=new Uint8Array(await file.slice(0,Math.min(file.size,8192)).arrayBuffer())}catch(e){return false}
+try{headerBytes=new Uint8Array(await file.slice(0,Math.min(file.size,8192)).arrayBuffer())}catch(e){return null}
 return _CheckHeaderMatch(headerBytes)
 }))
 _fN+=batch.length
-for(let bj=0;bj<batch.length;bj++){if(results[bj]){_fList.push(batch[bj]);_fMatched++}}
+for(let bj=0;bj<batch.length;bj++){if(results[bj]){batch[bj].templates=results[bj];_fList.push(batch[bj]);_fMatched++}}
 }
 // Zip-contained entries — one read+decompress pass per ZIP, not per entry
 for(const[zipHandle,groupEntries]of zipGroups){
@@ -2826,7 +2832,8 @@ let full=decompressed[entry.entryName]
 if(!full)continue
 if(full.length>8*1024*1024)continue  // outlier guard
 let headerBytes=full.subarray(0,Math.min(full.length,8192))
-if(_CheckHeaderMatch(headerBytes)){_fList.push(entry);_fMatched++}
+let templates=_CheckHeaderMatch(headerBytes)
+if(templates){entry.templates=templates;_fList.push(entry);_fMatched++}
 }
 }
 clearInterval(_fT)
@@ -2903,6 +2910,17 @@ let k=startIdx
 if(k<0)k+=ScanTotal
 if(k>=ScanTotal)k-=ScanTotal
 let entry=ScanEntries[k],seqNum=k+1
+// Check the template list cached during filtering FIRST — an instant, zero
+// file I/O check — before ever touching the file itself. Previously every
+// single step required a full read (and, for zip entries, full
+// decompression) just to check template presence and then discard the file
+// if it wasn't a match, which dominated stepping time whenever files were
+// bigger than the ~8KB actually needed for that check.
+if(ScanRawT>=0&&!A2&&entry.templates&&!entry.templates.includes(ScanRawT)){
+ScanIdx=k+1;if(ScanIdx>=ScanTotal)ScanIdx=0
+if(ScanActive)_ScanScheduleNext()
+return
+}
 W(G('nVer'),`⏳ Loading ${seqNum.toLocaleString()}/${ScanTotal.toLocaleString()}: ${entry.name}…`)
 let buf,ok=false
 try{
@@ -2915,12 +2933,10 @@ buf=await file.arrayBuffer()
 }
 ok=true
 }catch(e){}
-// Matching is interface-only, so many files legitimately won't have the
-// specific template being searched for. Check the header text for its
-// presence BEFORE touching the display at all — skip those completely
-// silently (no render, no flicker to a different template) rather than
-// falling back to showing whatever else happens to be in the file.
-if(ok&&ScanRawT>=0&&!A2&&!_QuickCheckTemplate(buf,ScanRawT))ok=false
+// Fallback safety net for the rare case entry.templates is missing (should
+// always be present after filtering, but this keeps behavior correct if
+// not) — uses the buffer already read above rather than reading again.
+if(ok&&ScanRawT>=0&&!A2&&!entry.templates&&!_QuickCheckTemplate(buf,ScanRawT))ok=false
 if(ok){
 _ScanLoading=true
 try{
