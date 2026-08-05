@@ -63,7 +63,7 @@ td button:not(.nbtn),th button{width:20px;height:20px}
   <span style='display:flex;align-items:center;gap:8px'>
   <span id='scanElapsed' title='Time elapsed since the current scan started (resets on each Scan click)' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
   <span id='lifetimeStats' title='How many times a template has been displayed while stepping/playing through results, across all Scan clicks this session' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
-  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260804g</span>
+  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260804h</span>
   </span>
 </div>
 <input id='local'type='file'style='display:none'onchange='OpFl()'>
@@ -2933,7 +2933,8 @@ let ScanEntries=[],ScanIdx=0,ScanTimer=null,ScanTimerRAF=false,ScanActive=false,
     ScanRawT=-1,ScanIntf='',ScanDirHandle=null,ScanFileHandle=null,ScanTotal=0,
     _ScanLoading=false,ScanOrigBuf=null,ScanOrigName='',ScanLastBuf=null,ScanLastName='',ScanDirection=1,ScanCollectAbort=false,ScanMatchedCount=0,ScanExaminedCount=0,_ScanDirsVisited=0,_ScanFilesSeen=0,_ScanWalkErrors=[],_ScanExtCounts={},_ScanSampleNames=[],
         _ScanLifetimeDisplayed=0,_ScanLifetimeRuns=0,
-    _ScanStartTime=0,_ScanElapsedTimer=null,_ScanWalkLastYield=0,_ScanLastStepTime=0,TrueFileSize=0
+    _ScanStartTime=0,_ScanElapsedTimer=null,_ScanWalkLastYield=0,_ScanLastStepTime=0,TrueFileSize=0,
+    _ZipCacheHandle=null,_ZipCacheFile=null,_ZipCacheDir=null
 _ScanClearTimer=()=>{if(ScanTimer!==null){if(ScanTimerRAF)cancelAnimationFrame(ScanTimer);else clearTimeout(ScanTimer);ScanTimer=null;ScanTimerRAF=false}}
 // Clearly highlights whichever scan-navigation button (s0-s4) is currently the
 // active direction, clearing it from all the others. Pass null/undefined when
@@ -2974,20 +2975,103 @@ async loadFileHint(){return this._get('fileHint')}
 // Ensure scan folder is set up; returns true if ready
 // Recursively walk a directory and all subdirectories, yielding {name, handle} for each .bin file found.
 // 'name' includes the relative subfolder path (e.g. "sub/deeper/file.bin") so sorting and display stay meaningful.
-_ReadZipEntryBytes=async(zipHandle,entryName)=>{
-if(zipHandle!==_ZipCacheHandle){
-let zipFile=zipHandle.getFile?await zipHandle.getFile():zipHandle
-_ZipCacheRawBuf=new Uint8Array(await zipFile.arrayBuffer())
-_ZipCacheHandle=zipHandle
+// Locates the End Of Central Directory record by scanning backward from the
+// end of the buffer for its signature. The EOCD is always near the end (it
+// may be preceded by a variable-length comment, hence the small backward
+// scan rather than assuming a fixed position).
+_FindEOCD=buf=>{
+let minLen=22
+for(let i=buf.length-minLen;i>=Math.max(0,buf.length-65557);i--){
+if((buf[i]|(buf[i+1]<<8)|(buf[i+2]<<16)|(buf[i+3]<<24))>>>0===0x06054b50)return i
 }
-// Decompress only the one entry actually needed for this step. Decompressing
-// every bin-like entry in the whole zip up front (the old behavior) could
-// take minutes on zips containing hundreds of thousands of entries — freezing
-// the tab for that entire time just to display a single file. Parsing the
-// central directory to find this one entry is cheap; full decompression of
-// everything else was the expensive part, and is no longer done.
-let out=fflate.unzipSync(_ZipCacheRawBuf,{filter:f=>f.name===entryName})
+return -1
+}
+// Parses a central-directory buffer (already sliced to start exactly at the
+// zip's own central-directory offset) into a Map of entryName -> {localOffset,
+// compSize, uncompSize, method}.
+_ParseCentralDirectory=cdBuf=>{
+let dv=new DataView(cdBuf.buffer,cdBuf.byteOffset,cdBuf.byteLength)
+let entries=new Map(),p=0
+while(p<cdBuf.length){
+if(dv.getUint32(p,true)!==0x02014b50)break
+let method=dv.getUint16(p+10,true)
+let compSize=dv.getUint32(p+20,true)
+let uncompSize=dv.getUint32(p+24,true)
+let nameLen=dv.getUint16(p+28,true)
+let extraLen=dv.getUint16(p+30,true)
+let commentLen=dv.getUint16(p+32,true)
+let localOffset=dv.getUint32(p+42,true)
+let name=_headerDecoder.decode(cdBuf.subarray(p+46,p+46+nameLen))
+entries.set(name,{localOffset,compSize,uncompSize,method})
+p+=46+nameLen+extraLen+commentLen
+}
+return entries
+}
+_ReadZipEntryBytes=async(zipHandle,entryName)=>{
+let zipFile=zipHandle.getFile?await zipHandle.getFile():zipHandle
+try{
+if(zipHandle!==_ZipCacheHandle){
+// Read only the tail of the file (where the EOCD + central directory live)
+// instead of the whole zip. The central directory scales with entry count,
+// not with the actual (often much larger) compressed data — for zips
+// containing hundreds of thousands of small entries, this is a small
+// fraction of the full file size. This is the fix for the remaining
+// bottleneck: reading a whole multi-GB zip into memory just to extract one
+// small entry, which could take minutes and looked exactly like a freeze.
+let tailSize=Math.min(zipFile.size,4*1024*1024) // generous cap for very large central directories
+let tailStart=Math.max(0,zipFile.size-tailSize)
+let tailBuf=new Uint8Array(await zipFile.slice(tailStart,zipFile.size).arrayBuffer())
+let eocdOff=_FindEOCD(tailBuf)
+if(eocdOff<0)throw new Error('EOCD not found in '+zipFile.name)
+let dv=new DataView(tailBuf.buffer,tailBuf.byteOffset,tailBuf.byteLength)
+let cdSize=dv.getUint32(eocdOff+12,true)
+let cdOffset=dv.getUint32(eocdOff+16,true)
+if(cdSize===0xFFFFFFFF||cdOffset===0xFFFFFFFF){
+// ZIP64 sentinel values — this archive needs the ZIP64 extension format,
+// which this fast path doesn't parse. Throw to hit the fallback below,
+// which reads the whole file with the library's own (ZIP64-aware)
+// decompressor instead of failing outright — slower for this one zip,
+// but still correct.
+throw new Error('ZIP64 archive — needs full-file fallback')
+}
+let cdBuf
+if(cdOffset>=tailStart){
+// Central directory is entirely within what we already read.
+cdBuf=tailBuf.subarray(cdOffset-tailStart,cdOffset-tailStart+cdSize)
+}else{
+// Central directory extends before our tail read (an extremely high
+// entry count) — fetch exactly that range directly.
+cdBuf=new Uint8Array(await zipFile.slice(cdOffset,cdOffset+cdSize).arrayBuffer())
+}
+_ZipCacheHandle=zipHandle
+_ZipCacheFile=zipFile
+_ZipCacheDir=_ParseCentralDirectory(cdBuf)
+}
+let info=_ZipCacheDir.get(entryName)
+if(!info)return null
+// Read just enough of the local file header to find the exact start of the
+// compressed data (filename/extra field lengths can in principle differ
+// slightly from the central directory's copy), then read only the
+// compressed bytes for this one entry — never the rest of the zip.
+let headBuf=new Uint8Array(await _ZipCacheFile.slice(info.localOffset,info.localOffset+30+1024).arrayBuffer())
+let hdv=new DataView(headBuf.buffer,headBuf.byteOffset,headBuf.byteLength)
+if(hdv.getUint32(0,true)!==0x04034b50)throw new Error('bad local file header signature')
+let nameLen=hdv.getUint16(26,true),extraLen=hdv.getUint16(28,true)
+let dataStart=info.localOffset+30+nameLen+extraLen
+let compData=new Uint8Array(await _ZipCacheFile.slice(dataStart,dataStart+info.compSize).arrayBuffer())
+if(info.method===0)return compData  // stored, no compression
+if(info.method===8)return fflate.inflateSync(compData,{size:info.uncompSize})
+throw new Error('unsupported compression method '+info.method)
+}catch(e){
+// Any unexpected issue with the fast partial-read path (ZIP64, unusual
+// extra fields, malformed archive, etc.) falls back to reading the whole
+// file with the library's own well-tested decompressor, trading speed for
+// guaranteed correctness rather than failing outright.
+_ZipCacheHandle=null
+let fullBuf=new Uint8Array(await zipFile.arrayBuffer())
+let out=fflate.unzipSync(fullBuf,{filter:f=>f.name===entryName})
 return out[entryName]||null
+}
 }
 
 _IsBinLike=(name)=>{
