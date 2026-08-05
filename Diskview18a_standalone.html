@@ -63,7 +63,7 @@ td button:not(.nbtn),th button{width:20px;height:20px}
   <span style='display:flex;align-items:center;gap:8px'>
   <span id='scanElapsed' title='Time elapsed since the current scan started (resets on each Scan click)' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
   <span id='lifetimeStats' title='How many times a template has been displayed while stepping/playing through results, across all Scan clicks this session' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
-  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260805h</span>
+  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260805i</span>
   </span>
 </div>
 <input id='local'type='file'style='display:none'onchange='OpFl()'>
@@ -1207,6 +1207,25 @@ let existing=G('defectSum2');if(existing)existing.remove()
 ds.parentNode.insertBefore(wrap,ds.nextSibling)
 }
 }
+// Gives a File-1 cell and its matching File-2 cell the same explicit width
+// (not just max-width, which doesn't reliably unify column widths across
+// rows in an auto-layout table) so long descriptive text wraps consistently
+// on both sides instead of the table keeping growing wider as more columns
+// are added. Only applied when the content is actually long enough to need
+// it, so short values (hex bytes, index numbers) aren't forced wider than
+// necessary. Cells that are intentionally kept on one line (e.g. hex-dump
+// rows using nowrap on purpose) are left untouched either way.
+let _cmpCopyLayoutStyle=(src,dst,longestLen)=>{
+let cs=getComputedStyle(src)
+dst.style.whiteSpace=cs.whiteSpace
+dst.style.overflow=cs.overflow
+dst.style.textOverflow=cs.textOverflow
+dst.style.wordBreak=cs.wordBreak
+if(cs.whiteSpace!=='nowrap'&&longestLen>60){
+src.style.width='400px'
+dst.style.width='400px'
+}
+}
 let rows=Q('#rTab>tbody>tr')
 rows.forEach((e,i)=>{
 let v1cells=Array.from(e.children).slice(1) // skip the first cell (Item/No/label column)
@@ -1233,36 +1252,14 @@ if(file2Colspan>1)th.colSpan=file2Colspan
 e.appendChild(th)
 return
 }
-// Copies the relevant layout style properties from a File-1 cell to its
-// matching File-2 cell, so File 2 always wraps/sizes exactly like File 1
-// does — some templates set specific cells to nowrap (e.g. the SMART error
-// log's hex-dump 'Ext' row) while others rely on default wrapping, and this
-// stays correct for either case without needing to special-case templates.
-let _cmpCopyLayoutStyle=(src,dst)=>{
-let cs=getComputedStyle(src)
-dst.style.whiteSpace=cs.whiteSpace
-dst.style.overflow=cs.overflow
-dst.style.textOverflow=cs.textOverflow
-dst.style.wordBreak=cs.wordBreak
-if(cs.whiteSpace!=='nowrap'){
-// Cap width for cells that aren't intentionally kept on one line (e.g. hex
-// dumps use nowrap on purpose), so long descriptive text wraps within a
-// reasonable width instead of letting the whole comparison table keep
-// growing wider as more columns are added.
-src.style.maxWidth='400px'
-dst.style.maxWidth='400px'
-}else{
-dst.style.maxWidth=cs.maxWidth
-}
-}
 if(v2row){
 let v2cells=v2row.slice(1) // corresponding values, skip the first (Item/No/label)
 v1cells.forEach((c1,ci)=>{
 let td=document.createElement('td')
 td.className='cmpCol'
 if(c1.colSpan>1)td.colSpan=c1.colSpan
-_cmpCopyLayoutStyle(c1,td)
 let v2val=ci<v2cells.length?v2cells[ci]:''
+_cmpCopyLayoutStyle(c1,td,Math.max(c1.innerText.length,v2val.length))
 td.innerText=v2val
 if(c1.innerText!=v2val){c1.classList.add('cmpDiff');td.style.background='#ffe0e0'}
 e.appendChild(td)
@@ -1275,13 +1272,14 @@ v1cells.forEach(c1=>{
 let td=document.createElement('td')
 td.className='cmpCol'
 if(c1.colSpan>1)td.colSpan=c1.colSpan
-_cmpCopyLayoutStyle(c1,td)
+_cmpCopyLayoutStyle(c1,td,c1.innerText.length)
 td.innerText='N/A'
 td.style.color='#aaa'
 e.appendChild(td)
 })
 }
-})}
+})
+SyncH()}
 
 SetTH=(x,j,len)=>{
 len=len||512
