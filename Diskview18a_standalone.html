@@ -63,7 +63,7 @@ td button:not(.nbtn),th button{width:20px;height:20px}
   <span style='display:flex;align-items:center;gap:8px'>
   <span id='scanElapsed' title='Time elapsed since the current scan started (resets on each Scan click)' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
   <span id='lifetimeStats' title='How many times a template has been displayed while stepping/playing through results, across all Scan clicks this session' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
-  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260804j</span>
+  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260804k</span>
   </span>
 </div>
 <input id='local'type='file'style='display:none'onchange='OpFl()'>
@@ -3425,7 +3425,7 @@ ScanIdx=k+1;if(ScanIdx>=ScanTotal)ScanIdx=0
 if(ScanActive)_ScanScheduleNext()
 return
 }
-W(G('nVer'),`⏳ Loading ${seqNum.toLocaleString()}/${ScanTotal.toLocaleString()}: ${entry.name}…`)
+W(G('nVer'),`⏳ Loading ${seqNum.toLocaleString()}/${ScanTotal.toLocaleString()}…`)
 let buf,ok=false
 try{
 if(entry.zipHandle){
@@ -3539,6 +3539,7 @@ await _doScanStepDir(-1)
 
 RevSpeedChange=()=>{
 W(G('revSpeedLbl'),Number(G('revSpeed').value).toFixed(1)+'s')
+try{localStorage.setItem('dv_scanSpeed',G('revSpeed').value)}catch(e){}
 if(RevTimer){
 clearInterval(RevTimer)
 RevTimer=setInterval(()=>Adv(1),Number(G('revSpeed').value)*1000)
@@ -3857,6 +3858,14 @@ DcFl0(B642Buf(b64))
 if(Tx*2>=ArIx.length){Tx=0;DcFl()}
 W(G('nVer'),'')}
 InitLast()
+// Restore the persisted scan speed setting
+try{
+let savedSpeed=localStorage.getItem('dv_scanSpeed')
+if(savedSpeed&&G('revSpeed')){
+G('revSpeed').value=savedSpeed
+W(G('revSpeedLbl'),Number(savedSpeed).toFixed(1)+'s')
+}
+}catch(e){}
 // Restore last-used file and folder locations from IndexedDB (for picker startIn)
 ;(async()=>{
 if(!ScanFileHandle){let h=await _ScanDB.loadFileHint();if(h)ScanFileHandle=h}
