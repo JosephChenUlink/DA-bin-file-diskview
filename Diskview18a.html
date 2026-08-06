@@ -63,7 +63,7 @@ td button:not(.nbtn),th button{width:20px;height:20px}
   <span style='display:flex;align-items:center;gap:8px'>
   <span id='scanElapsed' title='Time elapsed since the current scan started (resets on each Scan click)' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
   <span id='lifetimeStats' title='How many times a template has been displayed while stepping/playing through results, across all Scan clicks this session' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
-  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260805m</span>
+  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260805n</span>
   </span>
 </div>
 <input id='local'type='file'style='display:none'onchange='OpFl()'>
@@ -823,18 +823,23 @@ ds.parentNode.insertBefore(wrap,ds.nextSibling)
 }
 // Copies wrap-related style from a File-1 cell to its matching File-2 cell
 // so cells that are intentionally kept on one line (e.g. hex-dump rows
-// using nowrap on purpose) stay that way on both sides; actual column
-// widths are handled separately below via an explicit colgroup, since
-// per-cell width/max-width on individual TD/TH elements does not reliably
-// produce consistent column widths in an auto-layout table — different
-// header vs data row signals can pull the browser's column-width
-// reconciliation in different directions per column.
-let _cmpCopyLayoutStyle=(src,dst)=>{
+// using nowrap on purpose) stay that way on both sides. For the wide
+// (400px) column specifically, forces overflow-wrap so long unbroken
+// tokens (e.g. long hex strings with no spaces) actually wrap within the
+// fixed column width instead of overflowing past it — table-layout:fixed
+// enforces an exact width but won't shrink content to fit on its own.
+let _cmpCopyLayoutStyle=(src,dst,isWide)=>{
 let cs=getComputedStyle(src)
 dst.style.whiteSpace=cs.whiteSpace
 dst.style.overflow=cs.overflow
 dst.style.textOverflow=cs.textOverflow
 dst.style.wordBreak=cs.wordBreak
+if(isWide&&cs.whiteSpace!=='nowrap'){
+src.style.overflowWrap='break-word'
+src.style.wordBreak='break-word'
+dst.style.overflowWrap='break-word'
+dst.style.wordBreak='break-word'
+}
 }
 let rows=Q('#rTab>tbody>tr')
 let colWidths=null // set once, from the header row's actual structure
@@ -886,7 +891,7 @@ let td=document.createElement('td')
 td.className='cmpCol'
 if(c1.colSpan>1)td.colSpan=c1.colSpan
 let v2val=ci<v2cells.length?v2cells[ci]:''
-_cmpCopyLayoutStyle(c1,td)
+_cmpCopyLayoutStyle(c1,td,ci===v1cells.length-1)
 td.innerText=v2val
 if(c1.innerText!=v2val){c1.classList.add('cmpDiff');td.style.background='#ffe0e0'}
 e.appendChild(td)
@@ -899,7 +904,7 @@ v1cells.forEach((c1,ci)=>{
 let td=document.createElement('td')
 td.className='cmpCol'
 if(c1.colSpan>1)td.colSpan=c1.colSpan
-_cmpCopyLayoutStyle(c1,td)
+_cmpCopyLayoutStyle(c1,td,ci===v1cells.length-1)
 td.innerText='N/A'
 td.style.color='#aaa'
 e.appendChild(td)
