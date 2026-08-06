@@ -63,7 +63,7 @@ td button:not(.nbtn),th button{width:20px;height:20px}
   <span style='display:flex;align-items:center;gap:8px'>
   <span id='scanElapsed' title='Time elapsed since the current scan started (resets on each Scan click)' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
   <span id='lifetimeStats' title='How many times a template has been displayed while stepping/playing through results, across all Scan clicks this session' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
-  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260805n</span>
+  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260805o</span>
   </span>
 </div>
 <input id='local'type='file'style='display:none'onchange='OpFl()'>
@@ -1326,26 +1326,29 @@ ds.parentNode.insertBefore(wrap,ds.nextSibling)
 }
 // Copies wrap-related style from a File-1 cell to its matching File-2 cell
 // so cells that are intentionally kept on one line (e.g. hex-dump rows
-// using nowrap on purpose) stay that way on both sides. For the wide
-// (400px) column specifically, forces overflow-wrap so long unbroken
-// tokens (e.g. long hex strings with no spaces) actually wrap within the
-// fixed column width instead of overflowing past it — table-layout:fixed
-// enforces an exact width but won't shrink content to fit on its own.
-let _cmpCopyLayoutStyle=(src,dst,isWide)=>{
+// using nowrap on purpose) stay that way on both sides. For everything
+// else, forces overflow-wrap so any long unbroken token (long hex strings,
+// unexpectedly long values) wraps within its column's width instead of
+// overflowing into the next column — applied universally rather than only
+// to whichever column was guessed to be the 'long' one, since several
+// templates (e.g. T4/T201/T202) have more than one substantial column and
+// guessing wrong caused visible text overlap.
+let _cmpCopyLayoutStyle=(src,dst)=>{
 let cs=getComputedStyle(src)
 dst.style.whiteSpace=cs.whiteSpace
 dst.style.overflow=cs.overflow
 dst.style.textOverflow=cs.textOverflow
-dst.style.wordBreak=cs.wordBreak
-if(isWide&&cs.whiteSpace!=='nowrap'){
+if(cs.whiteSpace!=='nowrap'){
 src.style.overflowWrap='break-word'
 src.style.wordBreak='break-word'
 dst.style.overflowWrap='break-word'
 dst.style.wordBreak='break-word'
+}else{
+dst.style.wordBreak=cs.wordBreak
 }
 }
 let rows=Q('#rTab>tbody>tr')
-let colWidths=null // set once, from the header row's actual structure
+let numV1Cols=null,file2ColCount=null // set once, from the header row's actual structure
 rows.forEach((e,i)=>{
 let v1cells=Array.from(e.children).slice(1) // skip the first cell (Item/No/label column)
 let v1key=e.children.length>0?e.children[0].innerText:null
@@ -1370,21 +1373,7 @@ let labelColspan=e.children[0].colSpan||1
 let file2Colspan=v1cells.length+(labelColspan-1)
 if(file2Colspan>1)th.colSpan=file2Colspan
 e.appendChild(th)
-// Record the column layout from the FIRST header row seen (the governing
-// one for this template) so it can be applied as an explicit colgroup
-// after all rows are built — this is what actually controls widths, not
-// anything set directly on these cells.
-if(!colWidths){
-colWidths=[200] // label column
-for(let ci=0;ci<v1cells.length;ci++){
-let wide=getComputedStyle(v1cells[ci]).whiteSpace!=='nowrap'&&ci===v1cells.length-1
-colWidths.push(wide?400:90)
-}
-for(let ci=0;ci<file2Colspan;ci++){
-let wide=ci===file2Colspan-1&&v1cells.length>0&&getComputedStyle(v1cells[v1cells.length-1]).whiteSpace!=='nowrap'
-colWidths.push(wide?400:90)
-}
-}
+if(numV1Cols===null){numV1Cols=v1cells.length;file2ColCount=file2Colspan}
 return
 }
 if(v2row){
@@ -1394,7 +1383,7 @@ let td=document.createElement('td')
 td.className='cmpCol'
 if(c1.colSpan>1)td.colSpan=c1.colSpan
 let v2val=ci<v2cells.length?v2cells[ci]:''
-_cmpCopyLayoutStyle(c1,td,ci===v1cells.length-1)
+_cmpCopyLayoutStyle(c1,td)
 td.innerText=v2val
 if(c1.innerText!=v2val){c1.classList.add('cmpDiff');td.style.background='#ffe0e0'}
 e.appendChild(td)
@@ -1407,13 +1396,43 @@ v1cells.forEach((c1,ci)=>{
 let td=document.createElement('td')
 td.className='cmpCol'
 if(c1.colSpan>1)td.colSpan=c1.colSpan
-_cmpCopyLayoutStyle(c1,td,ci===v1cells.length-1)
+_cmpCopyLayoutStyle(c1,td)
 td.innerText='N/A'
 td.style.color='#aaa'
 e.appendChild(td)
 })
 }
 })
+// Measure each column's actual max content length across every row (now
+// that all rows are built) to allocate width proportionally — narrow for
+// short values (hex indices, IDs), wider for long descriptive text —
+// instead of assuming only the last column needs extra room. Column 0 is
+// always the label; columns 1..numV1Cols are File 1's data columns;
+// columns after that are File 2's data columns (mirroring the same
+// per-column widths as File 1, since they hold the same kind of values).
+if(numV1Cols!==null){
+let maxLen=new Array(numV1Cols).fill(0)
+Q('#rTab>tbody>tr').forEach(r=>{
+if(r.children.length>0&&r.children[0].tagName==='TH')return
+let cells=Array.from(r.children).slice(1,1+numV1Cols)
+cells.forEach((c,ci)=>{if(c)maxLen[ci]=Math.max(maxLen[ci],c.textContent.length)})
+})
+// ~7.2px/char is a reasonable monospace-ish estimate for this UI's font;
+// clamp each column between 60px (room for a short label/hex value) and
+// 320px (long descriptive text still wraps at a readable width instead of
+// stretching the whole table further).
+let perCol=maxLen.map(len=>Math.max(60,Math.min(320,Math.round(len*7.2)+16)))
+let colWidths=[200,...perCol,...perCol.slice(0,file2ColCount)]
+// Cap the total width to a reasonable screen-fitting maximum, scaling
+// every column down proportionally if needed — templates with many
+// columns (e.g. T3/T11 with 9+ per file) would otherwise produce a table
+// far wider than any normal window.
+let total=colWidths.reduce((a,b)=>a+b,0)
+let maxTotal=1700
+if(total>maxTotal){
+let scale=maxTotal/total
+colWidths=colWidths.map(w=>Math.max(50,Math.round(w*scale)))
+}
 // Apply the recorded column widths as an explicit colgroup with
 // table-layout:fixed — the only combination that gives deterministic,
 // guaranteed-consistent column widths regardless of content, rather than
@@ -1422,9 +1441,7 @@ e.appendChild(td)
 // fixed layout, an unconstrained table width (which defaults to filling
 // its container) causes the browser to proportionally stretch every
 // column to fill the extra space, silently overriding the colgroup's
-// individual widths — which is what kept making the last column render
-// wider than intended even with the colgroup in place.
-if(colWidths){
+// individual widths.
 let rTab=G('rTab')
 let existingColgroup=rTab.querySelector('colgroup')
 if(existingColgroup)existingColgroup.remove()
@@ -2884,6 +2901,10 @@ let rr=parseInt(x,16)
 if(rr==0)x=x+' (rate not reported)'
 else if(rr==1)x=x+' (non-rotating media, e.g. SSD)'
 else if(rr>=0x401&&rr<=0xFFFE)x=x+' ('+rr.toLocaleString()+' RPM)'
+}
+if(T==18&&arS[q]=='Nominal Form Factor'){
+let ff=parseInt(x.slice(-1),16),ffNames=['Not reported','5.25 inch','3.5 inch','2.5 inch','1.8 inch','Less than 1.8 inch']
+x=x+' ('+(ffNames[ff]||'Reserved')+')'
 }
 if(T==58&&len==48){
 let off=a[q]*1,ascii=''
