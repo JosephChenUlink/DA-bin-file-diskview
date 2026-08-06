@@ -63,7 +63,7 @@ td button:not(.nbtn),th button{width:20px;height:20px}
   <span style='display:flex;align-items:center;gap:8px'>
   <span id='scanElapsed' title='Time elapsed since the current scan started (resets on each Scan click)' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
   <span id='lifetimeStats' title='How many times a template has been displayed while stepping/playing through results, across all Scan clicks this session' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
-  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260805p</span>
+  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260805q</span>
   </span>
 </div>
 <input id='local'type='file'style='display:none'onchange='OpFl()'>
@@ -911,8 +911,21 @@ if(numV1Cols!==null){
 let maxLen=new Array(numV1Cols).fill(0)
 Q('#rTab>tbody>tr').forEach(r=>{
 if(r.children.length>0&&r.children[0].tagName==='TH')return
-let cells=Array.from(r.children).slice(1,1+numV1Cols)
-cells.forEach((c,ci)=>{if(c)maxLen[ci]=Math.max(maxLen[ci],c.textContent.length)})
+let cells=Array.from(r.children).slice(1) // skip the label cell
+let colPos=0
+cells.forEach(c=>{
+let span=c.colSpan||1
+// Cells spanning multiple columns (e.g. a hex-dump row's single wide
+// cell covering what's normally several columns) don't belong to any
+// one column position, so their length isn't used to size a single
+// column — that would misattribute a long spanning value to whichever
+// column happens to sit at its starting position. Their own width
+// instead comes naturally from the sum of the columns they span, each
+// already sized correctly by the other, non-spanning rows at those
+// same positions.
+if(span===1&&colPos<numV1Cols)maxLen[colPos]=Math.max(maxLen[colPos],c.textContent.length)
+colPos+=span
+})
 })
 // ~7.2px/char is a reasonable monospace-ish estimate for this UI's font;
 // clamp each column between 35px (room for a short hex value like '00')
