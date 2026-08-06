@@ -63,7 +63,7 @@ td button:not(.nbtn),th button{width:20px;height:20px}
   <span style='display:flex;align-items:center;gap:8px'>
   <span id='scanElapsed' title='Time elapsed since the current scan started (resets on each Scan click)' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
   <span id='lifetimeStats' title='How many times a template has been displayed while stepping/playing through results, across all Scan clicks this session' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
-  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260805l</span>
+  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260805m</span>
   </span>
 </div>
 <input id='local'type='file'style='display:none'onchange='OpFl()'>
@@ -722,7 +722,8 @@ Q('#rTab th.cmpCol').forEach(e=>e.remove())
 Q('#rTab>tbody>tr').forEach(e=>e.classList.remove('cmpDiff'))
 let rTab=G('rTab')
 let cg=rTab.querySelector('colgroup');if(cg)cg.remove()
-rTab.style.tableLayout=''}
+rTab.style.tableLayout=''
+rTab.style.width=''}
 
 CmpToggle=()=>{
 if(A2){ClearCmp();return}
@@ -908,7 +909,13 @@ e.appendChild(td)
 // Apply the recorded column widths as an explicit colgroup with
 // table-layout:fixed — the only combination that gives deterministic,
 // guaranteed-consistent column widths regardless of content, rather than
-// leaving it to the browser's auto-layout reconciliation across rows.
+// leaving it to the browser's auto-layout reconciliation across rows. The
+// table's own width must also be pinned to the colgroup's total: with
+// fixed layout, an unconstrained table width (which defaults to filling
+// its container) causes the browser to proportionally stretch every
+// column to fill the extra space, silently overriding the colgroup's
+// individual widths — which is what kept making the last column render
+// wider than intended even with the colgroup in place.
 if(colWidths){
 let rTab=G('rTab')
 let existingColgroup=rTab.querySelector('colgroup')
@@ -921,6 +928,7 @@ colgroup.appendChild(col)
 })
 rTab.insertBefore(colgroup,rTab.firstChild)
 rTab.style.tableLayout='fixed'
+rTab.style.width=colWidths.reduce((a,b)=>a+b,0)+'px'
 }
 SyncH()}
 
