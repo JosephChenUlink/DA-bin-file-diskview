@@ -63,7 +63,7 @@ td button:not(.nbtn),th button{width:20px;height:20px}
   <span style='display:flex;align-items:center;gap:8px'>
   <span id='scanElapsed' title='Time elapsed since the current scan started (resets on each Scan click)' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
   <span id='lifetimeStats' title='How many times a template has been displayed while stepping/playing through results, across all Scan clicks this session' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
-  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260805j</span>
+  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260805k</span>
   </span>
 </div>
 <input id='local'type='file'style='display:none'onchange='OpFl()'>
@@ -863,6 +863,20 @@ th.innerText='File 2'
 let labelColspan=e.children[0].colSpan||1
 let file2Colspan=v1cells.length+(labelColspan-1)
 if(file2Colspan>1)th.colSpan=file2Colspan
+// Give both File 1's own header cell and the new spanning 'File 2' header a
+// width hint matching what the data rows below them will actually need:
+// ~70px for each short column plus 400px for the long value column
+// (matching the same 'last column' rule used for data rows). Without this,
+// header row cells offered no per-column width signal, letting the
+// browser's auto-layout size File 2's columns wider than File 1's despite
+// identical data-row width settings.
+if(v1cells.length>0){
+let lastHeaderCell=v1cells[v1cells.length-1]
+if(getComputedStyle(lastHeaderCell).whiteSpace!=='nowrap'){
+lastHeaderCell.style.width='400px'
+if(file2Colspan>1)th.style.minWidth=(70*(file2Colspan-1)+400)+'px'
+}
+}
 e.appendChild(th)
 return
 }
