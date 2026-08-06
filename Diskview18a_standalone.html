@@ -63,7 +63,7 @@ td button:not(.nbtn),th button{width:20px;height:20px}
   <span style='display:flex;align-items:center;gap:8px'>
   <span id='scanElapsed' title='Time elapsed since the current scan started (resets on each Scan click)' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
   <span id='lifetimeStats' title='How many times a template has been displayed while stepping/playing through results, across all Scan clicks this session' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
-  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260805o</span>
+  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260805p</span>
   </span>
 </div>
 <input id='local'type='file'style='display:none'onchange='OpFl()'>
@@ -1418,10 +1418,10 @@ let cells=Array.from(r.children).slice(1,1+numV1Cols)
 cells.forEach((c,ci)=>{if(c)maxLen[ci]=Math.max(maxLen[ci],c.textContent.length)})
 })
 // ~7.2px/char is a reasonable monospace-ish estimate for this UI's font;
-// clamp each column between 60px (room for a short label/hex value) and
-// 320px (long descriptive text still wraps at a readable width instead of
-// stretching the whole table further).
-let perCol=maxLen.map(len=>Math.max(60,Math.min(320,Math.round(len*7.2)+16)))
+// clamp each column between 35px (room for a short hex value like '00')
+// and 320px (long descriptive text still wraps at a readable width
+// instead of stretching the whole table further).
+let perCol=maxLen.map(len=>Math.max(35,Math.min(320,Math.round(len*7.2)+16)))
 let colWidths=[200,...perCol,...perCol.slice(0,file2ColCount)]
 // Cap the total width to a reasonable screen-fitting maximum, scaling
 // every column down proportionally if needed — templates with many
@@ -1431,7 +1431,7 @@ let total=colWidths.reduce((a,b)=>a+b,0)
 let maxTotal=1700
 if(total>maxTotal){
 let scale=maxTotal/total
-colWidths=colWidths.map(w=>Math.max(50,Math.round(w*scale)))
+colWidths=colWidths.map(w=>Math.max(30,Math.round(w*scale)))
 }
 // Apply the recorded column widths as an explicit colgroup with
 // table-layout:fixed — the only combination that gives deterministic,
