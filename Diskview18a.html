@@ -63,7 +63,7 @@ td button:not(.nbtn),th button{width:20px;height:20px}
   <span style='display:flex;align-items:center;gap:8px'>
   <span id='scanElapsed' title='Time elapsed since the current scan started (resets on each Scan click)' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
   <span id='lifetimeStats' title='How many times a template has been displayed while stepping/playing through results, across all Scan clicks this session' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
-  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260805q</span>
+  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260805r</span>
   </span>
 </div>
 <input id='local'type='file'style='display:none'onchange='OpFl()'>
@@ -748,6 +748,42 @@ return
 G('local2').click()
 }
 
+// Extracts the drive's actual Model number/Product field from its own
+// Identify/Controller-Info template (T1 SATA, T101 NVMe, T334 SCSI SATA)
+// instead of the capture header's Model Number field, which is the
+// host/NAS system that ran the capture, not the drive being analyzed.
+// Reuses the existing, already-validated render pipeline (the same
+// save/swap/render/extract/restore pattern CmpRenderTable already uses to
+// borrow File 2's render) rather than re-implementing the byte-level
+// decode for three different interface types.
+GetDriveModel=(localA,localArIx,localFrom)=>{
+if(!localArIx||!localArIx.length)return null
+let candidates=[[1,'Model number'],[101,'Model number'],[334,'Product']]
+let found=null
+for(let cand of candidates){
+let idx=localArIx.findIndex((v,i)=>i%2===0&&v===cand[0])
+if(idx>=0){found=[idx/2,cand[1]];break}
+}
+if(!found)return null
+let[txIdx,fieldName]=found
+let saveA=A,saveArIx=ArIx,saveFrom=From,saveT=T,saveM=M,saveGp=Gp,saveF=F,saveTx=Tx
+let result=null
+try{
+A=localA;ArIx=localArIx;From=localFrom;Tx=txIdx
+DpFl()
+let rows=Q('#rTab tr')
+for(let r of rows){
+if(r.children.length>1&&r.children[0].textContent.trim().toLowerCase()===fieldName.toLowerCase()){
+result=r.children[2]?r.children[2].textContent.trim():null
+break
+}
+}
+}catch(e){}
+Tx=saveTx
+A=saveA;ArIx=saveArIx;From=saveFrom;T=saveT;M=saveM;Gp=saveGp;F=saveF
+DpFl()
+return result}
+
 BuildCmpSummary=()=>{
 let hdr1=SAll.split("h\n")[0]
 let rows="<tr><th></th><th>File 1: "+CurFile+"</th><th>File 2: "+CurFile2+"</th></tr>"
@@ -757,8 +793,13 @@ let dt1=(d1||'')+(t1?' '+t1:''),dt2=(d2||'')+(t2?' '+t2:'')
 if(dt1||dt2){let diff=dt1!=dt2;rows+="<tr"+(diff?" style='background:#ffe0e0'":"")+"><td><b>Date &amp; Time</b></td><td>"+(dt1||'-')+"</td><td>"+(dt2||'-')+(diff?' \u26a0':'')+"</td></tr>"}
 // Core fields (removed Slot Name, Slot Form Factor ID)
 let fields=['Model Number','Serial Number','Capacity','Interface','Bus Type','Is HDD']
+// Model Number is the one field pulled from the drive's own template data
+// (T1/T101/T334) instead of the capture header, since the header's copy
+// is the host/NAS system, not the drive itself.
+let driveModel1=GetDriveModel(A,ArIx,From),driveModel2=GetDriveModel(A2,ArIx2,From2)
 fields.forEach(fn=>{
 let displayName=fn,v1=CmpField(hdr1,fn),v2=CmpField(Hdr2,fn)
+if(fn==='Model Number'){v1=driveModel1||v1;v2=driveModel2||v2}
 if(fn==='Is HDD'){
 displayName='HDD'
 v1=v1==='1'?'Yes':v1==='0'?'No':v1
@@ -910,8 +951,7 @@ e.appendChild(td)
 if(numV1Cols!==null){
 let maxLen=new Array(numV1Cols).fill(0)
 Q('#rTab>tbody>tr').forEach(r=>{
-if(r.children.length>0&&r.children[0].tagName==='TH')return
-let cells=Array.from(r.children).slice(1) // skip the label cell
+let cells=Array.from(r.children).slice(1) // skip the first cell (Item/No/label column)
 let colPos=0
 cells.forEach(c=>{
 let span=c.colSpan||1
@@ -922,7 +962,11 @@ let span=c.colSpan||1
 // column happens to sit at its starting position. Their own width
 // instead comes naturally from the sum of the columns they span, each
 // already sized correctly by the other, non-spanning rows at those
-// same positions.
+// same positions. Header row cells are measured the same way as data
+// rows (not skipped) — a header label like 'TimeStamp' can be longer
+// than any actual data in that column, especially for templates with
+// few or no matching rows, and needs to be accounted for or the
+// header text itself overflows into the next column.
 if(span===1&&colPos<numV1Cols)maxLen[colPos]=Math.max(maxLen[colPos],c.textContent.length)
 colPos+=span
 })
@@ -3480,8 +3524,10 @@ masterDoc.text('Compare Summary',20,58)
 let fields=['Date & Time','Model Number','Serial Number','Capacity','Interface','Bus Type','Is HDD']
 let d1c=CmpField(SAll.split('h\n')[0],'Date'),t1c=CmpField(SAll.split('h\n')[0],'Time'),d2c=CmpField(Hdr2,'Date'),t2c=CmpField(Hdr2,'Time')
 let _dtV1=(d1c||'')+(t1c?' '+t1c:''),_dtV2=(d2c||'')+(t2c?' '+t2c:'')
+let _driveModel1c=GetDriveModel(A,ArIx,From),_driveModel2c=GetDriveModel(A2,ArIx2,From2)
 let cmpRows=fields.map(fn=>{
 if(fn==='Date & Time'){let v1=_dtV1,v2=_dtV2;return{label:'Date & Time',v1:v1||'-',v2:v2||'-',diff:v1!==v2}}
+if(fn==='Model Number'){let v1=_driveModel1c||CmpField(SAll.split('h\n')[0],fn)||'-',v2=_driveModel2c||CmpField(Hdr2,fn)||'-';return{label:fn,v1,v2,diff:v1!==v2}}
 let v1=CmpField(SAll.split('h\n')[0],fn)||'-'
 let v2=CmpField(Hdr2,fn)||'-'
 return{label:fn,v1,v2,diff:v1!==v2}
