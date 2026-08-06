@@ -63,7 +63,7 @@ td button:not(.nbtn),th button{width:20px;height:20px}
   <span style='display:flex;align-items:center;gap:8px'>
   <span id='scanElapsed' title='Time elapsed since the current scan started (resets on each Scan click)' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
   <span id='lifetimeStats' title='How many times a template has been displayed while stepping/playing through results, across all Scan clicks this session' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
-  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260805k</span>
+  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260805l</span>
   </span>
 </div>
 <input id='local'type='file'style='display:none'onchange='OpFl()'>
@@ -719,7 +719,10 @@ if(G('cmpBtn'))W(G('cmpBtn'),'Compare')
 let ds2=G('defectSum2');if(ds2)ds2.remove()
 Q('#rTab td.cmpCol').forEach(e=>e.remove())
 Q('#rTab th.cmpCol').forEach(e=>e.remove())
-Q('#rTab>tbody>tr').forEach(e=>e.classList.remove('cmpDiff'))}
+Q('#rTab>tbody>tr').forEach(e=>e.classList.remove('cmpDiff'))
+let rTab=G('rTab')
+let cg=rTab.querySelector('colgroup');if(cg)cg.remove()
+rTab.style.tableLayout=''}
 
 CmpToggle=()=>{
 if(A2){ClearCmp();return}
@@ -817,29 +820,23 @@ let existing=G('defectSum2');if(existing)existing.remove()
 ds.parentNode.insertBefore(wrap,ds.nextSibling)
 }
 }
-// Gives a File-1 cell and its matching File-2 cell the same explicit width
-// (not just max-width, which doesn't reliably unify column widths across
-// rows in an auto-layout table) so long descriptive text wraps consistently
-// on both sides instead of the table keeping growing wider as more columns
-// are added. Applied to the last column in each row (where templates
-// consistently put the long descriptive value) regardless of whether this
-// particular file pair's content happens to be short or long, so the width
-// stays stable as the user steps between different files instead of jumping
-// around based on that pair's specific content. Cells that are
-// intentionally kept on one line (e.g. hex-dump rows using nowrap on
-// purpose) are left untouched either way.
-let _cmpCopyLayoutStyle=(src,dst,isLastCell)=>{
+// Copies wrap-related style from a File-1 cell to its matching File-2 cell
+// so cells that are intentionally kept on one line (e.g. hex-dump rows
+// using nowrap on purpose) stay that way on both sides; actual column
+// widths are handled separately below via an explicit colgroup, since
+// per-cell width/max-width on individual TD/TH elements does not reliably
+// produce consistent column widths in an auto-layout table — different
+// header vs data row signals can pull the browser's column-width
+// reconciliation in different directions per column.
+let _cmpCopyLayoutStyle=(src,dst)=>{
 let cs=getComputedStyle(src)
 dst.style.whiteSpace=cs.whiteSpace
 dst.style.overflow=cs.overflow
 dst.style.textOverflow=cs.textOverflow
 dst.style.wordBreak=cs.wordBreak
-if(cs.whiteSpace!=='nowrap'&&isLastCell){
-src.style.width='400px'
-dst.style.width='400px'
-}
 }
 let rows=Q('#rTab>tbody>tr')
+let colWidths=null // set once, from the header row's actual structure
 rows.forEach((e,i)=>{
 let v1cells=Array.from(e.children).slice(1) // skip the first cell (Item/No/label column)
 let v1key=e.children.length>0?e.children[0].innerText:null
@@ -863,21 +860,22 @@ th.innerText='File 2'
 let labelColspan=e.children[0].colSpan||1
 let file2Colspan=v1cells.length+(labelColspan-1)
 if(file2Colspan>1)th.colSpan=file2Colspan
-// Give both File 1's own header cell and the new spanning 'File 2' header a
-// width hint matching what the data rows below them will actually need:
-// ~70px for each short column plus 400px for the long value column
-// (matching the same 'last column' rule used for data rows). Without this,
-// header row cells offered no per-column width signal, letting the
-// browser's auto-layout size File 2's columns wider than File 1's despite
-// identical data-row width settings.
-if(v1cells.length>0){
-let lastHeaderCell=v1cells[v1cells.length-1]
-if(getComputedStyle(lastHeaderCell).whiteSpace!=='nowrap'){
-lastHeaderCell.style.width='400px'
-if(file2Colspan>1)th.style.minWidth=(70*(file2Colspan-1)+400)+'px'
-}
-}
 e.appendChild(th)
+// Record the column layout from the FIRST header row seen (the governing
+// one for this template) so it can be applied as an explicit colgroup
+// after all rows are built — this is what actually controls widths, not
+// anything set directly on these cells.
+if(!colWidths){
+colWidths=[200] // label column
+for(let ci=0;ci<v1cells.length;ci++){
+let wide=getComputedStyle(v1cells[ci]).whiteSpace!=='nowrap'&&ci===v1cells.length-1
+colWidths.push(wide?400:90)
+}
+for(let ci=0;ci<file2Colspan;ci++){
+let wide=ci===file2Colspan-1&&v1cells.length>0&&getComputedStyle(v1cells[v1cells.length-1]).whiteSpace!=='nowrap'
+colWidths.push(wide?400:90)
+}
+}
 return
 }
 if(v2row){
@@ -887,7 +885,7 @@ let td=document.createElement('td')
 td.className='cmpCol'
 if(c1.colSpan>1)td.colSpan=c1.colSpan
 let v2val=ci<v2cells.length?v2cells[ci]:''
-_cmpCopyLayoutStyle(c1,td,ci===v1cells.length-1)
+_cmpCopyLayoutStyle(c1,td)
 td.innerText=v2val
 if(c1.innerText!=v2val){c1.classList.add('cmpDiff');td.style.background='#ffe0e0'}
 e.appendChild(td)
@@ -900,13 +898,30 @@ v1cells.forEach((c1,ci)=>{
 let td=document.createElement('td')
 td.className='cmpCol'
 if(c1.colSpan>1)td.colSpan=c1.colSpan
-_cmpCopyLayoutStyle(c1,td,ci===v1cells.length-1)
+_cmpCopyLayoutStyle(c1,td)
 td.innerText='N/A'
 td.style.color='#aaa'
 e.appendChild(td)
 })
 }
 })
+// Apply the recorded column widths as an explicit colgroup with
+// table-layout:fixed — the only combination that gives deterministic,
+// guaranteed-consistent column widths regardless of content, rather than
+// leaving it to the browser's auto-layout reconciliation across rows.
+if(colWidths){
+let rTab=G('rTab')
+let existingColgroup=rTab.querySelector('colgroup')
+if(existingColgroup)existingColgroup.remove()
+let colgroup=document.createElement('colgroup')
+colWidths.forEach(w=>{
+let col=document.createElement('col')
+col.style.width=w+'px'
+colgroup.appendChild(col)
+})
+rTab.insertBefore(colgroup,rTab.firstChild)
+rTab.style.tableLayout='fixed'
+}
 SyncH()}
 
 SetTH=(x,j,len)=>{
