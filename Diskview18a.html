@@ -63,7 +63,7 @@ td button:not(.nbtn),th button{width:20px;height:20px}
   <span style='display:flex;align-items:center;gap:8px'>
   <span id='scanElapsed' title='Time elapsed since the current scan started (resets on each Scan click)' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
   <span id='lifetimeStats' title='How many times a template has been displayed while stepping/playing through results, across all Scan clicks this session' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
-  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260807c</span>
+  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260807d</span>
   </span>
 </div>
 <input id='local'type='file'style='display:none'onchange='OpFl()'>
@@ -710,7 +710,12 @@ ArIx2.push(len)
 Hdr2=arS2[0]
 BuildCmpSummary()
 if(G('cmpBtn'))W(G('cmpBtn'),'× Cmp')
-if(Tx*2>=ArIx2.length){}
+// The header view builds its own File 2 columns inside DpHdr. Letting
+// CmpRenderTable run here as well appended a second File 2 group on top of
+// them, which is what produced the duplicated headers and empty rows when a
+// second file was loaded while the Header view was open.
+if(HdrView)DpFl()
+else if(Tx*2>=ArIx2.length){}
 else CmpRenderTable()}
 
 ClearCmp=()=>{
@@ -725,7 +730,10 @@ Q('#rTab>tbody>tr').forEach(e=>e.classList.remove('cmpDiff'))
 let rTab=G('rTab')
 let cg=rTab.querySelector('colgroup');if(cg)cg.remove()
 rTab.style.tableLayout=''
-rTab.style.width=''}
+rTab.style.width=''
+// DpHdr owns its File 2 columns, so stripping .cmpCol is not enough — the
+// header view has to be rebuilt from scratch.
+if(HdrView)DpFl()}
 
 CmpToggle=()=>{
 if(A2){ClearCmp();return}
@@ -786,30 +794,33 @@ A=saveA;ArIx=saveArIx;From=saveFrom;T=saveT;M=saveM;Gp=saveGp;F=saveF
 DpFl()
 return result}
 
+// The on-screen summary panel and the PDF's Compare Summary page were building
+// their own field lists and had already drifted apart. Both now read this.
+CmpSummaryRows=(h1,h2,m1,m2)=>{
+let f=(h,n)=>h?CmpField(h,n):null
+let cap=v=>{let n=Number(v);return (v&&isFinite(n)&&n>0)?Math.round(n/1e9).toLocaleString('en-US')+' GB':(v||'')}
+let hdd=v=>v==='1'?'HDD':(v==='0'?'SSD':(v||''))
+let dt=h=>{let d=f(h,'Date'),t=f(h,'Time');return (d||'')+(t?' '+t:'')}
+let rows=[
+{label:'Date & Time',v1:dt(h1),v2:dt(h2)},
+// The drive's own model, read from its IDENTIFY/Inquiry template...
+{label:'Drive Model',v1:m1||f(h1,'Model Number'),v2:m2||f(h2,'Model Number')},
+// ...kept distinct from the appliance that ran the capture, which is what the
+// header's Model Number field actually holds.
+{label:'Host Model Number',v1:f(h1,'Model Number'),v2:f(h2,'Model Number')},
+{label:'Serial Number',v1:f(h1,'Serial Number'),v2:f(h2,'Serial Number')},
+{label:'Capacity',v1:cap(f(h1,'Capacity')),v2:cap(f(h2,'Capacity'))},
+{label:'Interface',v1:f(h1,'Interface'),v2:f(h2,'Interface')},
+{label:'HDD/SSD',v1:hdd(f(h1,'Is HDD')),v2:hdd(f(h2,'Is HDD'))}
+]
+return rows.filter(r=>r.v1||r.v2).map(r=>({label:r.label,v1:r.v1||'-',v2:r.v2||'-',diff:(r.v1||'')!==(r.v2||'')}))
+}
+
 BuildCmpSummary=()=>{
 let hdr1=SAll.split("h\n")[0]
 let rows="<tr><th></th><th>File 1: "+CurFile+"</th><th>File 2: "+CurFile2+"</th></tr>"
-// Date & Time combined in one row
-let d1=CmpField(hdr1,'Date'),t1=CmpField(hdr1,'Time'),d2=CmpField(Hdr2,'Date'),t2=CmpField(Hdr2,'Time')
-let dt1=(d1||'')+(t1?' '+t1:''),dt2=(d2||'')+(t2?' '+t2:'')
-if(dt1||dt2){let diff=dt1!=dt2;rows+="<tr"+(diff?" style='background:#ffe0e0'":"")+"><td><b>Date &amp; Time</b></td><td>"+(dt1||'-')+"</td><td>"+(dt2||'-')+(diff?' \u26a0':'')+"</td></tr>"}
-// Core fields (removed Slot Name, Slot Form Factor ID)
-let fields=['Model Number','Serial Number','Capacity','Interface','Bus Type','Is HDD']
-// Model Number is the one field pulled from the drive's own template data
-// (T1/T101/T334) instead of the capture header, since the header's copy
-// is the host/NAS system, not the drive itself.
-let driveModel1=GetDriveModel(A,ArIx,From),driveModel2=GetDriveModel(A2,ArIx2,From2)
-fields.forEach(fn=>{
-let displayName=fn,v1=CmpField(hdr1,fn),v2=CmpField(Hdr2,fn)
-if(fn==='Model Number'){v1=driveModel1||v1;v2=driveModel2||v2}
-if(fn==='Is HDD'){
-displayName='HDD'
-v1=v1==='1'?'Yes':v1==='0'?'No':v1
-v2=v2==='1'?'Yes':v2==='0'?'No':v2
-}
-if(v1==null&&v2==null)return
-let diff=v1!=v2
-rows+="<tr"+(diff?" style='background:#ffe0e0'":"")+"><td><b>"+displayName+"</b></td><td>"+(v1||'-')+"</td><td>"+(v2||'-')+(diff?' \u26a0':'')+"</td></tr>"
+CmpSummaryRows(hdr1,Hdr2,GetDriveModel(A,ArIx,From),GetDriveModel(A2,ArIx2,From2)).forEach(r=>{
+rows+="<tr"+(r.diff?" style='background:#ffe0e0'":"")+"><td><b>"+r.label.replace('&','&amp;')+"</b></td><td>"+r.v1+"</td><td>"+r.v2+(r.diff?' \u26a0':'')+"</td></tr>"
 })
 W(G('cmpSummary'),"<table class='cell'style='font-size:12px;border-collapse:collapse'><style>#cmpSummary td,#cmpSummary th{padding:2px 8px;border:1px solid #ddd}</style>"+rows+"</table>")}
 
@@ -1098,7 +1109,7 @@ map2=new Map()
 let qr=cmp
 ?"<tr><th>Item</th><th>Offset</th><th>Value</th><th>Decoded</th><th class='cmpCol' colspan='2'>File 2</th></tr>"
 :"<tr><th>Item</th><th>Offset</th><th>Value</th><th>Decoded</th></tr>"
-let pos=0
+let pos=0,recs={},recOrder=[]
 hdrTxt.split('\n').forEach(line=>{
 // SAll[0] is a synthetic newline prepended by the decoder, so a character at
 // index i in the decoded text came from file byte i-1.
@@ -1109,6 +1120,16 @@ let ci=line.indexOf(':')
 let k=(ci>0?line.slice(0,ci):line).trim()
 let v=(ci>0?line.slice(ci+1):'').trim()
 let d=HdrDecode(k,v)
+// The record table used to occupy three consecutive rows per record (byte
+// index, length, template) which made a 26-record header 78 rows of noise.
+// They are collected here and emitted below as one row each.
+let mr=k.match(/^Record (\d+) (byte index|length|template)$/i)
+if(mr){
+let no=mr[1],fld=mr[2].toLowerCase().replace(' ','')
+if(!recs[no]){recs[no]={off:off,len:len};recOrder.push(no)}
+recs[no][fld]=v
+return
+}
 let row="<tr onmouseover='HdrHi("+off+","+len+")'>"
 if(!cmp)row+="<td>"+EscH(k)+"</td><td>"+U(off,2)+"</td><td>"+EscH(v)+"</td><td>"+d+"</td>"
 else{
@@ -1125,6 +1146,36 @@ row+="<td>"+EscH(k)+"</td><td>"+U(off,2)+"</td>"
 }
 qr+=row+"</tr>"
 })
+// ── Record table ──────────────────────────────────────────────────────────
+// Reuses the four columns already in place: Record / Byte Index / Length /
+// Template. In compare mode File 2 contributes its own length and template.
+if(recOrder.length){
+qr+="<tr><th>Record</th><th>Byte Index</th><th>Length</th><th>Template</th>"
++(cmp?"<th class='cmpCol' colspan='2'>File 2</th>":"")+"</tr>"
+let recs2=null
+if(cmp){
+recs2={}
+;(Hdr2||'').split('\n').forEach(l=>{
+let c=l.indexOf(':');if(c<0)return
+let m2=l.slice(0,c).trim().match(/^Record (\d+) (byte index|length|template)$/i)
+if(!m2)return
+let no=m2[1];if(!recs2[no])recs2[no]={}
+recs2[no][m2[2].toLowerCase().replace(' ','')]=l.slice(c+1).trim()
+})
+}
+let tname=t=>{let n=parseInt(t,10);return isFinite(n)?('<b>T'+n+'</b> '+EscH(TmplNames[n]||'(unnamed template)')):EscH(t||'')}
+recOrder.forEach(no=>{
+let r=recs[no],bi=r.byteindex||'',ln=r.length||'',tp=r.template||''
+let r2=recs2?recs2[no]:null
+let diff=cmp&&(!r2||r2.length!==ln||r2.template!==tp||r2.byteindex!==bi)
+qr+="<tr onmouseover='HdrHi("+r.off+","+r.len+")'><td>Record "+EscH(no)+"</td>"
++"<td>"+EscH(bi)+(bi&&isFinite(Number(bi))?" <span style='color:#888'>(0x"+U(Number(bi),2)+")</span>":"")+"</td>"
++"<td"+(diff?" class='cmpDiff'":"")+">"+EscH(ln)+"</td><td>"+tname(tp)+"</td>"
+if(cmp)qr+="<td class='cmpCol"+(diff?" cmpDiff":"")+"'>"+(r2?EscH(r2.length||''):"<span style='color:#aaa'>N/A</span>")+"</td>"
++"<td class='cmpCol'>"+(r2?tname(r2.template):'')+"</td>"
+qr+="</tr>"
+})
+}
 W(G('rTab'),qr)
 }
 
@@ -3853,7 +3904,9 @@ masterDoc.text(ttl,MG,30)
 masterDoc.setFont(undefined,'normal');masterDoc.setFontSize(7.5);SetText(MUTE)
 masterDoc.text(masterDoc.splitTextToSize(t2||'',maxw)[0]||'',MG,40)
 masterDoc.setFont(undefined,'bold');masterDoc.setFontSize(8);SetText(BRAND)
-masterDoc.text(label,w-MG,30,{align:'right'})
+let lab=String(label),labMax=w-MG-30-masterDoc.getTextWidth(ttl)
+if(masterDoc.getTextWidth(lab)>labMax){while(lab.length>4&&masterDoc.getTextWidth(lab+'\u2026')>labMax)lab=lab.slice(0,-1);lab+='\u2026'}
+masterDoc.text(lab,w-MG,30,{align:'right'})
 if(isCmp){
 // A drawn swatch, not a block character: U+2588 is outside WinAnsiEncoding, so
 // jsPDF emitted the whole string as two-byte text and viewers rendered it as
@@ -4028,17 +4081,7 @@ RegPage('Compare Summary',pw,ph)
 DrawHead('Compare Summary',pw)
 masterDoc.setFontSize(13);masterDoc.setFont(undefined,'bold');SetText(INK)
 masterDoc.text('Compare Summary',MG,72)
-let fields=['Date & Time','Model Number','Serial Number','Capacity','Interface','Bus Type','Is HDD']
-let d1c=CmpField(SAll.split('h\n')[0],'Date'),t1c=CmpField(SAll.split('h\n')[0],'Time'),d2c=CmpField(Hdr2,'Date'),t2c=CmpField(Hdr2,'Time')
-let _dtV1=(d1c||'')+(t1c?' '+t1c:''),_dtV2=(d2c||'')+(t2c?' '+t2c:'')
-let _driveModel1c=GetDriveModel(A,ArIx,From),_driveModel2c=GetDriveModel(A2,ArIx2,From2)
-let cmpRows=fields.map(fn=>{
-if(fn==='Date & Time'){let v1=_dtV1,v2=_dtV2;return{label:'Date & Time',v1:v1||'-',v2:v2||'-',diff:v1!==v2}}
-if(fn==='Model Number'){let v1=_driveModel1c||CmpField(SAll.split('h\n')[0],fn)||'-',v2=_driveModel2c||CmpField(Hdr2,fn)||'-';return{label:fn,v1,v2,diff:v1!==v2}}
-let v1=CmpField(SAll.split('h\n')[0],fn)||'-'
-let v2=CmpField(Hdr2,fn)||'-'
-return{label:fn,v1,v2,diff:v1!==v2}
-})
+let cmpRows=CmpSummaryRows(SAll.split('h\n')[0],Hdr2,GetDriveModel(A,ArIx,From),GetDriveModel(A2,ArIx2,From2))
 masterDoc.autoTable({
 head:[['Field','File 1: '+CurFile,'File 2: '+CurFile2]],
 body:cmpRows.map(r=>[{content:r.label,styles:{fontStyle:'bold'}},r.v1,r.v2]),
@@ -4066,7 +4109,9 @@ RenderTablePage(isCmp?'Header (Cmp)':'Header')
 
 for(let ti=0;ti<ArIx.length/2;ti++){
 DpT(ti)
-RenderTablePage('Template'+('00'+ArIx[ti*2]).substr(-3)+(isCmp?' (Cmp)':''))
+// A bare number tells the reader nothing about which log they are looking at.
+let _tn=TmplNames[ArIx[ti*2]]||''
+RenderTablePage('Template'+('00'+ArIx[ti*2]).substr(-3)+(_tn?' \u2014 '+_tn:'')+(isCmp?' (Cmp)':''))
 }
 
 // ── Footer pass ──────────────────────────────────────────────────────────────
