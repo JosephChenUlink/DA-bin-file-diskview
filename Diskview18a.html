@@ -63,7 +63,7 @@ td button:not(.nbtn),th button{width:20px;height:20px}
   <span style='display:flex;align-items:center;gap:8px'>
   <span id='scanElapsed' title='Time elapsed since the current scan started (resets on each Scan click)' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
   <span id='lifetimeStats' title='How many times a template has been displayed while stepping/playing through results, across all Scan clicks this session' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
-  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260807d</span>
+  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260807f</span>
   </span>
 </div>
 <input id='local'type='file'style='display:none'onchange='OpFl()'>
@@ -777,8 +777,14 @@ if(idx>=0){found=[idx/2,cand[1]];break}
 if(!found)return null
 let[txIdx,fieldName]=found
 let saveA=A,saveArIx=ArIx,saveFrom=From,saveT=T,saveM=M,saveGp=Gp,saveF=F,saveTx=Tx
+let saveHdr=HdrView
 let result=null
 try{
+// DpFl renders the header table instead of a template whenever HdrView is set,
+// so the probe found no 'Product'/'Model number' row and silently fell back to
+// the header's Model Number — the host appliance. That made the Drive Model row
+// wrong for any file compared while the Header view was open.
+HdrView=false
 A=localA;ArIx=localArIx;From=localFrom;Tx=txIdx
 DpFl()
 let rows=Q('#rTab tr')
@@ -789,17 +795,57 @@ break
 }
 }
 }catch(e){}
-Tx=saveTx
+Tx=saveTx;HdrView=saveHdr
 A=saveA;ArIx=saveArIx;From=saveFrom;T=saveT;M=saveM;Gp=saveGp;F=saveF
 DpFl()
 return result}
 
+// Same save/swap/render/extract/restore probe, reused to read the rotation rate
+// so HDD vs SSD can be answered for SCSI captures, whose headers carry no
+// 'Is HDD' field at all. SBC/ATA both define 0001h as non-rotating media and
+// any value from 0401h upward as the rotation speed in RPM.
+GetRotationKind=(localA,localArIx,localFrom)=>{
+if(!localArIx||!localArIx.length)return null
+let cand=[[328,'Medium Rotation Rate'],[17,'Nominal Media Rotation Rate']]
+let found=null
+for(let c of cand){
+let idx=localArIx.findIndex((v,i)=>i%2===0&&v===c[0])
+if(idx>=0){found=[idx/2,c[1]];break}
+}
+if(!found)return null
+let[txIdx,fieldName]=found
+let saveA=A,saveArIx=ArIx,saveFrom=From,saveT=T,saveM=M,saveGp=Gp,saveF=F,saveTx=Tx,saveHdr=HdrView
+let raw=null
+try{
+HdrView=false
+A=localA;ArIx=localArIx;From=localFrom;Tx=txIdx
+DpFl()
+for(let r of Q('#rTab tr')){
+if(r.children.length>2&&r.children[0].textContent.trim().toLowerCase()===fieldName.toLowerCase()){
+raw=r.children[2]?r.children[2].textContent.trim():null;break
+}
+}
+}catch(e){}
+Tx=saveTx;HdrView=saveHdr
+A=saveA;ArIx=saveArIx;From=saveFrom;T=saveT;M=saveM;Gp=saveGp;F=saveF
+DpFl()
+if(!raw)return null
+let m=raw.match(/^([0-9A-Fa-f]{1,8})/)
+if(!m)return null
+let n=parseInt(m[1],16)
+if(n===1)return 'SSD'
+if(n>=0x0401&&n<=0xFFFE)return 'HDD'
+return null}
+
 // The on-screen summary panel and the PDF's Compare Summary page were building
 // their own field lists and had already drifted apart. Both now read this.
-CmpSummaryRows=(h1,h2,m1,m2)=>{
+CmpSummaryRows=(h1,h2,m1,m2,r1,r2)=>{
 let f=(h,n)=>h?CmpField(h,n):null
 let cap=v=>{let n=Number(v);return (v&&isFinite(n)&&n>0)?Math.round(n/1e9).toLocaleString('en-US')+' GB':(v||'')}
-let hdd=v=>v==='1'?'HDD':(v==='0'?'SSD':(v||''))
+// SCSI headers carry no 'Is HDD' field, so the row was being filtered away
+// entirely for SCSI captures. Fall back to the drive's own rotation rate, and
+// keep the row visible either way rather than silently dropping it.
+let hdd=(v,rot)=>v==='1'?'HDD':(v==='0'?'SSD':(rot||''))
 let dt=h=>{let d=f(h,'Date'),t=f(h,'Time');return (d||'')+(t?' '+t:'')}
 let rows=[
 {label:'Date & Time',v1:dt(h1),v2:dt(h2)},
@@ -807,19 +853,21 @@ let rows=[
 {label:'Drive Model',v1:m1||f(h1,'Model Number'),v2:m2||f(h2,'Model Number')},
 // ...kept distinct from the appliance that ran the capture, which is what the
 // header's Model Number field actually holds.
-{label:'Host Model Number',v1:f(h1,'Model Number'),v2:f(h2,'Model Number')},
+{label:'Host Model',v1:f(h1,'Model Number'),v2:f(h2,'Model Number')},
 {label:'Serial Number',v1:f(h1,'Serial Number'),v2:f(h2,'Serial Number')},
 {label:'Capacity',v1:cap(f(h1,'Capacity')),v2:cap(f(h2,'Capacity'))},
 {label:'Interface',v1:f(h1,'Interface'),v2:f(h2,'Interface')},
-{label:'HDD/SSD',v1:hdd(f(h1,'Is HDD')),v2:hdd(f(h2,'Is HDD'))}
+{label:'HDD/SSD',v1:hdd(f(h1,'Is HDD'),r1),v2:hdd(f(h2,'Is HDD'),r2),always:1}
 ]
-return rows.filter(r=>r.v1||r.v2).map(r=>({label:r.label,v1:r.v1||'-',v2:r.v2||'-',diff:(r.v1||'')!==(r.v2||'')}))
+// `always` rows stay even when neither file supplies a value, so a missing
+// field shows as '-' instead of the row vanishing from the summary.
+return rows.filter(r=>r.always||r.v1||r.v2).map(r=>({label:r.label,v1:r.v1||'-',v2:r.v2||'-',diff:(r.v1||'')!==(r.v2||'')}))
 }
 
 BuildCmpSummary=()=>{
 let hdr1=SAll.split("h\n")[0]
 let rows="<tr><th></th><th>File 1: "+CurFile+"</th><th>File 2: "+CurFile2+"</th></tr>"
-CmpSummaryRows(hdr1,Hdr2,GetDriveModel(A,ArIx,From),GetDriveModel(A2,ArIx2,From2)).forEach(r=>{
+CmpSummaryRows(hdr1,Hdr2,GetDriveModel(A,ArIx,From),GetDriveModel(A2,ArIx2,From2),GetRotationKind(A,ArIx,From),GetRotationKind(A2,ArIx2,From2)).forEach(r=>{
 rows+="<tr"+(r.diff?" style='background:#ffe0e0'":"")+"><td><b>"+r.label.replace('&','&amp;')+"</b></td><td>"+r.v1+"</td><td>"+r.v2+(r.diff?' \u26a0':'')+"</td></tr>"
 })
 W(G('cmpSummary'),"<table class='cell'style='font-size:12px;border-collapse:collapse'><style>#cmpSummary td,#cmpSummary th{padding:2px 8px;border:1px solid #ddd}</style>"+rows+"</table>")}
@@ -884,25 +932,44 @@ ds.parentNode.insertBefore(wrap,ds.nextSibling)
 // to whichever column was guessed to be the 'long' one, since several
 // templates (e.g. T4/T201/T202) have more than one substantial column and
 // guessing wrong caused visible text overlap.
-let _cmpCopyLayoutStyle=(src,dst)=>{
-let cs=getComputedStyle(src)
-dst.style.whiteSpace=cs.whiteSpace
-dst.style.overflow=cs.overflow
-dst.style.textOverflow=cs.textOverflow
-if(cs.whiteSpace!=='nowrap'){
+// getComputedStyle is a read that forces the browser to flush pending style and
+// layout work. Calling it once per cell, interleaved with the style writes and
+// appends below, made every cell trigger its own synchronous layout pass — the
+// reason a 640-row defect list (T333) froze the tab for several seconds.
+// Wrap behaviour is driven by the column and the cell's class, never by the
+// row, so it is resolved once per (column, class) and reused thereafter.
+let _wrapCache=new Map()
+let _cmpCopyLayoutStyle=(src,dst,ci)=>{
+let key=ci+'|'+src.className
+let cs=_wrapCache.get(key)
+if(!cs){
+let g=getComputedStyle(src)
+cs={ws:g.whiteSpace,ov:g.overflow,to:g.textOverflow,wb:g.wordBreak}
+_wrapCache.set(key,cs)
+}
+dst.style.whiteSpace=cs.ws
+dst.style.overflow=cs.ov
+dst.style.textOverflow=cs.to
+if(cs.ws!=='nowrap'){
 src.style.overflowWrap='break-word'
 src.style.wordBreak='break-word'
 dst.style.overflowWrap='break-word'
 dst.style.wordBreak='break-word'
 }else{
-dst.style.wordBreak=cs.wordBreak
+dst.style.wordBreak=cs.wb
 }
 }
 let rows=Q('#rTab>tbody>tr')
+// innerText is layout-dependent, so reading it after appending a cell or
+// writing a style forces another synchronous layout. Every File 1 cell is read
+// here in one pass, before anything is mutated, so the whole comparison costs
+// one layout instead of one per cell.
+let rowTexts=Array.from(rows).map(e=>Array.from(e.children).map(c=>c.innerText))
 let numV1Cols=null,file2ColCount=null // set once, from the header row's actual structure
 rows.forEach((e,i)=>{
 let v1cells=Array.from(e.children).slice(1) // skip the first cell (Item/No/label column)
-let v1key=e.children.length>0?e.children[0].innerText:null
+let v1texts=rowTexts[i]||[]
+let v1key=e.children.length>0?v1texts[0]:null
 let v2row=(vals2ByKey&&v1key!==null&&vals2ByKey.has(v1key))?vals2ByKey.get(v1key):vals2[i]
 // A row is a column-header row if its first cell is a <th> — this can happen
 // anywhere in the table, not just at index 0. Some templates (e.g. NVMe's
@@ -934,9 +1001,9 @@ let td=document.createElement('td')
 td.className='cmpCol'
 if(c1.colSpan>1)td.colSpan=c1.colSpan
 let v2val=ci<v2cells.length?v2cells[ci]:''
-_cmpCopyLayoutStyle(c1,td)
+_cmpCopyLayoutStyle(c1,td,ci)
 td.innerText=v2val
-if(c1.innerText!=v2val){c1.classList.add('cmpDiff');td.style.background='#ffe0e0'}
+if(v1texts[ci+1]!=v2val){c1.classList.add('cmpDiff');td.style.background='#ffe0e0'}
 e.appendChild(td)
 })
 }else{
@@ -1101,13 +1168,20 @@ G('rTab').className='wideitem'
 // In compare mode File 2's header is matched field by field by name, not by
 // line position: the two captures can declare different record counts, so the
 // same field sits on a different line in each file.
+// File 2 mirrors every File 1 column except the label, Offset included: the
+// same field sits at a different byte offset in each capture, and for the
+// record table the byte index is the column that matters most.
 let cmp=!!A2,map2=null
 if(cmp){
 map2=new Map()
-;(Hdr2||'').split('\n').forEach(l=>{let c=l.indexOf(':');if(c>0)map2.set(l.slice(0,c).trim(),l.slice(c+1).trim())})
+let p2=0
+;(Hdr2||'').split('\n').forEach(l=>{
+let o2=Math.max(p2-1,0);p2+=l.length+1
+let c=l.indexOf(':');if(c>0)map2.set(l.slice(0,c).trim(),{v:l.slice(c+1).trim(),off:o2})
+})
 }
 let qr=cmp
-?"<tr><th>Item</th><th>Offset</th><th>Value</th><th>Decoded</th><th class='cmpCol' colspan='2'>File 2</th></tr>"
+?"<tr><th>Item</th><th>Offset</th><th>Value</th><th>Decoded</th><th class='cmpCol' colspan='3'>File 2</th></tr>"
 :"<tr><th>Item</th><th>Offset</th><th>Value</th><th>Decoded</th></tr>"
 let pos=0,recs={},recOrder=[]
 hdrTxt.split('\n').forEach(line=>{
@@ -1130,10 +1204,12 @@ if(!recs[no]){recs[no]={off:off,len:len};recOrder.push(no)}
 recs[no][fld]=v
 return
 }
-let row="<tr onmouseover='HdrHi("+off+","+len+")'>"
+// Click, not hover: every other template view highlights its bytes on click,
+// and passing the pointer over a row is not a request to move the binary pane.
+let row="<tr style='cursor:pointer' onclick='HdrHi("+off+","+len+")'>"
 if(!cmp)row+="<td>"+EscH(k)+"</td><td>"+U(off,2)+"</td><td>"+EscH(v)+"</td><td>"+d+"</td>"
 else{
-let has=map2.has(k),v2=has?map2.get(k):''
+let e2=map2.get(k),has=!!e2,v2=has?e2.v:''
 // Marked the same way the template comparison marks a difference — the value
 // cell on each side is tinted — so scanning the column shows what moved
 // between the two captures. Lines that carry no value at all (banner text,
@@ -1141,6 +1217,7 @@ let has=map2.has(k),v2=has?map2.get(k):''
 let diff=ci>0&&(!has||v2!==v)
 row+="<td>"+EscH(k)+"</td><td>"+U(off,2)+"</td>"
 +"<td"+(diff?" class='cmpDiff'":"")+">"+EscH(v)+"</td><td>"+d+"</td>"
++"<td class='cmpCol'>"+(has?U(e2.off,2):'')+"</td>"
 +"<td class='cmpCol"+(diff?" cmpDiff":"")+"'>"+(has?EscH(v2):"<span style='color:#aaa'>N/A</span>")+"</td>"
 +"<td class='cmpCol'>"+(has?HdrDecode(k,v2):'')+"</td>"
 }
@@ -1151,7 +1228,7 @@ qr+=row+"</tr>"
 // Template. In compare mode File 2 contributes its own length and template.
 if(recOrder.length){
 qr+="<tr><th>Record</th><th>Byte Index</th><th>Length</th><th>Template</th>"
-+(cmp?"<th class='cmpCol' colspan='2'>File 2</th>":"")+"</tr>"
++(cmp?"<th class='cmpCol' colspan='3'>File 2</th>":"")+"</tr>"
 let recs2=null
 if(cmp){
 recs2={}
@@ -1168,10 +1245,12 @@ recOrder.forEach(no=>{
 let r=recs[no],bi=r.byteindex||'',ln=r.length||'',tp=r.template||''
 let r2=recs2?recs2[no]:null
 let diff=cmp&&(!r2||r2.length!==ln||r2.template!==tp||r2.byteindex!==bi)
-qr+="<tr onmouseover='HdrHi("+r.off+","+r.len+")'><td>Record "+EscH(no)+"</td>"
-+"<td>"+EscH(bi)+(bi&&isFinite(Number(bi))?" <span style='color:#888'>(0x"+U(Number(bi),2)+")</span>":"")+"</td>"
+let bx=b=>EscH(b)+(b&&isFinite(Number(b))?" <span style='color:#888'>(0x"+U(Number(b),2)+")</span>":"")
+qr+="<tr style='cursor:pointer' onclick='HdrHi("+r.off+","+r.len+")'><td>Record "+EscH(no)+"</td>"
++"<td>"+bx(bi)+"</td>"
 +"<td"+(diff?" class='cmpDiff'":"")+">"+EscH(ln)+"</td><td>"+tname(tp)+"</td>"
-if(cmp)qr+="<td class='cmpCol"+(diff?" cmpDiff":"")+"'>"+(r2?EscH(r2.length||''):"<span style='color:#aaa'>N/A</span>")+"</td>"
+if(cmp)qr+="<td class='cmpCol'>"+(r2?bx(r2.byteindex||''):"<span style='color:#aaa'>N/A</span>")+"</td>"
++"<td class='cmpCol"+(diff?" cmpDiff":"")+"'>"+(r2?EscH(r2.length||''):'')+"</td>"
 +"<td class='cmpCol'>"+(r2?tname(r2.template):'')+"</td>"
 qr+="</tr>"
 })
@@ -2603,10 +2682,13 @@ let words=parseInt(x,16),Cx=n=>n.toString().replace(/\B(?=(\d{3})+(?!\d))/g,',')
 x=words?(x+' ('+Cx(words*2)+' bytes per logical sector)'):(x+' (not used \u2014 default 512-byte logical sector)')
 }
 if(T==17&&arS[q]=='Nominal Buffer Size'){
+// A drive cache is tens or hundreds of MiB, so rounding it to whole GB
+// reported a 256 MiB buffer as "0 GB". MiB is the unit this field is
+// actually specified and marketed in.
 let by=BigInt('0x'+x),Cx=n=>n.toString().replace(/\B(?=(\d{3})+(?!\d))/g,',')
 if(by>0n){
-let gi=by/1000000000n,gf=(by%1000000000n)*100n/1000000000n
-x=x+' ('+Cx(by)+' bytes = '+Cx(gi+(gf>=50n?1n:0n))+' GB)'
+let mi=by/1048576n,rem=by%1048576n
+x=x+' ('+Cx(by)+' bytes = '+(rem===0n?Cx(mi)+' MiB':Cx(mi)+'.'+((rem*10n/1048576n).toString())+' MiB')+')'
 }else x=x+' (0 bytes)'
 }
 if(T==55&&q==0){
@@ -4081,7 +4163,7 @@ RegPage('Compare Summary',pw,ph)
 DrawHead('Compare Summary',pw)
 masterDoc.setFontSize(13);masterDoc.setFont(undefined,'bold');SetText(INK)
 masterDoc.text('Compare Summary',MG,72)
-let cmpRows=CmpSummaryRows(SAll.split('h\n')[0],Hdr2,GetDriveModel(A,ArIx,From),GetDriveModel(A2,ArIx2,From2))
+let cmpRows=CmpSummaryRows(SAll.split('h\n')[0],Hdr2,GetDriveModel(A,ArIx,From),GetDriveModel(A2,ArIx2,From2),GetRotationKind(A,ArIx,From),GetRotationKind(A2,ArIx2,From2))
 masterDoc.autoTable({
 head:[['Field','File 1: '+CurFile,'File 2: '+CurFile2]],
 body:cmpRows.map(r=>[{content:r.label,styles:{fontStyle:'bold'}},r.v1,r.v2]),
