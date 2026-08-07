@@ -46,7 +46,7 @@ td button:not(.nbtn),th button{width:20px;height:20px}
 #rTab.t1012 td.extrow{width:1px;overflow:visible;white-space:nowrap;position:relative;z-index:1;background:#fff}
 #rTab.t1012 .noLbl{color:#000;text-align:left}
 #rTab th{text-align:left}
-#rTab tr.cmpDiff{background:#ffe0e0}
+#rTab tr.cmpDiff,#rTab td.cmpDiff{background:#ffe0e0}
 #rTab td.cmpCol,#rTab th.cmpCol{border-left:2px solid #999}
 #rTab.t1012 th:first-child{text-align:left}
 #rTab tr:last-child td:last-child{word-break:break-all}
@@ -63,7 +63,7 @@ td button:not(.nbtn),th button{width:20px;height:20px}
   <span style='display:flex;align-items:center;gap:8px'>
   <span id='scanElapsed' title='Time elapsed since the current scan started (resets on each Scan click)' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
   <span id='lifetimeStats' title='How many times a template has been displayed while stepping/playing through results, across all Scan clicks this session' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
-  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260806i</span>
+  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260807a</span>
   </span>
 </div>
 <input id='local'type='file'style='display:none'onchange='OpFl()'>
@@ -671,7 +671,9 @@ Tx=fi>=0?fi/2:0
 PrevRawT=-1
 }
 DpFl()
-if(A2)CmpRenderTable()}
+// The header view builds its own File 2 columns, so CmpRenderTable would be
+// appending a second set on top of them.
+if(A2&&!HdrView)CmpRenderTable()}
 
 OpFl2=z=>{
 let f=G('local2').files[0],r=new FileReader()
@@ -1085,7 +1087,18 @@ W(G('offset'),U(0,2))
 Q('#lTab td:not(.adr)').forEach((e,i)=>W(e,i<hLen?U(raw[i]*1,1):''))
 Q('#lTab td.adr').forEach((e,i)=>W(e,U(i*16,2)))
 G('rTab').className='wideitem'
-let qr="<tr><th>Item</th><th>Offset</th><th>Value</th><th>Decoded</th></tr>",pos=0
+// In compare mode File 2's header is matched field by field by name, not by
+// line position: the two captures can declare different record counts, so the
+// same field sits on a different line in each file.
+let cmp=!!A2,map2=null
+if(cmp){
+map2=new Map()
+;(Hdr2||'').split('\n').forEach(l=>{let c=l.indexOf(':');if(c>0)map2.set(l.slice(0,c).trim(),l.slice(c+1).trim())})
+}
+let qr=cmp
+?"<tr><th>Item</th><th>Offset</th><th>Value</th><th>Decoded</th><th class='cmpCol' colspan='2'>File 2</th></tr>"
+:"<tr><th>Item</th><th>Offset</th><th>Value</th><th>Decoded</th></tr>"
+let pos=0
 hdrTxt.split('\n').forEach(line=>{
 // SAll[0] is a synthetic newline prepended by the decoder, so a character at
 // index i in the decoded text came from file byte i-1.
@@ -1096,7 +1109,21 @@ let ci=line.indexOf(':')
 let k=(ci>0?line.slice(0,ci):line).trim()
 let v=(ci>0?line.slice(ci+1):'').trim()
 let d=HdrDecode(k,v)
-qr+="<tr onmouseover='HdrHi("+off+","+len+")'><td>"+EscH(k)+"</td><td>"+U(off,2)+"</td><td>"+EscH(v)+"</td><td>"+d+"</td></tr>"
+let row="<tr onmouseover='HdrHi("+off+","+len+")'>"
+if(!cmp)row+="<td>"+EscH(k)+"</td><td>"+U(off,2)+"</td><td>"+EscH(v)+"</td><td>"+d+"</td>"
+else{
+let has=map2.has(k),v2=has?map2.get(k):''
+// Marked the same way the template comparison marks a difference — the value
+// cell on each side is tinted — so scanning the column shows what moved
+// between the two captures. Lines that carry no value at all (banner text,
+// the END marker) are never flagged.
+let diff=ci>0&&(!has||v2!==v)
+row+="<td>"+EscH(k)+"</td><td>"+U(off,2)+"</td>"
++"<td"+(diff?" class='cmpDiff'":"")+">"+EscH(v)+"</td><td>"+d+"</td>"
++"<td class='cmpCol"+(diff?" cmpDiff":"")+"'>"+(has?EscH(v2):"<span style='color:#aaa'>N/A</span>")+"</td>"
++"<td class='cmpCol'>"+(has?HdrDecode(k,v2):'')+"</td>"
+}
+qr+=row+"</tr>"
 })
 W(G('rTab'),qr)
 }
@@ -3620,10 +3647,13 @@ for(let k=0;k<span;k++)headers.push(base.length===span?base[k]:txt)
 })
 // How many columns belong to each file, when this is a compare table whose
 // trailing header spans a matching group. 0 means "not a paired table".
-let cmpSplit=0
+let cmpSplit=0,cmpLead=0
 if(isCompareMode&&hcells.length>1){
 let last=hcells[hcells.length-1],k=last.colSpan||1
-if(k>1&&headers.length===1+2*k)cmpSplit=k
+// Columns ahead of the two file groups are shared labels. Template tables have
+// one (Item); the header comparison has two (Item and Offset), so the count is
+// derived rather than assumed.
+if(k>1&&headers.length>2*k){cmpSplit=k;cmpLead=headers.length-2*k}
 }
 let body=rows.slice(headerRowIdx+1).map(r=>{
 let isDiff=r.classList.contains('cmpDiff')
@@ -3639,7 +3669,7 @@ return span>1?{content:txt,colSpan:span}:txt
 })
 return {cells,isDiff,sty}
 })
-return {headers,body,isCompareMode,preNotes,cmpSplit}
+return {headers,body,isCompareMode,preNotes,cmpSplit,cmpLead}
 }
 
 GetCsv=z=>{
@@ -3944,10 +3974,9 @@ masterDoc.text('Red = differs between files',MG+11,lgY)
 SetText(INK)
 }
 
-// ── Template pages ────────────────────────────────────────────────────────────
-for(let ti=0;ti<ArIx.length/2;ti++){
-DpT(ti)
-let{headers,body,isCompareMode,preNotes,cmpSplit}=GetTableData()
+// ── Table pages ───────────────────────────────────────────────────────────────
+let RenderTablePage=(label)=>{
+let{headers,body,isCompareMode,preNotes,cmpSplit,cmpLead}=GetTableData()
 let diffFlags=body.map(r=>r.isDiff)
 let rowStyles=body.map(r=>r.sty)
 let nCols=headers.length
@@ -3986,7 +4015,7 @@ let layout=useLand?PdfColLayout(masterDoc,headers,processedBody,pgW-MG*2,7,CPAD)
 if(cmpSplit){
 let ws=layout.widths,availW=(useLand?pgW:PORTW)-MG*2
 for(let i=0;i<cmpSplit;i++){
-let a=1+i,b=1+cmpSplit+i
+let a=cmpLead+i,b=cmpLead+cmpSplit+i
 if(b<ws.length){let m=Math.max(ws[a],ws[b]);ws[a]=m;ws[b]=m}
 }
 let sum=ws.reduce((a,b)=>a+b,0)
@@ -3998,12 +4027,11 @@ layout.widths.forEach((w,ci)=>{colStyles[ci]={cellWidth:w}})
 // every column heading — on a 15-column-per-side table the prefixes alone
 // would eat more width than the data.
 let headRows=cmpSplit?[
-[{content:'',colSpan:1},
+[{content:'',colSpan:cmpLead},
 {content:'File 1: '+CurFile,colSpan:cmpSplit,styles:{halign:'center'}},
 {content:'File 2: '+CurFile2,colSpan:cmpSplit,styles:{halign:'center'}}],
 headers]:[headers]
 
-let tmplName='Template'+('00'+ArIx[ti*2]).substr(-3)+(isCmp?' (Cmp)':'')
 masterDoc.addPage('letter',useLand?'landscape':'portrait')
 if(noteLines.length){
 masterDoc.setFontSize(8);masterDoc.setFont(undefined,'normal');SetText(MUTE)
@@ -4033,10 +4061,23 @@ data.cell.styles.fillColor=[255,220,220]
 if(data.column.index===nCols-1){data.cell.styles.textColor=DIFF;data.cell.styles.fontStyle='bold'}
 }},
 didDrawPage:()=>{
-RegPage(tmplName,pgW,pgH)
-DrawHead(tmplName,pgW)
+RegPage(label,pgW,pgH)
+DrawHead(label,pgW)
 }
 })
+}
+
+// The header comparison sits with the summary, ahead of the per-template
+// pages: which drive, which host and which capture date is the context for
+// everything that follows.
+if(isCmp){
+DpT(-1)
+RenderTablePage('Header (Cmp)')
+}
+
+for(let ti=0;ti<ArIx.length/2;ti++){
+DpT(ti)
+RenderTablePage('Template'+('00'+ArIx[ti*2]).substr(-3)+(isCmp?' (Cmp)':''))
 }
 
 // ── Footer pass ──────────────────────────────────────────────────────────────
