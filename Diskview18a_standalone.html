@@ -63,7 +63,7 @@ td button:not(.nbtn),th button{width:20px;height:20px}
   <span style='display:flex;align-items:center;gap:8px'>
   <span id='scanElapsed' title='Time elapsed since the current scan started (resets on each Scan click)' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
   <span id='lifetimeStats' title='How many times a template has been displayed while stepping/playing through results, across all Scan clicks this session' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
-  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260806b</span>
+  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260806c</span>
   </span>
 </div>
 <input id='local'type='file'style='display:none'onchange='OpFl()'>
@@ -3999,6 +3999,74 @@ return out.map(v=>`"${v}"`).join(',')
 return lines.join('\n')
 }
 
+// ── PDF table layout helpers ─────────────────────────────────────────────────
+// Column widths are measured with real font metrics rather than estimated from
+// character counts, colSpan cells are measured against the span they actually
+// cover instead of inflating column 0, and columns shrink toward the width of
+// their longest unbreakable token instead of a flat 18pt floor. The old flat
+// floor is what squeezed cells until they wrapped one character per line
+// (e.g. the T105 self-test summary rows) and broke headers mid-word
+// ('Segmen/t', 'Chec/k').
+_pdfChunkHex=s=>{
+if(typeof s!='string')return s
+// A long hex run is one unbreakable token, so a narrow column had to split it
+// at an arbitrary offset. Grouping into 8-char words with hair spaces lets the
+// wrap land on byte boundaries and keeps the column's minimum width small.
+return s.replace(/\b([0-9A-Fa-f]{17,})\b/g,m=>m.replace(/(.{8})(?=.)/g,'$1\u200A'))
+}
+_pdfCellText=v=>v==null?'':(typeof v=='object'?String(v.content==null?'':v.content):String(v))
+_pdfTokenW=(doc,s)=>{
+let w=0
+String(s).split(/[\s\u200A]+/).forEach(t=>{if(t)w=Math.max(w,doc.getTextWidth(t))})
+return w
+}
+// Returns {widths,minTotal,natTotal}. widths always sums to exactly `avail`.
+PdfColLayout=(doc,headers,body,avail,fontSize,cellPad)=>{
+let n=headers.length,pad=cellPad*2+1
+let nat=new Array(n).fill(0),min=new Array(n).fill(0)
+doc.setFontSize(fontSize);doc.setFont(undefined,'bold')
+for(let i=0;i<n;i++){
+nat[i]=doc.getTextWidth(String(headers[i]))+pad
+min[i]=_pdfTokenW(doc,headers[i])+pad
+}
+doc.setFont(undefined,'normal')
+body.forEach(cells=>{
+let ci=0
+cells.forEach(c=>{
+let span=(c&&typeof c=='object'&&c.colSpan)?c.colSpan:1
+let txt=_pdfCellText(c)
+if(span==1&&ci<n){
+nat[ci]=Math.max(nat[ci],doc.getTextWidth(txt)+pad)
+min[ci]=Math.max(min[ci],_pdfTokenW(doc,txt)+pad)
+}
+// span>1 cells are laid out across several columns, so they must not inflate
+// any single one; they only constrain the table total, bounded by `avail`.
+ci+=span
+})
+})
+// No single column may claim the whole page up front, or one long annotation
+// column would starve every other column before the fit is even attempted.
+let cap=avail*0.55,raw=nat.slice()
+for(let i=0;i<n;i++){nat[i]=Math.min(nat[i],cap);min[i]=Math.min(min[i],nat[i],cap)}
+let deficit=raw.map((w,i)=>w-nat[i]),defTotal=deficit.reduce((a,b)=>a+b,0)
+let minTotal=min.reduce((a,b)=>a+b,0),natTotal=nat.reduce((a,b)=>a+b,0),widths
+if(natTotal<=avail){
+let slack=avail-natTotal
+// Give the leftover space to the columns the cap actually held back — those
+// are the ones whose text would otherwise wrap. Only when nothing was capped
+// (so the table truly fits unwrapped) is the slack spread proportionally,
+// which just stops the table huddling against the left edge.
+if(defTotal>0)widths=nat.map((w,i)=>w+slack*(deficit[i]/defTotal))
+else widths=natTotal>0?nat.map(w=>w+slack*(w/natTotal)):nat.slice()
+}else if(minTotal<avail){
+// Shrink each column from natural toward minimum in proportion to its slack,
+// so wide prose columns give up the most and short code columns keep intact.
+let k=(avail-minTotal)/(natTotal-minTotal)
+widths=nat.map((w,i)=>min[i]+(w-min[i])*k)
+}else widths=min.slice()
+return{widths,minTotal,natTotal}
+}
+
 PdfAll=z=>{
 let{jsPDF}=window.jspdf
 let TxSave=Tx
@@ -4028,14 +4096,22 @@ do{
   else t+='\n'
   SI+=t
 }while(i1<i2)
-masterDoc.setFontSize(10);masterDoc.text(SI,15,10)
+let _introLines=masterDoc.splitTextToSize(SI,pw-40)
+let _iy=58,_ibot=ph-58,_drawIntroChrome=()=>{
 pageNum++
 masterDoc.setFontSize(10);masterDoc.setTextColor(128,128,128)
 masterDoc.text('Introduction',pw-20,40,{align:'right'})
 masterDoc.setFontSize(9);masterDoc.setTextColor(80,80,80)
 masterDoc.text('Page '+pageNum+' - Introduction',pw/2,ph-20,{align:'center'})
 masterDoc.setFontSize(8);masterDoc.text('Generated '+genDt+' - '+htmlName,pw/2,ph-10,{align:'center'})
-masterDoc.setTextColor(0,0,0)
+masterDoc.setTextColor(0,0,0);masterDoc.setFontSize(9)
+}
+_drawIntroChrome()
+masterDoc.setFontSize(9)
+_introLines.forEach(ln=>{
+if(_iy>_ibot){masterDoc.addPage();_iy=58;_drawIntroChrome()}
+masterDoc.text(ln,20,_iy);_iy+=11
+})
 
 // ── Compare Summary page ─────────────────────────────────────────────────────
 if(isCmp){
@@ -4093,37 +4169,35 @@ if(m&&(/^0+$/.test(m[1])||/^F+$/i.test(m[1]))){cells[lastIdx]=m[1].slice(0,6)+'.
 return cells
 })
 
+processedBody=processedBody.map(cells=>cells.map(c=>
+(c&&typeof c=='object')?Object.assign({},c,{content:_pdfChunkHex(String(c.content==null?'':c.content))}):_pdfChunkHex(c)))
+// A log with no entries used to emit a bare header strip with nothing under it.
+if(!processedBody.length)processedBody=[[{content:'(no entries in this log)',colSpan:nCols||1,
+styles:{textColor:[120,120,120],fontStyle:'italic',halign:'center'}}]]
+
+// Portrait unless the table genuinely needs the extra width: either it cannot
+// fit without breaking words, or it is a wide grid table whose readability
+// depends on column alignment. Narrow Item/Index/Value tables stay portrait.
+let PORTW=612,LANDW=792,portAvail=PORTW-40
+let probe=PdfColLayout(masterDoc,headers,processedBody,portAvail,7,2)
+let useLand=isCmp||probe.minTotal>portAvail||(nCols>=6&&probe.natTotal>portAvail)
+let pgW=useLand?LANDW:PORTW,pgH=useLand?PORTW:792
+let layout=useLand?PdfColLayout(masterDoc,headers,processedBody,pgW-40,7,2):probe
 let colStyles={}
-if(nCols>2){
-let pageAvail=pw-40
-let colWidthsArr=[]
-for(let ci=0;ci<nCols-1;ci++){
-let lens=processedBody.map(r=>{
-let v=r[ci]
-return v==null?0:typeof v==='object'?String(v.content||'').length:String(v).length
-})
-let maxLen=Math.max(headers[ci].length,...lens)
-let w=Math.min(220,Math.max(26,maxLen*4.3+8))
-colWidthsArr.push(w)
-}
-let totalFixed=colWidthsArr.reduce((a,w)=>a+w,0),maxAllowed=(pw-40)*0.82
-if(totalFixed>maxAllowed){let scale=maxAllowed/totalFixed;colWidthsArr=colWidthsArr.map(w=>Math.max(18,w*scale))}
-colWidthsArr.forEach((w,ci)=>{colStyles[ci]={cellWidth:w}})
-colStyles[nCols-1]={cellWidth:'auto'}
-}
+layout.widths.forEach((w,ci)=>{colStyles[ci]={cellWidth:w}})
 
 let tmplName='Template'+('00'+ArIx[ti*2]).substr(-3)+(isCmp?' (Cmp)':'')
-masterDoc.addPage()
+masterDoc.addPage('letter',useLand?'landscape':'portrait')
 if(noteLines.length){
 masterDoc.setFontSize(8);masterDoc.setFont(undefined,'normal');masterDoc.setTextColor(50,50,50)
-noteLines.forEach((line,li)=>masterDoc.text(line,20,58+li*10,{maxWidth:pw-40}))
+noteLines.forEach((line,li)=>masterDoc.text(line,20,58+li*10,{maxWidth:pgW-40}))
 masterDoc.setTextColor(0,0,0)
 }
 masterDoc.autoTable({
 head:[headers],body:processedBody,theme:'striped',
 styles:{fontSize:7,cellPadding:2,overflow:'linebreak'},
 headStyles:{fillColor:[26,95,168],fontSize:7},
-margin:{top:tableTop,bottom:55},columnStyles:colStyles,
+margin:{top:tableTop,bottom:55,left:20,right:20},columnStyles:colStyles,
 didParseCell:(data)=>{
 if(data.section==='body'&&diffFlags[data.row.index]){
 data.cell.styles.fillColor=[255,220,220]
@@ -4132,13 +4206,21 @@ if(data.column.index===nCols-1){data.cell.styles.textColor=[180,0,0];data.cell.s
 didDrawPage:()=>{
 pageNum++
 masterDoc.setFontSize(9);masterDoc.setFont(undefined,'bold');masterDoc.setTextColor(0,0,0)
-masterDoc.text(t1,20,15,{maxWidth:pw-180})
-masterDoc.setFontSize(8);masterDoc.setFont(undefined,'normal');masterDoc.text(t2,20,26)
-masterDoc.setFontSize(9);masterDoc.setTextColor(128,128,128);masterDoc.text(tmplName,pw-20,40,{align:'right'})
-if(isCmp){masterDoc.setFontSize(7);masterDoc.setTextColor(180,0,0);masterDoc.text('\u2588=diff',pw-20,50,{align:'right'})}
+// Long bin filenames used to wrap onto a second line here and collide with the
+// subtitle at y=26, so the title is clipped to a single measured line instead.
+let _t1w=pgW-190,_t1=t1
+if(masterDoc.getTextWidth(_t1)>_t1w){
+while(_t1.length>8&&masterDoc.getTextWidth(_t1+'\u2026"')>_t1w)_t1=_t1.slice(0,-1)
+_t1+='\u2026"'
+}
+masterDoc.text(_t1,20,15)
+masterDoc.setFontSize(8);masterDoc.setFont(undefined,'normal')
+masterDoc.text(masterDoc.splitTextToSize(t2,pgW-190)[0],20,26)
+masterDoc.setFontSize(9);masterDoc.setTextColor(128,128,128);masterDoc.text(tmplName,pgW-20,40,{align:'right'})
+if(isCmp){masterDoc.setFontSize(7);masterDoc.setTextColor(180,0,0);masterDoc.text('\u2588=diff',pgW-20,50,{align:'right'})}
 masterDoc.setFontSize(9);masterDoc.setTextColor(80,80,80)
-masterDoc.text('Page '+pageNum+' - '+tmplName,pw/2,ph-20,{align:'center'})
-masterDoc.setFontSize(8);masterDoc.text('Generated '+genDt+' - '+htmlName,pw/2,ph-10,{align:'center'})
+masterDoc.text('Page '+pageNum+' - '+tmplName,pgW/2,pgH-20,{align:'center'})
+masterDoc.setFontSize(8);masterDoc.text('Generated '+genDt+' - '+htmlName,pgW/2,pgH-10,{align:'center'})
 masterDoc.setTextColor(0,0,0)
 }
 })
