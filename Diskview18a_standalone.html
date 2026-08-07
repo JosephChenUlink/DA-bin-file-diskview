@@ -63,7 +63,7 @@ td button:not(.nbtn),th button{width:20px;height:20px}
   <span style='display:flex;align-items:center;gap:8px'>
   <span id='scanElapsed' title='Time elapsed since the current scan started (resets on each Scan click)' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
   <span id='lifetimeStats' title='How many times a template has been displayed while stepping/playing through results, across all Scan clicks this session' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
-  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260806c</span>
+  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260806d</span>
   </span>
 </div>
 <input id='local'type='file'style='display:none'onchange='OpFl()'>
@@ -1087,102 +1087,6 @@ r.onload=e=>{DcFl0_2(e.target.result)}
 r.readAsArrayBuffer(f)}
 
 DcFl0_2=x=>{SAll2=_DecodeBin(x);DcFl2()}
-
-CmpField=(hdr,name)=>{
-let ix=hdr.indexOf(name+':')
-if(ix<0)return null
-let ix1=hdr.indexOf('\n',ix)
-return hdr.substr(ix+name.length+1,ix1-ix-name.length-1).trim()
-}
-
-DcFl2=z=>{
-let arS2=SAll2.split("h\n")
-A2=(arS2.length==2&&_LastDataStart>=0)?_LastRawBytes.subarray(_LastDataStart):[]
-let ix=arS2[0].indexOf("Size:"),ix1=arS2[0].indexOf("\n",ix)
-From2=arS2[0].substr(ix+6,ix1-ix-6)-0
-ArIx2=Array()
-let s=arS2[0].toLowerCase()
-while(s.indexOf("length:",ix)>0){
-ix=s.indexOf("length:",ix)
-ix1=s.indexOf("\n",ix)
-let len=s.substr(ix+8,ix1-ix-8)-0
-ix=s.indexOf("template:",ix)
-if(ix<0)break  // malformed/truncated header — stop rather than loop forever
-ix1=s.indexOf("\n",ix)
-ArIx2.push(s.substr(ix+10,ix1-ix-10)-0)
-ArIx2.push(len)
-}
-Hdr2=arS2[0]
-BuildCmpSummary()
-if(G('cmpBtn'))W(G('cmpBtn'),'× Cmp')
-if(Tx*2>=ArIx2.length){}
-else CmpRenderTable()}
-
-
-
-CmpField=(hdr,name)=>{
-let ix=hdr.indexOf(name+':')
-if(ix<0)return null
-let ix1=hdr.indexOf('\n',ix)
-return hdr.substr(ix+name.length+1,ix1-ix-name.length-1).trim()
-}
-
-DcFl2=z=>{
-let arS2=SAll2.split("h\n")
-A2=(arS2.length==2&&_LastDataStart>=0)?_LastRawBytes.subarray(_LastDataStart):[]
-let ix=arS2[0].indexOf("Size:"),ix1=arS2[0].indexOf("\n",ix)
-From2=arS2[0].substr(ix+6,ix1-ix-6)-0
-ArIx2=Array()
-let s=arS2[0].toLowerCase()
-while(s.indexOf("length:",ix)>0){
-ix=s.indexOf("length:",ix)
-ix1=s.indexOf("\n",ix)
-let len=s.substr(ix+8,ix1-ix-8)-0
-ix=s.indexOf("template:",ix)
-if(ix<0)break  // malformed/truncated header — stop rather than loop forever
-ix1=s.indexOf("\n",ix)
-ArIx2.push(s.substr(ix+10,ix1-ix-10)-0)
-ArIx2.push(len)
-}
-Hdr2=arS2[0]
-BuildCmpSummary()
-if(G('cmpBtn'))W(G('cmpBtn'),'× Cmp')
-if(Tx*2>=ArIx2.length){}
-else CmpRenderTable()}
-
-
-
-CmpField=(hdr,name)=>{
-let ix=hdr.indexOf(name+':')
-if(ix<0)return null
-let ix1=hdr.indexOf('\n',ix)
-return hdr.substr(ix+name.length+1,ix1-ix-name.length-1).trim()
-}
-
-DcFl2=z=>{
-let arS2=SAll2.split("h\n")
-A2=(arS2.length==2&&_LastDataStart>=0)?_LastRawBytes.subarray(_LastDataStart):[]
-let ix=arS2[0].indexOf("Size:"),ix1=arS2[0].indexOf("\n",ix)
-From2=arS2[0].substr(ix+6,ix1-ix-6)-0
-ArIx2=Array()
-let s=arS2[0].toLowerCase()
-while(s.indexOf("length:",ix)>0){
-ix=s.indexOf("length:",ix)
-ix1=s.indexOf("\n",ix)
-let len=s.substr(ix+8,ix1-ix-8)-0
-ix=s.indexOf("template:",ix)
-if(ix<0)break  // malformed/truncated header — stop rather than loop forever
-ix1=s.indexOf("\n",ix)
-ArIx2.push(s.substr(ix+10,ix1-ix-10)-0)
-ArIx2.push(len)
-}
-Hdr2=arS2[0]
-BuildCmpSummary()
-if(G('cmpBtn'))W(G('cmpBtn'),'× Cmp')
-if(Tx*2>=ArIx2.length){}
-else CmpRenderTable()}
-
-
 
 CmpField=(hdr,name)=>{
 let ix=hdr.indexOf(name+':')
