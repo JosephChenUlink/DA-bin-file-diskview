@@ -63,7 +63,7 @@ td button:not(.nbtn),th button{width:20px;height:20px}
   <span style='display:flex;align-items:center;gap:8px'>
   <span id='scanElapsed' title='Time elapsed since the current scan started (resets on each Scan click)' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
   <span id='lifetimeStats' title='How many times a template has been displayed while stepping/playing through results, across all Scan clicks this session' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
-  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260807a</span>
+  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260807b</span>
   </span>
 </div>
 <input id='local'type='file'style='display:none'onchange='OpFl()'>
@@ -1543,8 +1543,15 @@ SyncH()
 
 Dp2=z=>{
 let qd,qr="<tr><th>ID</th><th>Flag(hex)</th><th>Attr</th><th>Worst</th><th>Raw Value(hex)</th><th>Rsv(hex)</th><th>Description</th></tr>",i,j,y
+// The scan stops at the first zero attribute ID, but a truncated capture — or a
+// record that fills every slot — need not contain one. Unbounded, the index
+// walks past the end of A, where undefined==0 is false, so the loop never
+// terminates and the row string grows until the engine rejects it with
+// "Invalid string length". That killed the entire PDF export part-way through,
+// which is why SATA comparisons lost every page after the SMART table.
+let _end=Math.min(A.length,F+(ArIx[Tx*2+1]||512))
 for(j=0;;j++){
-if(A[F+j*12+2]==0)break
+if(F+j*12+2>=_end||A[F+j*12+2]==0)break
 qd=""
 for(i=0;i<7;i++)qd+="<td></td>"
 qr+="<tr id=r"+j+">"+qd+"</tr>"
@@ -1657,8 +1664,15 @@ j++
 
 DpD=z=>{
 let qd,qr=`<tr><th>SMART ID</th><th>Thresholds Data</th><th>Description</th></tr>`
+// The scan stops at the first zero attribute ID, but a truncated capture — or a
+// record that fills every slot — need not contain one. Unbounded, the index
+// walks past the end of A, where undefined==0 is false, so the loop never
+// terminates and the row string grows until the engine rejects it with
+// "Invalid string length". That killed the entire PDF export part-way through,
+// which is why SATA comparisons lost every page after the SMART table.
+let _end=Math.min(A.length,F+(ArIx[Tx*2+1]||512))
 for(let j=0;;j++){
-if(A[F+j*12+2]==0)break
+if(F+j*12+2>=_end||A[F+j*12+2]==0)break
 qd=""
 for(let i=0;i<3;i++)qd+="<td></td>"
 qr+="<tr id=r"+j+">"+qd+"</tr>"
@@ -3627,6 +3641,10 @@ rows=rows.filter((r,ri)=>!(ri==1&&r.className.includes('c0')&&r.cells.length==he
 // of its visual colspan.
 let headerRowIdx=rows.findIndex(r=>r.cells.length>1&&r.cells[0].tagName=='TH')
 if(headerRowIdx<0)headerRowIdx=0 // fall back to the original behavior
+// An empty table used to throw here, and one throw anywhere in the loop aborts
+// the whole export — every page after it is lost. A template with nothing to
+// show should cost its own page, not the document.
+if(!rows.length)return {headers:['(no data in this template)'],body:[],isCompareMode:!!A2,preNotes:[],cmpSplit:0,cmpLead:0}
 let preNotes=rows.slice(0,headerRowIdx).map(r=>_cellText(r.cells[0])).filter(t=>t)
 let isCompareMode=!!A2
 // A header cell that spans several columns (compare mode appends a single
@@ -3902,77 +3920,10 @@ masterDoc.text('Generated '+genDt,CL,fy);fy+=11
 masterDoc.text(htmlName+(bld?'  \u00b7  '+bld:''),CL,fy)
 RegPage('Cover',pw,ph)
 
-// ── Introduction ─────────────────────────────────────────────────────────────
-let s=SAll.toLowerCase(),i1=s.indexOf('record '),i2=s.indexOf('end')-3,i=0,l,n=ArIx.length/2,t
-let lm=(G('local').files[0]&&G('local').files[0].lastModifiedDate)?G('local').files[0].lastModifiedDate.toUTCString():'N/A'
-// Title, company and generation date now live on the cover, so repeating them
-// here would just be a second, worse cover.
-let SI='Source file: '+CurFile+'\nBin file date: '+lm
-if(isCmp)SI+='\n\nCOMPARE MODE\nFile 2: '+CurFile2
-SI+='\n\nStart of Bin File:'+SAll.substring(0,i1)
-do{
-  if(n>29)i++
-  l=i1;i1+=s.substring(i1,i2).indexOf('template')+14
-  t=SAll.substr(l,i1-l).replaceAll('\n','; ')
-  if(i){t=t.replaceAll(/record /ig,'')+(i%2?'':'\n')}
-  else t+='\n'
-  SI+=t
-}while(i1<i2)
-let _introLines=masterDoc.splitTextToSize(SI,pw-MG*2)
-let _iy=0,_ibot=ph-62,_first=1,_drawIntroChrome=()=>{
-RegPage('Introduction',pw,ph)
-DrawHead('Introduction',pw)
-if(_first){
-masterDoc.setFont(undefined,'bold');masterDoc.setFontSize(13);SetText(INK)
-masterDoc.text('Introduction',MG,72)
-_iy=94;_first=0
-}else _iy=64
-masterDoc.setFont(undefined,'normal');masterDoc.setFontSize(9);SetText(INK)
-}
-masterDoc.addPage()
-_drawIntroChrome()
-_introLines.forEach(ln=>{
-if(_iy>_ibot){masterDoc.addPage();_drawIntroChrome()}
-masterDoc.text(ln,MG,_iy);_iy+=11
-})
-
-// ── Compare Summary page ─────────────────────────────────────────────────────
-if(isCmp){
-masterDoc.addPage()
-RegPage('Compare Summary',pw,ph)
-DrawHead('Compare Summary',pw)
-masterDoc.setFontSize(13);masterDoc.setFont(undefined,'bold');SetText(INK)
-masterDoc.text('Compare Summary',MG,72)
-let fields=['Date & Time','Model Number','Serial Number','Capacity','Interface','Bus Type','Is HDD']
-let d1c=CmpField(SAll.split('h\n')[0],'Date'),t1c=CmpField(SAll.split('h\n')[0],'Time'),d2c=CmpField(Hdr2,'Date'),t2c=CmpField(Hdr2,'Time')
-let _dtV1=(d1c||'')+(t1c?' '+t1c:''),_dtV2=(d2c||'')+(t2c?' '+t2c:'')
-let _driveModel1c=GetDriveModel(A,ArIx,From),_driveModel2c=GetDriveModel(A2,ArIx2,From2)
-let cmpRows=fields.map(fn=>{
-if(fn==='Date & Time'){let v1=_dtV1,v2=_dtV2;return{label:'Date & Time',v1:v1||'-',v2:v2||'-',diff:v1!==v2}}
-if(fn==='Model Number'){let v1=_driveModel1c||CmpField(SAll.split('h\n')[0],fn)||'-',v2=_driveModel2c||CmpField(Hdr2,fn)||'-';return{label:fn,v1,v2,diff:v1!==v2}}
-let v1=CmpField(SAll.split('h\n')[0],fn)||'-'
-let v2=CmpField(Hdr2,fn)||'-'
-return{label:fn,v1,v2,diff:v1!==v2}
-})
-masterDoc.autoTable({
-head:[['Field','File 1: '+CurFile,'File 2: '+CurFile2]],
-body:cmpRows.map(r=>[{content:r.label,styles:{fontStyle:'bold'}},r.v1,r.v2]),
-theme:'grid',startY:88,
-styles:{fontSize:9,cellPadding:5,overflow:'linebreak',textColor:INK,lineColor:RULE,lineWidth:0.5},
-headStyles:{fillColor:BRAND,textColor:[255,255,255],fontSize:9,fontStyle:'bold',lineColor:BRAND},
-columnStyles:{0:{cellWidth:90},1:{cellWidth:'auto'},2:{cellWidth:'auto'}},
-didParseCell:(data)=>{
-if(data.section==='body'&&cmpRows[data.row.index]&&cmpRows[data.row.index].diff){
-data.cell.styles.fillColor=[255,220,220];data.cell.styles.textColor=DIFF;data.cell.styles.fontStyle='bold'
-}},margin:{top:60,bottom:52,left:MG,right:MG}
-})
-masterDoc.setFontSize(8);SetText(DIFF)
-let lgY=masterDoc.lastAutoTable.finalY+14
-SetFill([255,220,220]);SetDraw(DIFF);masterDoc.setLineWidth(0.4)
-masterDoc.rect(MG,lgY-6.5,7,7,'FD')
-masterDoc.text('Red = differs between files',MG+11,lgY)
-SetText(INK)
-}
+// The Introduction pages are gone: they were a plain-text dump of the same
+// header the Header page now renders as a proper table, with byte offsets and
+// decoded values, so keeping both meant printing the same content twice — once
+// badly.
 
 // ── Table pages ───────────────────────────────────────────────────────────────
 let RenderTablePage=(label)=>{
@@ -4067,13 +4018,48 @@ DrawHead(label,pgW)
 })
 }
 
-// The header comparison sits with the summary, ahead of the per-template
-// pages: which drive, which host and which capture date is the context for
-// everything that follows.
+// ── Compare Summary page ─────────────────────────────────────────────────────
 if(isCmp){
-DpT(-1)
-RenderTablePage('Header (Cmp)')
+masterDoc.addPage()
+RegPage('Compare Summary',pw,ph)
+DrawHead('Compare Summary',pw)
+masterDoc.setFontSize(13);masterDoc.setFont(undefined,'bold');SetText(INK)
+masterDoc.text('Compare Summary',MG,72)
+let fields=['Date & Time','Model Number','Serial Number','Capacity','Interface','Bus Type','Is HDD']
+let d1c=CmpField(SAll.split('h\n')[0],'Date'),t1c=CmpField(SAll.split('h\n')[0],'Time'),d2c=CmpField(Hdr2,'Date'),t2c=CmpField(Hdr2,'Time')
+let _dtV1=(d1c||'')+(t1c?' '+t1c:''),_dtV2=(d2c||'')+(t2c?' '+t2c:'')
+let _driveModel1c=GetDriveModel(A,ArIx,From),_driveModel2c=GetDriveModel(A2,ArIx2,From2)
+let cmpRows=fields.map(fn=>{
+if(fn==='Date & Time'){let v1=_dtV1,v2=_dtV2;return{label:'Date & Time',v1:v1||'-',v2:v2||'-',diff:v1!==v2}}
+if(fn==='Model Number'){let v1=_driveModel1c||CmpField(SAll.split('h\n')[0],fn)||'-',v2=_driveModel2c||CmpField(Hdr2,fn)||'-';return{label:fn,v1,v2,diff:v1!==v2}}
+let v1=CmpField(SAll.split('h\n')[0],fn)||'-'
+let v2=CmpField(Hdr2,fn)||'-'
+return{label:fn,v1,v2,diff:v1!==v2}
+})
+masterDoc.autoTable({
+head:[['Field','File 1: '+CurFile,'File 2: '+CurFile2]],
+body:cmpRows.map(r=>[{content:r.label,styles:{fontStyle:'bold'}},r.v1,r.v2]),
+theme:'grid',startY:88,
+styles:{fontSize:9,cellPadding:5,overflow:'linebreak',textColor:INK,lineColor:RULE,lineWidth:0.5},
+headStyles:{fillColor:BRAND,textColor:[255,255,255],fontSize:9,fontStyle:'bold',lineColor:BRAND},
+columnStyles:{0:{cellWidth:90},1:{cellWidth:'auto'},2:{cellWidth:'auto'}},
+didParseCell:(data)=>{
+if(data.section==='body'&&cmpRows[data.row.index]&&cmpRows[data.row.index].diff){
+data.cell.styles.fillColor=[255,220,220];data.cell.styles.textColor=DIFF;data.cell.styles.fontStyle='bold'
+}},margin:{top:60,bottom:52,left:MG,right:MG}
+})
+masterDoc.setFontSize(8);SetText(DIFF)
+let lgY=masterDoc.lastAutoTable.finalY+14
+SetFill([255,220,220]);SetDraw(DIFF);masterDoc.setLineWidth(0.4)
+masterDoc.rect(MG,lgY-6.5,7,7,'FD')
+masterDoc.text('Red = differs between files',MG+11,lgY)
+SetText(INK)
 }
+
+// The header page follows the cover (or the Compare Summary): which drive,
+// which host and which capture date is the context for everything after it.
+DpT(-1)
+RenderTablePage(isCmp?'Header (Cmp)':'Header')
 
 for(let ti=0;ti<ArIx.length/2;ti++){
 DpT(ti)
