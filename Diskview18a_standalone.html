@@ -63,7 +63,7 @@ td button:not(.nbtn),th button{width:20px;height:20px}
   <span style='display:flex;align-items:center;gap:8px'>
   <span id='scanElapsed' title='Time elapsed since the current scan started (resets on each Scan click)' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
   <span id='lifetimeStats' title='How many times a template has been displayed while stepping/playing through results, across all Scan clicks this session' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
-  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260806g</span>
+  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260806h</span>
   </span>
 </div>
 <input id='local'type='file'style='display:none'onchange='OpFl()'>
@@ -1067,7 +1067,7 @@ for(i=0;i<ArIx.length/2;i++)y=y.replace("DpT()","DpT("+i+")")
 if(y.substr(0,4)=='<br>')y=y.substr(4)
 y=y.replace(/Capacity:\s*(\d+)/,(m,p1)=>'Capacity: '+p1+' ('+(Number(p1)/1e9).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})+' GB)')
 W(G('ruSide'),y)
-if(!ArIx.length){W(G('tmpl'),'(no templates)');W(G('tmplName'),'');PrevRawT=-1;return}
+if(!ArIx.length&&!HdrView){W(G('tmpl'),'(no templates)');W(G('tmplName'),'');PrevRawT=-1;return}
 if(Tx*2>=ArIx.length||Tx<0)Tx=0
 if(PrevRawT>=0){
 let fi=ArIx.findIndex((v,i)=>i%2===0&&v===PrevRawT)
@@ -1424,7 +1424,84 @@ qr+="<tr>"+qd+"</tr>"
 }
 W(G('lTab'),qr)}
 
+// ── Header view (pseudo-template, index -1) ──────────────────────────────────
+// Every bin file opens with an ASCII header describing the host, the drive and
+// the record table that follows. It was previously only visible as raw text in
+// the description pane, and only when that pane happened not to be showing
+// something else — there was no way to select it, see its bytes, or export it.
+// Modelling it as a template at index -1, ahead of the first real record, makes
+// it behave like every other view: bytes on the left, decoded fields on the
+// right, and it flows through the existing CSV export untouched.
+HdrView=false
+EscH=s=>String(s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]))
+// Hovering a header field highlights the bytes it occupies, the same gesture
+// the template views already use. The header is ASCII, so a character offset in
+// the decoded text is a byte offset in the file.
+HdrHi=(o,l)=>{NoHiLi();HiLi(1,o-1,l)}
+// Only decodes what the value actually determines. Fields whose encoding isn't
+// established (Slot Form Factor ID, Attribute, Rack/Slot numbering) are left
+// blank on purpose — a guessed mapping in a drive-health report is worse than
+// an empty cell.
+HdrDecode=(k,v)=>{
+if(!v)return ''
+let n=Number(v),kl=k.toLowerCase()
+if(kl==='capacity'&&isFinite(n)&&n>0)
+return (n/1e9).toLocaleString('en-US',{maximumFractionDigits:1})+' GB &nbsp;/&nbsp; '+(n/(1<<30)).toLocaleString('en-US',{maximumFractionDigits:1})+' GiB'
+if(kl==='header size'&&isFinite(n))return n.toLocaleString()+' bytes; first record at 0x'+U(n,2)
+if(kl==='no. of records'&&isFinite(n))return n.toLocaleString()+' template records follow'
+if(kl==='is hdd')return v==='1'?'Rotating media (HDD)':(v==='0'?'Solid state (no platters)':'')
+if(kl==='interface')return {NVMe:'NVM Express over PCIe',SATA:'Serial ATA',SCSI:'SCSI / SAS'}[v]||''
+if(kl==='drive status')return {OK:'No fault reported',WARNING:'Attention — one or more attributes degraded',ERROR:'Fault reported'}[v.toUpperCase()]||''
+if(kl==='user data encrypted')return v.toUpperCase()==='TRUE'?'User data encrypted at rest':(v.toUpperCase()==='FALSE'?'Not encrypted':'')
+if(kl==='slot activated')return v.toLowerCase()==='true'?'Slot in use':(v.toLowerCase()==='false'?'Slot not activated':'')
+// Model Number / Serial Number in the header belong to the host appliance, not
+// the drive. Reading them as drive identity is the single most consequential
+// misreading of this file format, so both are called out explicitly.
+if(kl==='model number')return '<brow>Host appliance model &mdash; not the drive</brow>'
+if(kl==='serial number')return '<brow>Host appliance serial'+(/^[0-9a-f]{64}$/i.test(v)?' &mdash; SHA-256 hash (GDPR)':'')+'</brow>'
+if(kl==='firmware version')return '<brow>Host firmware &mdash; not the drive firmware</brow>'
+if(kl==='host id'&&/^[0-9a-f]{64}$/i.test(v))return 'SHA-256 hash (GDPR)'
+if(kl==='driveserial')return /^0{16,}$/.test(v)?'Zeroed per GDPR policy':(/^[0-9a-f]{64}$/i.test(v)?'SHA-256 hash (GDPR) &mdash; join key for this drive':'')
+if(/^record \d+ byte index$/.test(kl)&&isFinite(n))return 'file offset 0x'+U(n,2)
+if(/^record \d+ length$/.test(kl)&&isFinite(n))return n.toLocaleString()+' bytes'
+let mt=kl.match(/^record (\d+) template$/)
+if(mt){let t=parseInt(v,10);return isFinite(t)?'<b>T'+t+'</b> '+EscH(TmplNames[t]||'(unnamed template)'):''}
+return ''
+}
+DpHdr=z=>{
+BuildTitle()
+let hdrTxt=(SAll.split('h\n')[0]||'')
+// _LastDataStart is where the binary section begins, so it is exactly the
+// header's byte length; From (Header Size) is the fallback for odd files.
+let hLen=(typeof _LastDataStart!=='undefined'&&_LastDataStart>0)?_LastDataStart:(From||hdrTxt.length)
+let raw=(typeof _LastRawBytes!=='undefined'&&_LastRawBytes)?_LastRawBytes:[]
+W(G('tmpl'),'Header')
+W(G('tmplName'),'Header ('+hLen.toLocaleString()+' bytes)')
+W(G('err'),"<div style='font-size:11px;color:#777;background:#fafafa;border:1px solid #e0e0e0;border-radius:3px;padding:3px 8px;margin-bottom:2px'>&#128274; GDPR: Serial Number, Host ID and DriveSerial are stored hashed or zeroed, never as raw values.</div>")
+Fx=0;F=0;T=0;ArRange=[];Gp=0
+SetTH(1,0,hLen)
+W(G('offset'),U(0,2))
+Q('#lTab td:not(.adr)').forEach((e,i)=>W(e,i<hLen?U(raw[i]*1,1):''))
+Q('#lTab td.adr').forEach((e,i)=>W(e,U(i*16,2)))
+G('rTab').className='wideitem'
+let qr="<tr><th>Item</th><th>Offset</th><th>Value</th><th>Decoded</th></tr>",pos=0
+hdrTxt.split('\n').forEach(line=>{
+// SAll[0] is a synthetic newline prepended by the decoder, so a character at
+// index i in the decoded text came from file byte i-1.
+let off=Math.max(pos-1,0),len=line.length
+pos+=len+1
+if(!line.trim())return
+let ci=line.indexOf(':')
+let k=(ci>0?line.slice(0,ci):line).trim()
+let v=(ci>0?line.slice(ci+1):'').trim()
+let d=HdrDecode(k,v)
+qr+="<tr onmouseover='HdrHi("+off+","+len+")'><td>"+EscH(k)+"</td><td>"+U(off,2)+"</td><td>"+EscH(v)+"</td><td>"+d+"</td></tr>"
+})
+W(G('rTab'),qr)
+}
+
 DpFl=z=>{
+if(HdrView){DpHdr();return}
 if(!ArIx||!ArIx.length){W(G('tmpl'),'(no templates)');W(G('tmplName'),'');W(G('err'),'');W(G('ruSide'),'');W(G('rdSide'),'');return}
 BuildTitle()
 let x=ArIx[Tx*2],len,ii=0,i,j,k,kr,qr,qd
@@ -3035,11 +3112,13 @@ if(r)Q('#rTab td').forEach(e=>e.classList.remove('hili','highg','cyan'))
 Q('#lTab td').forEach(e=>e.classList.remove('hili','hilig'))}
 
 Adv=x=>{
-let lmt=ArIx.length/2-1,v=Tx+x
-if(v>lmt)v=0
-if(v<0)v=lmt
+// -1 is the header, which sits ahead of the first record, so the cycle runs
+// -1 .. lmt and wraps back to the header rather than to template 0.
+let lmt=ArIx.length/2-1,v=(HdrView?-1:Tx)+x
+if(v>lmt)v=-1
+if(v<-1)v=lmt
 DpT(v)
-if((ScanActive||ScanStepMode)&&!_ScanLoading&&!RevTimer)ScanRawT=ArIx[Tx*2]}
+if(!HdrView&&(ScanActive||ScanStepMode)&&!_ScanLoading&&!RevTimer)ScanRawT=ArIx[Tx*2]}
 
 // ── Scan play/stop/direction controls ───────────────────────────────────────
 ScanSetup=async()=>{
@@ -3826,9 +3905,9 @@ W(G('ruSide'),s)
 return}
 if(P())DpT(Tx)
 else{
-let s=''
+let s='<a onclick="DpT(-1)">Header</a>'
 items.forEach((e,j)=>{
-let pre=j===0?'':(j%5===0?'<br>':' | ')
+let pre=(j+1)%5===0?'<br>':' | '
 s+=pre+`<a onclick="DpT(${e.idx})">Template`+('00'+e.num).substr(-3)+'</a>'
 })
 W(G('ruSide'),s)}}
@@ -4333,7 +4412,7 @@ let n=parseInt(hex,16)%16
 let names=['Unknown','Sleep','Standby','Active/Idle','Executing SMART off-line or self-test','Reserved','Reserved','Reserved','Reserved','Reserved','Reserved','Vendor specific','Vendor specific','Vendor specific','Vendor specific','Vendor specific']
 return names[n]}
 G=x=>{return D.getElementById(x)}
-DpT=i=>{Tx=i;DcFl();G('rdSide').scrollTop=0;try{localStorage.setItem('dv_lastTx',Tx)}catch(e){}}
+DpT=i=>{HdrView=(i===-1);if(!HdrView)Tx=i;DcFl();G('rdSide').scrollTop=0;try{localStorage.setItem('dv_lastTx',HdrView?-1:Tx)}catch(e){}}
 SaveFl=z=>{saveAs(new Blob([SAll],{type: "text/plain;charset=utf-8"}),G('file').value+".csv")}
 
 H2D=(ix,y)=>{return A[ix+y]*256+A[ix]*1}
