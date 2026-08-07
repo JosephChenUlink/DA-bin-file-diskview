@@ -63,7 +63,7 @@ td button:not(.nbtn),th button{width:20px;height:20px}
   <span style='display:flex;align-items:center;gap:8px'>
   <span id='scanElapsed' title='Time elapsed since the current scan started (resets on each Scan click)' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
   <span id='lifetimeStats' title='How many times a template has been displayed while stepping/playing through results, across all Scan clicks this session' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
-  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260806f</span>
+  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260806g</span>
   </span>
 </div>
 <input id='local'type='file'style='display:none'onchange='OpFl()'>
@@ -3970,14 +3970,25 @@ return lines.join('\n')
 _pdfChunkHex=s=>{
 if(typeof s!='string')return s
 // A long hex run is one unbreakable token, so a narrow column had to split it
-// at an arbitrary offset. Grouping into 8-char words with hair spaces lets the
-// wrap land on byte boundaries and keeps the column's minimum width small.
-return s.replace(/\b([0-9A-Fa-f]{17,})\b/g,m=>m.replace(/(.{8})(?=.)/g,'$1\u200A'))
+// at an arbitrary offset. Grouping into 8-char words lets the wrap land on byte
+// boundaries and keeps the column's minimum width small.
+// This used a U+200A hair space, which was wrong twice over: it is outside
+// WinAnsiEncoding, so how a viewer renders it is undefined, and jsPDF does not
+// treat it as a break opportunity, so the run stayed one long token and
+// overflowed the cell border no matter how the width was measured. An ordinary
+// space is the only separator jsPDF will actually wrap on, and 8-char groups
+// are how hex is conventionally written anyway.
+return s.replace(/\b([0-9A-Fa-f]{17,})\b/g,m=>m.replace(/(.{8})(?=.)/g,'$1 '))
 }
 _pdfCellText=v=>v==null?'':(typeof v=='object'?String(v.content==null?'':v.content):String(v))
 _pdfTokenW=(doc,s)=>{
 let w=0
-String(s).split(/[\s\u200A]+/).forEach(t=>{if(t)w=Math.max(w,doc.getTextWidth(t))})
+// jsPDF breaks a paragraph on literal spaces only — not tabs, not non-breaking
+// spaces, not any other Unicode space — so the narrowest a column can be must
+// be measured by exactly that rule. Splitting on /\s+/ here reported tokens
+// smaller than the ones jsPDF actually has to fit, and the column was then
+// sized below its true minimum, which is what pushed text past the cell border.
+String(s).split(/\r?\n/).forEach(line=>line.split(' ').forEach(t=>{if(t)w=Math.max(w,doc.getTextWidth(t))}))
 return w
 }
 // Returns {widths,minTotal,natTotal}. widths always sums to exactly `avail`.
