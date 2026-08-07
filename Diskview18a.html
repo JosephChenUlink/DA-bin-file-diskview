@@ -63,7 +63,7 @@ td button:not(.nbtn),th button{width:20px;height:20px}
   <span style='display:flex;align-items:center;gap:8px'>
   <span id='scanElapsed' title='Time elapsed since the current scan started (resets on each Scan click)' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
   <span id='lifetimeStats' title='How many times a template has been displayed while stepping/playing through results, across all Scan clicks this session' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
-  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260806a</span>
+  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260806b</span>
   </span>
 </div>
 <input id='local'type='file'style='display:none'onchange='OpFl()'>
@@ -3442,21 +3442,47 @@ return
 try{PdfAll()}catch(e){alert('PDF generation failed: '+e.message)}
 }
 
+// Extracts readable text from a table cell for PDF/CSV export. A cell can
+// itself contain a nested HTML table (e.g. the NVMe PSD Header/PSD-N rows,
+// which build a small sub-table of individually-labeled fields for the
+// main UI view) — plain textContent on such a cell concatenates every
+// nested cell's text with no separator at all ('MPMPSNOPSENLAT...'),
+// since textContent doesn't insert whitespace between sibling elements.
+// Detect this case and join the nested cells with a clear separator
+// instead, so the exported value stays readable.
+let _cellText=c=>{
+let nested=c.querySelector('table')
+if(nested)return Array.from(nested.querySelectorAll('td,th')).map(nc=>nc.textContent.trim()).join(' | ')
+return c.textContent.trim()
+}
+
 GetTableData=()=>{
 let rows=Array.from(G('rTab').rows).filter(r=>getComputedStyle(r).display!='none')
 let headerCols=rows[0]?rows[0].cells.length:0
 rows=rows.filter((r,ri)=>!(ri==1&&r.className.includes('c0')&&r.cells.length==headerCols&&r.cells[0].tagName=='TH'))
-let headers=Array.from(rows[0].cells).map(c=>c.textContent.trim())
+// Find the real multi-column header row rather than assuming rows[0] is it.
+// Some templates (e.g. T105's NVMe self-test log) put one or more
+// single-cell colspan summary rows ('Current Self-test Operation...')
+// before the actual 'Entry | Offset | Result | ...' header — treating
+// rows[0] as the header in that case makes the exported table think it
+// only has 1 column, silently dropping every other column's data for
+// every row below it. A real header row has more than one cell; a
+// colspan summary row always collapses to exactly 1 DOM cell regardless
+// of its visual colspan.
+let headerRowIdx=rows.findIndex(r=>r.cells.length>1&&r.cells[0].tagName=='TH')
+if(headerRowIdx<0)headerRowIdx=0 // fall back to the original behavior
+let preNotes=rows.slice(0,headerRowIdx).map(r=>_cellText(r.cells[0])).filter(t=>t)
+let headers=Array.from(rows[headerRowIdx].cells).map(c=>_cellText(c))
 let isCompareMode=!!A2
-let body=rows.slice(1).map(r=>{
+let body=rows.slice(headerRowIdx+1).map(r=>{
 let isDiff=r.classList.contains('cmpDiff')
 let cells=Array.from(r.cells).map(c=>{
-let span=c.colSpan||1,txt=c.textContent.trim().replaceAll('\u0394','Delta ')
+let span=c.colSpan||1,txt=_cellText(c).replaceAll('\u0394','Delta ')
 return span>1?{content:txt,colSpan:span}:txt
 })
 return {cells,isDiff}
 })
-return {headers,body,isCompareMode}
+return {headers,body,isCompareMode,preNotes}
 }
 
 GetCsv=z=>{
@@ -3470,7 +3496,7 @@ cells=Array.from(r.cells)
 let out=[]
 cells.forEach(c=>{
 let span=c.colSpan||1
-out.push(c.textContent.trim())
+out.push(_cellText(c))
 for(let k=1;k<span;k++)out.push('')
 })
 return out.map(v=>`"${v}"`).join(',')
@@ -3556,9 +3582,11 @@ masterDoc.setTextColor(0,0,0)
 // ── Template pages ────────────────────────────────────────────────────────────
 for(let ti=0;ti<ArIx.length/2;ti++){
 DpT(ti)
-let{headers,body,isCompareMode}=GetTableData()
+let{headers,body,isCompareMode,preNotes}=GetTableData()
 let diffFlags=body.map(r=>r.isDiff)
 let nCols=headers.length
+let noteLines=preNotes||[]
+let tableTop=70+(noteLines.length?noteLines.length*10+6:0)
 
 let processedBody=body.map((row,ri)=>{
 let cells=row.cells.slice()
@@ -3591,11 +3619,16 @@ colStyles[nCols-1]={cellWidth:'auto'}
 
 let tmplName='Template'+('00'+ArIx[ti*2]).substr(-3)+(isCmp?' (Cmp)':'')
 masterDoc.addPage()
+if(noteLines.length){
+masterDoc.setFontSize(8);masterDoc.setFont(undefined,'normal');masterDoc.setTextColor(50,50,50)
+noteLines.forEach((line,li)=>masterDoc.text(line,20,58+li*10,{maxWidth:pw-40}))
+masterDoc.setTextColor(0,0,0)
+}
 masterDoc.autoTable({
 head:[headers],body:processedBody,theme:'striped',
 styles:{fontSize:7,cellPadding:2,overflow:'linebreak'},
 headStyles:{fillColor:[26,95,168],fontSize:7},
-margin:{top:70,bottom:55},columnStyles:colStyles,
+margin:{top:tableTop,bottom:55},columnStyles:colStyles,
 didParseCell:(data)=>{
 if(data.section==='body'&&diffFlags[data.row.index]){
 data.cell.styles.fillColor=[255,220,220]
