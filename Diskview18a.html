@@ -63,7 +63,7 @@ td button:not(.nbtn),th button{width:20px;height:20px}
   <span style='display:flex;align-items:center;gap:8px'>
   <span id='scanElapsed' title='Time elapsed since the current scan started (resets on each Scan click)' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
   <span id='lifetimeStats' title='How many times a template has been displayed while stepping/playing through results, across all Scan clicks this session' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
-  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260806h</span>
+  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260806i</span>
   </span>
 </div>
 <input id='local'type='file'style='display:none'onchange='OpFl()'>
@@ -3601,8 +3601,30 @@ rows=rows.filter((r,ri)=>!(ri==1&&r.className.includes('c0')&&r.cells.length==he
 let headerRowIdx=rows.findIndex(r=>r.cells.length>1&&r.cells[0].tagName=='TH')
 if(headerRowIdx<0)headerRowIdx=0 // fall back to the original behavior
 let preNotes=rows.slice(0,headerRowIdx).map(r=>_cellText(r.cells[0])).filter(t=>t)
-let headers=Array.from(rows[headerRowIdx].cells).map(c=>_cellText(c))
 let isCompareMode=!!A2
+// A header cell that spans several columns (compare mode appends a single
+// 'File 2' cell with colSpan = the number of File 1 columns) used to collapse
+// to ONE entry here. autoTable takes its column count from the head row, so
+// every body column past that point was silently discarded — a 16-column
+// compare table rendered 17 of its 31 columns and dropped all but one of
+// File 2's. Expanding the span gives each column its own header again.
+let hcells=Array.from(rows[headerRowIdx].cells)
+let headers=[]
+hcells.forEach(c=>{
+let span=c.colSpan||1,txt=_cellText(c)
+if(span<2){headers.push(txt);return}
+// Where the span exactly covers the group of columns already named to its
+// left, reuse those names so each column still says what it holds.
+let base=headers.slice(-span)
+for(let k=0;k<span;k++)headers.push(base.length===span?base[k]:txt)
+})
+// How many columns belong to each file, when this is a compare table whose
+// trailing header spans a matching group. 0 means "not a paired table".
+let cmpSplit=0
+if(isCompareMode&&hcells.length>1){
+let last=hcells[hcells.length-1],k=last.colSpan||1
+if(k>1&&headers.length===1+2*k)cmpSplit=k
+}
 let body=rows.slice(headerRowIdx+1).map(r=>{
 let isDiff=r.classList.contains('cmpDiff')
 // sty is keyed by the column a cell *starts* at, not by its position in the
@@ -3617,7 +3639,7 @@ return span>1?{content:txt,colSpan:span}:txt
 })
 return {cells,isDiff,sty}
 })
-return {headers,body,isCompareMode,preNotes}
+return {headers,body,isCompareMode,preNotes,cmpSplit}
 }
 
 GetCsv=z=>{
@@ -3714,7 +3736,19 @@ else widths=natTotal>0?nat.map(w=>w+slack*(w/natTotal)):nat.slice()
 // so wide prose columns give up the most and short code columns keep intact.
 let k=(avail-minTotal)/(natTotal-minTotal)
 widths=nat.map((w,i)=>min[i]+(w-min[i])*k)
-}else widths=min.slice()
+}else{
+// Even at their narrowest the columns want more room than the page has. This
+// used to return the minimums unchanged, so the widths summed to more than
+// `avail` and autoTable drew the table straight through the right margin and
+// off the paper. Scaling them down to fit means some long tokens now break
+// mid-word, which is a far smaller loss than losing the columns off the page.
+let k=avail/minTotal
+widths=min.map(w=>w*k)
+}
+// Guard the invariant the whole layout depends on: the widths sum to exactly
+// `avail`, never more. Rounding is absorbed by the last column.
+let sum=widths.reduce((a,b)=>a+b,0)
+if(sum>0&&Math.abs(sum-avail)>0.01)widths[widths.length-1]+=avail-sum
 return{widths,minTotal,natTotal}
 }
 
@@ -3740,6 +3774,10 @@ let t2=G('dvTitle').innerText
 // per-cell data colours from the viewer are layered on top; every extra accent
 // colour competes with the data for attention.
 let BRAND=[26,95,168],INK=[34,34,34],MUTE=[110,120,132],RULE=[214,221,230],DIFF=[180,0,0]
+// Page margin for all chrome and tables. 20pt sat inside the non-printable
+// edge of most office printers, so borders and footers were being clipped on
+// paper even when the PDF itself was correct.
+let MG=24
 let SetFill=c=>masterDoc.setFillColor(c[0],c[1],c[2])
 let SetText=c=>masterDoc.setTextColor(c[0],c[1],c[2])
 let SetDraw=c=>masterDoc.setDrawColor(c[0],c[1],c[2])
@@ -3756,17 +3794,26 @@ let RegPage=(label,w,h)=>{pageMeta[masterDoc.internal.getCurrentPageInfo().pageN
 // from a stack of loose tables; the header itself stays small and grey so the
 // table keeps the visual weight.
 let DrawHead=(label,w)=>{
-let maxw=w-170
+let maxw=w-170-(MG-20)*2
 masterDoc.setFont(undefined,'bold');masterDoc.setFontSize(8);SetText(INK)
 let ttl=t1
 if(masterDoc.getTextWidth(ttl)>maxw){while(ttl.length>8&&masterDoc.getTextWidth(ttl+'\u2026"')>maxw)ttl=ttl.slice(0,-1);ttl+='\u2026"'}
-masterDoc.text(ttl,20,30)
+masterDoc.text(ttl,MG,30)
 masterDoc.setFont(undefined,'normal');masterDoc.setFontSize(7.5);SetText(MUTE)
-masterDoc.text(masterDoc.splitTextToSize(t2||'',maxw)[0]||'',20,40)
+masterDoc.text(masterDoc.splitTextToSize(t2||'',maxw)[0]||'',MG,40)
 masterDoc.setFont(undefined,'bold');masterDoc.setFontSize(8);SetText(BRAND)
-masterDoc.text(label,w-20,30,{align:'right'})
-if(isCmp){masterDoc.setFont(undefined,'normal');masterDoc.setFontSize(7);SetText(DIFF);masterDoc.text('\u2588 = differs',w-20,40,{align:'right'})}
-SetDraw(RULE);masterDoc.setLineWidth(0.5);masterDoc.line(20,46,w-20,46)
+masterDoc.text(label,w-MG,30,{align:'right'})
+if(isCmp){
+// A drawn swatch, not a block character: U+2588 is outside WinAnsiEncoding, so
+// jsPDF emitted the whole string as two-byte text and viewers rendered it as
+// garbage. Any legend marker here has to be geometry, not a glyph.
+masterDoc.setFont(undefined,'normal');masterDoc.setFontSize(7);SetText(DIFF)
+let lbl='= differs'
+masterDoc.text(lbl,w-MG,40,{align:'right'})
+SetFill([255,220,220]);SetDraw(DIFF);masterDoc.setLineWidth(0.4)
+masterDoc.rect(w-MG-masterDoc.getTextWidth(lbl)-9,34.5,6,6,'FD')
+}
+SetDraw(RULE);masterDoc.setLineWidth(0.5);masterDoc.line(MG,46,w-MG,46)
 SetText(INK);masterDoc.setFont(undefined,'normal')
 }
 
@@ -3841,13 +3888,13 @@ do{
   else t+='\n'
   SI+=t
 }while(i1<i2)
-let _introLines=masterDoc.splitTextToSize(SI,pw-40)
+let _introLines=masterDoc.splitTextToSize(SI,pw-MG*2)
 let _iy=0,_ibot=ph-62,_first=1,_drawIntroChrome=()=>{
 RegPage('Introduction',pw,ph)
 DrawHead('Introduction',pw)
 if(_first){
 masterDoc.setFont(undefined,'bold');masterDoc.setFontSize(13);SetText(INK)
-masterDoc.text('Introduction',20,72)
+masterDoc.text('Introduction',MG,72)
 _iy=94;_first=0
 }else _iy=64
 masterDoc.setFont(undefined,'normal');masterDoc.setFontSize(9);SetText(INK)
@@ -3856,7 +3903,7 @@ masterDoc.addPage()
 _drawIntroChrome()
 _introLines.forEach(ln=>{
 if(_iy>_ibot){masterDoc.addPage();_drawIntroChrome()}
-masterDoc.text(ln,20,_iy);_iy+=11
+masterDoc.text(ln,MG,_iy);_iy+=11
 })
 
 // ── Compare Summary page ─────────────────────────────────────────────────────
@@ -3865,7 +3912,7 @@ masterDoc.addPage()
 RegPage('Compare Summary',pw,ph)
 DrawHead('Compare Summary',pw)
 masterDoc.setFontSize(13);masterDoc.setFont(undefined,'bold');SetText(INK)
-masterDoc.text('Compare Summary',20,72)
+masterDoc.text('Compare Summary',MG,72)
 let fields=['Date & Time','Model Number','Serial Number','Capacity','Interface','Bus Type','Is HDD']
 let d1c=CmpField(SAll.split('h\n')[0],'Date'),t1c=CmpField(SAll.split('h\n')[0],'Time'),d2c=CmpField(Hdr2,'Date'),t2c=CmpField(Hdr2,'Time')
 let _dtV1=(d1c||'')+(t1c?' '+t1c:''),_dtV2=(d2c||'')+(t2c?' '+t2c:'')
@@ -3887,17 +3934,20 @@ columnStyles:{0:{cellWidth:90},1:{cellWidth:'auto'},2:{cellWidth:'auto'}},
 didParseCell:(data)=>{
 if(data.section==='body'&&cmpRows[data.row.index]&&cmpRows[data.row.index].diff){
 data.cell.styles.fillColor=[255,220,220];data.cell.styles.textColor=DIFF;data.cell.styles.fontStyle='bold'
-}},margin:{top:60,bottom:52}
+}},margin:{top:60,bottom:52,left:MG,right:MG}
 })
 masterDoc.setFontSize(8);SetText(DIFF)
-masterDoc.text('\u2588 Red = differs between files',20,masterDoc.lastAutoTable.finalY+14)
+let lgY=masterDoc.lastAutoTable.finalY+14
+SetFill([255,220,220]);SetDraw(DIFF);masterDoc.setLineWidth(0.4)
+masterDoc.rect(MG,lgY-6.5,7,7,'FD')
+masterDoc.text('Red = differs between files',MG+11,lgY)
 SetText(INK)
 }
 
 // ── Template pages ────────────────────────────────────────────────────────────
 for(let ti=0;ti<ArIx.length/2;ti++){
 DpT(ti)
-let{headers,body,isCompareMode,preNotes}=GetTableData()
+let{headers,body,isCompareMode,preNotes,cmpSplit}=GetTableData()
 let diffFlags=body.map(r=>r.isDiff)
 let rowStyles=body.map(r=>r.sty)
 let nCols=headers.length
@@ -3923,29 +3973,51 @@ styles:{textColor:[120,120,120],fontStyle:'italic',halign:'center'}}]]
 // Portrait unless the table genuinely needs the extra width: either it cannot
 // fit without breaking words, or it is a wide grid table whose readability
 // depends on column alignment. Narrow Item/Index/Value tables stay portrait.
-let PORTW=612,LANDW=792,portAvail=PORTW-40,CPAD=2.5
+let PORTW=612,LANDW=792,portAvail=PORTW-MG*2,CPAD=2.5
 let probe=PdfColLayout(masterDoc,headers,processedBody,portAvail,7,CPAD)
 let useLand=isCmp||probe.minTotal>portAvail||(nCols>=6&&probe.natTotal>portAvail)
 let pgW=useLand?LANDW:PORTW,pgH=useLand?PORTW:792
-let layout=useLand?PdfColLayout(masterDoc,headers,processedBody,pgW-40,7,CPAD):probe
+let layout=useLand?PdfColLayout(masterDoc,headers,processedBody,pgW-MG*2,7,CPAD):probe
+// In a comparison the two files must be the same width, or the eye reads the
+// wider side as the more important one and lining values up becomes work.
+// Content-fitting alone gives them whatever width their own text happens to
+// need, so each pair is widened to the larger of the two and the whole row is
+// rescaled back to the page.
+if(cmpSplit){
+let ws=layout.widths,availW=(useLand?pgW:PORTW)-MG*2
+for(let i=0;i<cmpSplit;i++){
+let a=1+i,b=1+cmpSplit+i
+if(b<ws.length){let m=Math.max(ws[a],ws[b]);ws[a]=m;ws[b]=m}
+}
+let sum=ws.reduce((a,b)=>a+b,0)
+if(sum>0){let k=availW/sum;for(let i=0;i<ws.length;i++)ws[i]*=k}
+}
 let colStyles={}
 layout.widths.forEach((w,ci)=>{colStyles[ci]={cellWidth:w}})
+// Name the two files once, above their column groups, instead of prefixing
+// every column heading — on a 15-column-per-side table the prefixes alone
+// would eat more width than the data.
+let headRows=cmpSplit?[
+[{content:'',colSpan:1},
+{content:'File 1: '+CurFile,colSpan:cmpSplit,styles:{halign:'center'}},
+{content:'File 2: '+CurFile2,colSpan:cmpSplit,styles:{halign:'center'}}],
+headers]:[headers]
 
 let tmplName='Template'+('00'+ArIx[ti*2]).substr(-3)+(isCmp?' (Cmp)':'')
 masterDoc.addPage('letter',useLand?'landscape':'portrait')
 if(noteLines.length){
 masterDoc.setFontSize(8);masterDoc.setFont(undefined,'normal');SetText(MUTE)
-noteLines.forEach((line,li)=>masterDoc.text(line,20,60+li*10,{maxWidth:pgW-40}))
+noteLines.forEach((line,li)=>masterDoc.text(line,MG,60+li*10,{maxWidth:pgW-MG*2}))
 SetText(INK)
 }
 masterDoc.autoTable({
-head:[headers],body:processedBody,theme:'striped',
+head:headRows,body:processedBody,theme:'striped',
 styles:{fontSize:7,cellPadding:CPAD,overflow:'linebreak',textColor:INK},
 headStyles:{fillColor:BRAND,textColor:[255,255,255],fontStyle:'bold',fontSize:7,cellPadding:3},
 // A near-white blue-grey band separates rows without the heavy grey of the
 // default stripe, which would otherwise fight the data colours sitting on top.
 alternateRowStyles:{fillColor:[246,248,251]},
-margin:{top:tableTop,bottom:52,left:20,right:20},columnStyles:colStyles,
+margin:{top:tableTop,bottom:52,left:MG,right:MG},columnStyles:colStyles,
 didParseCell:(data)=>{
 if(data.section!=='body')return
 // Screen colours first, then the compare-mode diff highlight on top: a diff is
@@ -3975,10 +4047,10 @@ for(let p=1;p<=total;p++){
 masterDoc.setPage(p)
 let m=pageMeta[p]||{label:'',w:pw,h:ph}
 if(m.label==='Cover')continue
-SetDraw(RULE);masterDoc.setLineWidth(0.5);masterDoc.line(20,m.h-34,m.w-20,m.h-34)
+SetDraw(RULE);masterDoc.setLineWidth(0.5);masterDoc.line(MG,m.h-34,m.w-MG,m.h-34)
 masterDoc.setFont(undefined,'normal');masterDoc.setFontSize(7);SetText(MUTE)
-masterDoc.text(m.label||'',20,m.h-22)
-masterDoc.text(genDt,m.w-20,m.h-22,{align:'right'})
+masterDoc.text(m.label||'',MG,m.h-22)
+masterDoc.text(genDt,m.w-MG,m.h-22,{align:'right'})
 masterDoc.setFontSize(7.5);SetText(INK)
 masterDoc.text('Page '+p+' of '+total,m.w/2,m.h-22,{align:'center'})
 }
