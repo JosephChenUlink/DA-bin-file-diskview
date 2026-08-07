@@ -63,7 +63,7 @@ td button:not(.nbtn),th button{width:20px;height:20px}
   <span style='display:flex;align-items:center;gap:8px'>
   <span id='scanElapsed' title='Time elapsed since the current scan started (resets on each Scan click)' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
   <span id='lifetimeStats' title='How many times a template has been displayed while stepping/playing through results, across all Scan clicks this session' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
-  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260806d</span>
+  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260806e</span>
   </span>
 </div>
 <input id='local'type='file'style='display:none'onchange='OpFl()'>
@@ -3456,6 +3456,56 @@ if(nested)return Array.from(nested.querySelectorAll('td,th')).map(nc=>nc.textCon
 return c.textContent.trim()
 }
 
+// Carries the on-screen colouring of a table cell into the PDF. The viewer
+// puts colour on row/cell classes (c0..c3 = blue/brown/green/orange, white,
+// hilig) and on inline wrappers (<b>, <brow>, <c>, <g>, <h>). A wrapper only
+// counts when it covers the cell's entire text, because one PDF table cell can
+// carry exactly one colour — a partially highlighted cell keeps the cell's own
+// colour rather than letting one fragment repaint the whole thing.
+// The click-selection class (hili) is deliberately skipped: it is a cursor,
+// not data, and a gold selection bar frozen into an exported report is noise.
+// A near-white background is dropped so ordinary rows keep the table's own
+// banding instead of being flooded with flat white.
+let _pdfStyCache={}
+let _rgb=s=>{
+let m=/^rgba?\(\s*([\d.]+)[,\s]+([\d.]+)[,\s]+([\d.]+)\s*(?:[,/]\s*([\d.]+)\s*)?\)$/.exec(s||'')
+if(!m)return null
+if(m[4]!==undefined&&parseFloat(m[4])===0)return null
+return [Math.round(+m[1]),Math.round(+m[2]),Math.round(+m[3])]
+}
+let _nearWhite=c=>!!c&&c[0]>=250&&c[1]>=250&&c[2]>=250
+// Colour here is entirely class-driven, so cells are cached by class
+// signature: a 640-entry defect log resolves two or three distinct signatures
+// instead of making thousands of getComputedStyle calls during export.
+let _cellStyle=c=>{
+let txt=c.textContent.trim()
+let kids=c.children
+let solo=(kids.length===1&&txt&&kids[0].textContent.trim()===txt)?kids[0]:null
+let key=c.tagName+'|'+c.className+'|'+(c.parentElement?c.parentElement.className:'')+'|'+(solo?solo.tagName+'.'+solo.className:'')
+if(_pdfStyCache[key]!==undefined)return _pdfStyCache[key]
+// .hili paints blue-on-gold for the click cursor, so the cell must be read
+// through to the element above it to get the colour it shows unselected.
+let host=c
+while(host&&host.classList&&host.classList.contains('hili')&&host.parentElement)host=host.parentElement
+let fg=_rgb(getComputedStyle(host).color),bg=null
+for(let e=c;e&&e.tagName!=='BODY';e=e.parentElement){
+if(e.classList&&e.classList.contains('hili'))continue
+bg=_rgb(getComputedStyle(e).backgroundColor)
+if(bg)break
+}
+if(solo&&!(solo.classList&&solo.classList.contains('hili'))){
+let cs=getComputedStyle(solo)
+let sf=_rgb(cs.color);if(sf)fg=sf
+let sb=_rgb(cs.backgroundColor);if(sb)bg=sb
+}
+let out={}
+if(fg)out.textColor=fg
+if(bg&&!_nearWhite(bg))out.fillColor=bg
+out=(out.textColor||out.fillColor)?out:null
+_pdfStyCache[key]=out
+return out
+}
+
 GetTableData=()=>{
 let rows=Array.from(G('rTab').rows).filter(r=>getComputedStyle(r).display!='none')
 let headerCols=rows[0]?rows[0].cells.length:0
@@ -3476,11 +3526,17 @@ let headers=Array.from(rows[headerRowIdx].cells).map(c=>_cellText(c))
 let isCompareMode=!!A2
 let body=rows.slice(headerRowIdx+1).map(r=>{
 let isDiff=r.classList.contains('cmpDiff')
+// sty is keyed by the column a cell *starts* at, not by its position in the
+// row, so colSpan cells line up with autoTable's column.index in didParseCell.
+let sty={},ci=0
 let cells=Array.from(r.cells).map(c=>{
 let span=c.colSpan||1,txt=_cellText(c).replaceAll('\u0394','Delta ')
+let cs=_cellStyle(c)
+if(cs)sty[ci]=cs
+ci+=span
 return span>1?{content:txt,colSpan:span}:txt
 })
-return {cells,isDiff}
+return {cells,isDiff,sty}
 })
 return {headers,body,isCompareMode,preNotes}
 }
@@ -3660,6 +3716,7 @@ for(let ti=0;ti<ArIx.length/2;ti++){
 DpT(ti)
 let{headers,body,isCompareMode,preNotes}=GetTableData()
 let diffFlags=body.map(r=>r.isDiff)
+let rowStyles=body.map(r=>r.sty)
 let nCols=headers.length
 let noteLines=preNotes||[]
 let tableTop=70+(noteLines.length?noteLines.length*10+6:0)
@@ -3704,7 +3761,16 @@ styles:{fontSize:7,cellPadding:2,overflow:'linebreak'},
 headStyles:{fillColor:[26,95,168],fontSize:7},
 margin:{top:tableTop,bottom:55,left:20,right:20},columnStyles:colStyles,
 didParseCell:(data)=>{
-if(data.section==='body'&&diffFlags[data.row.index]){
+if(data.section!=='body')return
+// Screen colours first, then the compare-mode diff highlight on top: a diff is
+// a property of the comparison rather than of the source table, so it has to
+// win over whatever colour the cell happened to carry in the viewer.
+let sc=rowStyles[data.row.index]&&rowStyles[data.row.index][data.column.index]
+if(sc){
+if(sc.textColor)data.cell.styles.textColor=sc.textColor
+if(sc.fillColor)data.cell.styles.fillColor=sc.fillColor
+}
+if(diffFlags[data.row.index]){
 data.cell.styles.fillColor=[255,220,220]
 if(data.column.index===nCols-1){data.cell.styles.textColor=[180,0,0];data.cell.styles.fontStyle='bold'}
 }},
