@@ -63,7 +63,7 @@ td button:not(.nbtn),th button{width:20px;height:20px}
   <span style='display:flex;align-items:center;gap:8px'>
   <span id='scanElapsed' title='Time elapsed since the current scan started (resets on each Scan click)' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
   <span id='lifetimeStats' title='How many times a template has been displayed while stepping/playing through results, across all Scan clicks this session' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
-  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260806e</span>
+  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260806f</span>
   </span>
 </div>
 <input id='local'type='file'style='display:none'onchange='OpFl()'>
@@ -3635,18 +3635,112 @@ let isCmp=!!A2
 let masterDoc=new jsPDF({orientation:isCmp?'l':'p',unit:'pt',format:'letter'})
 let pw=masterDoc.internal.pageSize.getWidth()
 let ph=masterDoc.internal.pageSize.getHeight()
-let pageNum=0
 let genDt=(new Date()).toLocaleString()
 let htmlName=location.pathname.split('/').pop()||'diskview.html'
+let bldEl=document.querySelector("[title='Build version']")
+let bld=bldEl?bldEl.textContent.trim():''
 let fl=(CurFile||'DriveAnalyzer').replace(/\.[^.]*$/,'').replace('fakepath','Bin')+(isCmp?'_compare':'')
 let trunc=s=>s.length>40?s.slice(0,37)+'...':s
 let t1=isCmp?'COMPARE: "'+trunc(CurFile)+'" vs "'+trunc(CurFile2)+'"':'DA Drive Analyzer: "'+CurFile+'"'
 let t2=G('dvTitle').innerText
 
-// ── Introduction page ────────────────────────────────────────────────────────
+// ── Report palette ───────────────────────────────────────────────────────────
+// One brand blue, one ink, one muted grey, one rule grey. Holding the whole
+// document to four colours is what keeps it looking like a report once the
+// per-cell data colours from the viewer are layered on top; every extra accent
+// colour competes with the data for attention.
+let BRAND=[26,95,168],INK=[34,34,34],MUTE=[110,120,132],RULE=[214,221,230],DIFF=[180,0,0]
+let SetFill=c=>masterDoc.setFillColor(c[0],c[1],c[2])
+let SetText=c=>masterDoc.setTextColor(c[0],c[1],c[2])
+let SetDraw=c=>masterDoc.setDrawColor(c[0],c[1],c[2])
+
+// Page labels and geometry are recorded as pages are produced so the footer can
+// be stamped in a second pass, once the real page total exists. Writing
+// 'Page 3 of 41' during generation is impossible — the total is not known yet —
+// and jsPDF's placeholder substitution visibly shifts centred text when the
+// digit count changes, so a second pass is both simpler and better aligned.
+let pageMeta={}
+let RegPage=(label,w,h)=>{pageMeta[masterDoc.internal.getCurrentPageInfo().pageNumber]={label:label,w:w,h:h}}
+
+// Shared page chrome. A hairline under the header is what separates a report
+// from a stack of loose tables; the header itself stays small and grey so the
+// table keeps the visual weight.
+let DrawHead=(label,w)=>{
+let maxw=w-170
+masterDoc.setFont(undefined,'bold');masterDoc.setFontSize(8);SetText(INK)
+let ttl=t1
+if(masterDoc.getTextWidth(ttl)>maxw){while(ttl.length>8&&masterDoc.getTextWidth(ttl+'\u2026"')>maxw)ttl=ttl.slice(0,-1);ttl+='\u2026"'}
+masterDoc.text(ttl,20,30)
+masterDoc.setFont(undefined,'normal');masterDoc.setFontSize(7.5);SetText(MUTE)
+masterDoc.text(masterDoc.splitTextToSize(t2||'',maxw)[0]||'',20,40)
+masterDoc.setFont(undefined,'bold');masterDoc.setFontSize(8);SetText(BRAND)
+masterDoc.text(label,w-20,30,{align:'right'})
+if(isCmp){masterDoc.setFont(undefined,'normal');masterDoc.setFontSize(7);SetText(DIFF);masterDoc.text('\u2588 = differs',w-20,40,{align:'right'})}
+SetDraw(RULE);masterDoc.setLineWidth(0.5);masterDoc.line(20,46,w-20,46)
+SetText(INK);masterDoc.setFont(undefined,'normal')
+}
+
+// ── Cover ────────────────────────────────────────────────────────────────────
+let hdr1=SAll.split('h\n')[0],HF=n=>(CmpField(hdr1,n)||'').trim(),DASH='\u2014'
+let capB=HF('Capacity')
+let capTxt=capB?Math.round(Number(capB)/1e9).toLocaleString('en-US')+' GB  ('+Number(capB).toLocaleString('en-US')+' bytes)':DASH
+// The header's Model Number and Serial Number describe the host appliance, not
+// the drive — reading them as drive identity is the most consequential mistake
+// this report could make, so the drive model is read from the IDENTIFY /
+// Identify-Controller template and the host fields are labelled as host.
+let drvModel=''
+try{drvModel=GetDriveModel(A,ArIx,From)||''}catch(e){drvModel=''}
+let slotTxt=((HF('Slot Number')?'#'+HF('Slot Number'):'')+(HF('Slot Name')?'  '+HF('Slot Name'):'')).trim()
+let covRows=[
+['Interface',HF('Interface')||DASH],
+['Drive model',drvModel||DASH],
+['Capacity',capTxt],
+['Drive status',HF('Drive Status')||DASH],
+['Capture date',[HF('Date'),HF('Time')].filter(x=>x).join('  ')||DASH],
+['Host system',(HF('Model Number')||DASH)+(HF('Product Type')?'  ('+HF('Product Type')+')':'')],
+['Host firmware',HF('Firmware Version')||DASH],
+['Drive slot',slotTxt||DASH],
+['Records',(ArIx.length/2)+' templates']
+]
+let CL=56,CRt=pw-56
+SetFill(BRAND);masterDoc.rect(0,0,pw,7,'F')
+masterDoc.setFont(undefined,'normal');masterDoc.setFontSize(8);SetText(MUTE)
+masterDoc.text(isCmp?'DRIVE HEALTH DATA \u2014 COMPARISON REPORT':'DRIVE HEALTH DATA REPORT',CL,118)
+masterDoc.setFont(undefined,'bold');masterDoc.setFontSize(26);SetText(INK)
+masterDoc.text('DA Drive Analyzer',CL,152)
+masterDoc.setFont(undefined,'normal');masterDoc.setFontSize(11);SetText(BRAND)
+let cy=176
+masterDoc.splitTextToSize(CurFile,CRt-CL).slice(0,2).forEach(ln=>{masterDoc.text(ln,CL,cy);cy+=14})
+if(isCmp){
+masterDoc.setFontSize(9);SetText(MUTE);masterDoc.text('compared with',CL,cy+2);cy+=16
+masterDoc.setFontSize(11);SetText(BRAND)
+masterDoc.splitTextToSize(CurFile2,CRt-CL).slice(0,2).forEach(ln=>{masterDoc.text(ln,CL,cy);cy+=14})
+}
+cy+=14
+SetDraw(RULE);masterDoc.setLineWidth(0.8);masterDoc.line(CL,cy,CRt,cy);cy+=28
+covRows.forEach(r=>{
+masterDoc.setFont(undefined,'normal');masterDoc.setFontSize(7.5);SetText(MUTE)
+masterDoc.text(String(r[0]).toUpperCase(),CL,cy)
+masterDoc.setFontSize(10);SetText(INK)
+masterDoc.splitTextToSize(String(r[1]),CRt-CL-140).slice(0,2).forEach((ln,li)=>masterDoc.text(ln,CL+140,cy+li*12))
+cy+=23
+})
+let fy=ph-96
+SetDraw(RULE);masterDoc.setLineWidth(0.5);masterDoc.line(CL,fy,CRt,fy);fy+=17
+masterDoc.setFont(undefined,'bold');masterDoc.setFontSize(9);SetText(INK)
+masterDoc.text('ULINK Technology',CL,fy);fy+=13
+masterDoc.setFont(undefined,'normal');masterDoc.setFontSize(8);SetText(MUTE)
+masterDoc.text('Copyright 2026',CL,fy);fy+=11
+masterDoc.text('Generated '+genDt,CL,fy);fy+=11
+masterDoc.text(htmlName+(bld?'  \u00b7  '+bld:''),CL,fy)
+RegPage('Cover',pw,ph)
+
+// ── Introduction ─────────────────────────────────────────────────────────────
 let s=SAll.toLowerCase(),i1=s.indexOf('record '),i2=s.indexOf('end')-3,i=0,l,n=ArIx.length/2,t
 let lm=(G('local').files[0]&&G('local').files[0].lastModifiedDate)?G('local').files[0].lastModifiedDate.toUTCString():'N/A'
-let SI='DA Drive Analyzer\nCompany: ULINK Technology, Copyright 2026\nFile 1: '+CurFile+'\nBin File Date: '+lm+'\nPDF Date: '+genDt
+// Title, company and generation date now live on the cover, so repeating them
+// here would just be a second, worse cover.
+let SI='Source file: '+CurFile+'\nBin file date: '+lm
 if(isCmp)SI+='\n\nCOMPARE MODE\nFile 2: '+CurFile2
 SI+='\n\nStart of Bin File:'+SAll.substring(0,i1)
 do{
@@ -3658,27 +3752,30 @@ do{
   SI+=t
 }while(i1<i2)
 let _introLines=masterDoc.splitTextToSize(SI,pw-40)
-let _iy=58,_ibot=ph-58,_drawIntroChrome=()=>{
-pageNum++
-masterDoc.setFontSize(10);masterDoc.setTextColor(128,128,128)
-masterDoc.text('Introduction',pw-20,40,{align:'right'})
-masterDoc.setFontSize(9);masterDoc.setTextColor(80,80,80)
-masterDoc.text('Page '+pageNum+' - Introduction',pw/2,ph-20,{align:'center'})
-masterDoc.setFontSize(8);masterDoc.text('Generated '+genDt+' - '+htmlName,pw/2,ph-10,{align:'center'})
-masterDoc.setTextColor(0,0,0);masterDoc.setFontSize(9)
+let _iy=0,_ibot=ph-62,_first=1,_drawIntroChrome=()=>{
+RegPage('Introduction',pw,ph)
+DrawHead('Introduction',pw)
+if(_first){
+masterDoc.setFont(undefined,'bold');masterDoc.setFontSize(13);SetText(INK)
+masterDoc.text('Introduction',20,72)
+_iy=94;_first=0
+}else _iy=64
+masterDoc.setFont(undefined,'normal');masterDoc.setFontSize(9);SetText(INK)
 }
+masterDoc.addPage()
 _drawIntroChrome()
-masterDoc.setFontSize(9)
 _introLines.forEach(ln=>{
-if(_iy>_ibot){masterDoc.addPage();_iy=58;_drawIntroChrome()}
+if(_iy>_ibot){masterDoc.addPage();_drawIntroChrome()}
 masterDoc.text(ln,20,_iy);_iy+=11
 })
 
 // ── Compare Summary page ─────────────────────────────────────────────────────
 if(isCmp){
-masterDoc.addPage();pageNum++
-masterDoc.setFontSize(13);masterDoc.setFont(undefined,'bold');masterDoc.setTextColor(0,0,0)
-masterDoc.text('Compare Summary',20,58)
+masterDoc.addPage()
+RegPage('Compare Summary',pw,ph)
+DrawHead('Compare Summary',pw)
+masterDoc.setFontSize(13);masterDoc.setFont(undefined,'bold');SetText(INK)
+masterDoc.text('Compare Summary',20,72)
 let fields=['Date & Time','Model Number','Serial Number','Capacity','Interface','Bus Type','Is HDD']
 let d1c=CmpField(SAll.split('h\n')[0],'Date'),t1c=CmpField(SAll.split('h\n')[0],'Time'),d2c=CmpField(Hdr2,'Date'),t2c=CmpField(Hdr2,'Time')
 let _dtV1=(d1c||'')+(t1c?' '+t1c:''),_dtV2=(d2c||'')+(t2c?' '+t2c:'')
@@ -3693,22 +3790,18 @@ return{label:fn,v1,v2,diff:v1!==v2}
 masterDoc.autoTable({
 head:[['Field','File 1: '+CurFile,'File 2: '+CurFile2]],
 body:cmpRows.map(r=>[{content:r.label,styles:{fontStyle:'bold'}},r.v1,r.v2]),
-theme:'grid',startY:68,
-styles:{fontSize:9,cellPadding:5,overflow:'linebreak'},
-headStyles:{fillColor:[26,95,168],fontSize:9,fontStyle:'bold'},
+theme:'grid',startY:88,
+styles:{fontSize:9,cellPadding:5,overflow:'linebreak',textColor:INK,lineColor:RULE,lineWidth:0.5},
+headStyles:{fillColor:BRAND,textColor:[255,255,255],fontSize:9,fontStyle:'bold',lineColor:BRAND},
 columnStyles:{0:{cellWidth:90},1:{cellWidth:'auto'},2:{cellWidth:'auto'}},
 didParseCell:(data)=>{
 if(data.section==='body'&&cmpRows[data.row.index]&&cmpRows[data.row.index].diff){
-data.cell.styles.fillColor=[255,220,220];data.cell.styles.textColor=[180,0,0];data.cell.styles.fontStyle='bold'
-}},margin:{top:50,bottom:55}
+data.cell.styles.fillColor=[255,220,220];data.cell.styles.textColor=DIFF;data.cell.styles.fontStyle='bold'
+}},margin:{top:60,bottom:52}
 })
-let legendY=masterDoc.lastAutoTable.finalY+14
-masterDoc.setFontSize(8);masterDoc.setTextColor(180,0,0)
-masterDoc.text('\u2588 Red = differs between files',20,legendY)
-masterDoc.setTextColor(80,80,80)
-masterDoc.text('Page '+pageNum+' - Compare Summary',pw/2,ph-20,{align:'center'})
-masterDoc.setFontSize(8);masterDoc.text('Generated '+genDt+' - '+htmlName,pw/2,ph-10,{align:'center'})
-masterDoc.setTextColor(0,0,0)
+masterDoc.setFontSize(8);SetText(DIFF)
+masterDoc.text('\u2588 Red = differs between files',20,masterDoc.lastAutoTable.finalY+14)
+SetText(INK)
 }
 
 // ── Template pages ────────────────────────────────────────────────────────────
@@ -3719,7 +3812,7 @@ let diffFlags=body.map(r=>r.isDiff)
 let rowStyles=body.map(r=>r.sty)
 let nCols=headers.length
 let noteLines=preNotes||[]
-let tableTop=70+(noteLines.length?noteLines.length*10+6:0)
+let tableTop=62+(noteLines.length?noteLines.length*10+8:0)
 
 let processedBody=body.map((row,ri)=>{
 let cells=row.cells.slice()
@@ -3740,26 +3833,29 @@ styles:{textColor:[120,120,120],fontStyle:'italic',halign:'center'}}]]
 // Portrait unless the table genuinely needs the extra width: either it cannot
 // fit without breaking words, or it is a wide grid table whose readability
 // depends on column alignment. Narrow Item/Index/Value tables stay portrait.
-let PORTW=612,LANDW=792,portAvail=PORTW-40
-let probe=PdfColLayout(masterDoc,headers,processedBody,portAvail,7,2)
+let PORTW=612,LANDW=792,portAvail=PORTW-40,CPAD=2.5
+let probe=PdfColLayout(masterDoc,headers,processedBody,portAvail,7,CPAD)
 let useLand=isCmp||probe.minTotal>portAvail||(nCols>=6&&probe.natTotal>portAvail)
 let pgW=useLand?LANDW:PORTW,pgH=useLand?PORTW:792
-let layout=useLand?PdfColLayout(masterDoc,headers,processedBody,pgW-40,7,2):probe
+let layout=useLand?PdfColLayout(masterDoc,headers,processedBody,pgW-40,7,CPAD):probe
 let colStyles={}
 layout.widths.forEach((w,ci)=>{colStyles[ci]={cellWidth:w}})
 
 let tmplName='Template'+('00'+ArIx[ti*2]).substr(-3)+(isCmp?' (Cmp)':'')
 masterDoc.addPage('letter',useLand?'landscape':'portrait')
 if(noteLines.length){
-masterDoc.setFontSize(8);masterDoc.setFont(undefined,'normal');masterDoc.setTextColor(50,50,50)
-noteLines.forEach((line,li)=>masterDoc.text(line,20,58+li*10,{maxWidth:pgW-40}))
-masterDoc.setTextColor(0,0,0)
+masterDoc.setFontSize(8);masterDoc.setFont(undefined,'normal');SetText(MUTE)
+noteLines.forEach((line,li)=>masterDoc.text(line,20,60+li*10,{maxWidth:pgW-40}))
+SetText(INK)
 }
 masterDoc.autoTable({
 head:[headers],body:processedBody,theme:'striped',
-styles:{fontSize:7,cellPadding:2,overflow:'linebreak'},
-headStyles:{fillColor:[26,95,168],fontSize:7},
-margin:{top:tableTop,bottom:55,left:20,right:20},columnStyles:colStyles,
+styles:{fontSize:7,cellPadding:CPAD,overflow:'linebreak',textColor:INK},
+headStyles:{fillColor:BRAND,textColor:[255,255,255],fontStyle:'bold',fontSize:7,cellPadding:3},
+// A near-white blue-grey band separates rows without the heavy grey of the
+// default stripe, which would otherwise fight the data colours sitting on top.
+alternateRowStyles:{fillColor:[246,248,251]},
+margin:{top:tableTop,bottom:52,left:20,right:20},columnStyles:colStyles,
 didParseCell:(data)=>{
 if(data.section!=='body')return
 // Screen colours first, then the compare-mode diff highlight on top: a diff is
@@ -3772,34 +3868,36 @@ if(sc.fillColor)data.cell.styles.fillColor=sc.fillColor
 }
 if(diffFlags[data.row.index]){
 data.cell.styles.fillColor=[255,220,220]
-if(data.column.index===nCols-1){data.cell.styles.textColor=[180,0,0];data.cell.styles.fontStyle='bold'}
+if(data.column.index===nCols-1){data.cell.styles.textColor=DIFF;data.cell.styles.fontStyle='bold'}
 }},
 didDrawPage:()=>{
-pageNum++
-masterDoc.setFontSize(9);masterDoc.setFont(undefined,'bold');masterDoc.setTextColor(0,0,0)
-// Long bin filenames used to wrap onto a second line here and collide with the
-// subtitle at y=26, so the title is clipped to a single measured line instead.
-let _t1w=pgW-190,_t1=t1
-if(masterDoc.getTextWidth(_t1)>_t1w){
-while(_t1.length>8&&masterDoc.getTextWidth(_t1+'\u2026"')>_t1w)_t1=_t1.slice(0,-1)
-_t1+='\u2026"'
-}
-masterDoc.text(_t1,20,15)
-masterDoc.setFontSize(8);masterDoc.setFont(undefined,'normal')
-masterDoc.text(masterDoc.splitTextToSize(t2,pgW-190)[0],20,26)
-masterDoc.setFontSize(9);masterDoc.setTextColor(128,128,128);masterDoc.text(tmplName,pgW-20,40,{align:'right'})
-if(isCmp){masterDoc.setFontSize(7);masterDoc.setTextColor(180,0,0);masterDoc.text('\u2588=diff',pgW-20,50,{align:'right'})}
-masterDoc.setFontSize(9);masterDoc.setTextColor(80,80,80)
-masterDoc.text('Page '+pageNum+' - '+tmplName,pgW/2,pgH-20,{align:'center'})
-masterDoc.setFontSize(8);masterDoc.text('Generated '+genDt+' - '+htmlName,pgW/2,pgH-10,{align:'center'})
-masterDoc.setTextColor(0,0,0)
+RegPage(tmplName,pgW,pgH)
+DrawHead(tmplName,pgW)
 }
 })
 }
+
+// ── Footer pass ──────────────────────────────────────────────────────────────
+// Runs only once every page exists, so 'Page 7 of 41' is exact and centred on
+// its true width. The cover is counted in the total but carries no footer.
+let total=masterDoc.internal.getNumberOfPages()
+for(let p=1;p<=total;p++){
+masterDoc.setPage(p)
+let m=pageMeta[p]||{label:'',w:pw,h:ph}
+if(m.label==='Cover')continue
+SetDraw(RULE);masterDoc.setLineWidth(0.5);masterDoc.line(20,m.h-34,m.w-20,m.h-34)
+masterDoc.setFont(undefined,'normal');masterDoc.setFontSize(7);SetText(MUTE)
+masterDoc.text(m.label||'',20,m.h-22)
+masterDoc.text(genDt,m.w-20,m.h-22,{align:'right'})
+masterDoc.setFontSize(7.5);SetText(INK)
+masterDoc.text('Page '+p+' of '+total,m.w/2,m.h-22,{align:'center'})
+}
+
 DpT(TxSave)
 masterDoc.save(fl+'.pdf')
 W(G('nVer'),'PDF ready \u2014 '+fl+'.pdf')
 }
+
 MO=async(e,fl)=>{}
 
 W=(x,y)=>{if(x)x.innerHTML=y}
