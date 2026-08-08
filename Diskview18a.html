@@ -47,6 +47,8 @@ td button:not(.nbtn),th button{width:20px;height:20px}
 #rTab.t1012 .noLbl{color:#000;text-align:left}
 #rTab th{text-align:left}
 #rTab tr.cmpDiff,#rTab td.cmpDiff{background:#ffe0e0}
+#rTab tr.hili>td{background:#fff3b0}
+#rTab tr.hili>td.cmpDiff{background:#ffd9a0}
 #rTab td.cmpCol,#rTab th.cmpCol{border-left:2px solid #999}
 #rTab.t1012 th:first-child{text-align:left}
 #rTab tr:last-child td:last-child{word-break:break-all}
@@ -63,7 +65,7 @@ td button:not(.nbtn),th button{width:20px;height:20px}
   <span style='display:flex;align-items:center;gap:8px'>
   <span id='scanElapsed' title='Time elapsed since the current scan started (resets on each Scan click)' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
   <span id='lifetimeStats' title='How many times a template has been displayed while stepping/playing through results, across all Scan clicks this session' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
-  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260807f</span>
+  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260807g</span>
   </span>
 </div>
 <input id='local'type='file'style='display:none'onchange='OpFl()'>
@@ -1118,7 +1120,15 @@ EscH=s=>String(s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]))
 // Hovering a header field highlights the bytes it occupies, the same gesture
 // the template views already use. The header is ASCII, so a character offset in
 // the decoded text is a byte offset in the file.
-HdrHi=(o,l)=>{NoHiLi();HiLi(1,o-1,l)}
+// Marks the clicked row as selected as well as highlighting its bytes, so the
+// decode side shows which entry the binary pane is currently pointing at. Uses
+// the same 'hili' class the template views use for row selection, which the PDF
+// colour extraction already ignores as transient cursor state.
+HdrHi=(row,o,l)=>{
+NoHiLi()
+Q('#rTab>tbody>tr').forEach(e=>e.classList.remove('hili'))
+if(row&&row.classList)row.classList.add('hili')
+HiLi(1,o-1,l)}
 // Only decodes what the value actually determines. Fields whose encoding isn't
 // established (Slot Form Factor ID, Attribute, Rack/Slot numbering) are left
 // blank on purpose — a guessed mapping in a drive-health report is worse than
@@ -1206,7 +1216,7 @@ return
 }
 // Click, not hover: every other template view highlights its bytes on click,
 // and passing the pointer over a row is not a request to move the binary pane.
-let row="<tr style='cursor:pointer' onclick='HdrHi("+off+","+len+")'>"
+let row="<tr style='cursor:pointer' onclick='HdrHi(this,"+off+","+len+")'>"
 if(!cmp)row+="<td>"+EscH(k)+"</td><td>"+U(off,2)+"</td><td>"+EscH(v)+"</td><td>"+d+"</td>"
 else{
 let e2=map2.get(k),has=!!e2,v2=has?e2.v:''
@@ -1246,7 +1256,7 @@ let r=recs[no],bi=r.byteindex||'',ln=r.length||'',tp=r.template||''
 let r2=recs2?recs2[no]:null
 let diff=cmp&&(!r2||r2.length!==ln||r2.template!==tp||r2.byteindex!==bi)
 let bx=b=>EscH(b)+(b&&isFinite(Number(b))?" <span style='color:#888'>(0x"+U(Number(b),2)+")</span>":"")
-qr+="<tr style='cursor:pointer' onclick='HdrHi("+r.off+","+r.len+")'><td>Record "+EscH(no)+"</td>"
+qr+="<tr style='cursor:pointer' onclick='HdrHi(this,"+r.off+","+r.len+")'><td>Record "+EscH(no)+"</td>"
 +"<td>"+bx(bi)+"</td>"
 +"<td"+(diff?" class='cmpDiff'":"")+">"+EscH(ln)+"</td><td>"+tname(tp)+"</td>"
 if(cmp)qr+="<td class='cmpCol'>"+(r2?bx(r2.byteindex||''):"<span style='color:#aaa'>N/A</span>")+"</td>"
@@ -3884,13 +3894,23 @@ nat[i]=doc.getTextWidth(String(headers[i]))+pad
 min[i]=_pdfTokenW(doc,headers[i])+pad
 }
 doc.setFont(undefined,'normal')
+// Widths were taken from the widest cell in each column, so one outlier row set
+// the width for all of them: Template334's single long vendor string pushed its
+// Value column past a quarter of the page while eleven two-character values sat
+// in it and the Item labels wrapped for want of the same space.
+// The typical width is used instead — the 85th percentile of the column's cells
+// — so the column fits almost everything and the rare long value wraps, which
+// is the cheaper compromise. `min` still tracks the true longest token, so no
+// column is ever sized below what it must fit without breaking a word.
+let colW=[]
+for(let i=0;i<n;i++)colW.push([])
 body.forEach(cells=>{
 let ci=0
 cells.forEach(c=>{
 let span=(c&&typeof c=='object'&&c.colSpan)?c.colSpan:1
 let txt=_pdfCellText(c)
 if(span==1&&ci<n){
-nat[ci]=Math.max(nat[ci],doc.getTextWidth(txt)+pad)
+colW[ci].push(doc.getTextWidth(txt)+pad)
 min[ci]=Math.max(min[ci],_pdfTokenW(doc,txt)+pad)
 }
 // span>1 cells are laid out across several columns, so they must not inflate
@@ -3898,6 +3918,15 @@ min[ci]=Math.max(min[ci],_pdfTokenW(doc,txt)+pad)
 ci+=span
 })
 })
+for(let i=0;i<n;i++){
+let w=colW[i]
+if(!w.length)continue
+w.sort((a,b)=>a-b)
+// Below a handful of rows a percentile is meaningless — one of four rows being
+// long is not an outlier — so short columns keep the widest cell.
+let pick=w.length<8?w[w.length-1]:w[Math.min(w.length-1,Math.floor(w.length*0.85))]
+nat[i]=Math.max(nat[i],pick)
+}
 // No single column may claim the whole page up front, or one long annotation
 // column would starve every other column before the fit is even attempted.
 let cap=avail*0.55,raw=nat.slice()
@@ -4127,6 +4156,30 @@ masterDoc.setFontSize(8);masterDoc.setFont(undefined,'normal');SetText(MUTE)
 noteLines.forEach((line,li)=>masterDoc.text(line,MG,60+li*10,{maxWidth:pgW-MG*2}))
 SetText(INK)
 }
+// The defect-list templates (T332 G-list, T333 P-list) carry a per-head summary
+// above the entry list on screen. It is the part a reader actually acts on —
+// which head is shedding sectors — so it belongs in the report rather than only
+// in the viewer. In compare mode File 2's copy is emitted directly beneath.
+let _defSrc=[[G('defectSum'),isCmp?'Defect Summary by Head \u2014 File 1: '+CurFile:'Defect Summary by Head']]
+if(isCmp)_defSrc.push([G('defectSum2'),'Defect Summary by Head \u2014 File 2: '+CurFile2])
+let _startY=tableTop
+_defSrc.forEach(([el,title])=>{
+if(!el)return
+let t=el.querySelector('table');if(!t)return
+let dr=Array.from(t.rows).map(r=>Array.from(r.cells).map(c=>c.textContent.trim()))
+if(dr.length<2)return
+masterDoc.setFontSize(9);masterDoc.setFont(undefined,'bold');SetText(INK)
+masterDoc.text(title,MG,_startY+2)
+masterDoc.autoTable({
+head:[dr[0]],body:dr.slice(1),theme:'grid',startY:_startY+8,tableWidth:'wrap',
+styles:{fontSize:7,cellPadding:2,textColor:INK,lineColor:RULE,lineWidth:0.5,halign:'right'},
+headStyles:{fillColor:BRAND,textColor:[255,255,255],fontSize:7,fontStyle:'bold',halign:'center',lineColor:BRAND},
+columnStyles:{0:{halign:'center'}},
+margin:{top:62,bottom:52,left:MG,right:MG},
+didDrawPage:()=>{RegPage(label,pgW,pgH);DrawHead(label,pgW)}
+})
+_startY=masterDoc.lastAutoTable.finalY+16
+})
 masterDoc.autoTable({
 head:headRows,body:processedBody,theme:'striped',
 styles:{fontSize:7,cellPadding:CPAD,overflow:'linebreak',textColor:INK},
@@ -4134,6 +4187,7 @@ headStyles:{fillColor:BRAND,textColor:[255,255,255],fontStyle:'bold',fontSize:7,
 // A near-white blue-grey band separates rows without the heavy grey of the
 // default stripe, which would otherwise fight the data colours sitting on top.
 alternateRowStyles:{fillColor:[246,248,251]},
+startY:_startY>tableTop?_startY:undefined,
 margin:{top:tableTop,bottom:52,left:MG,right:MG},columnStyles:colStyles,
 didParseCell:(data)=>{
 if(data.section!=='body')return
