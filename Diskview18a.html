@@ -88,7 +88,7 @@ body.guideOpen #guideDoc{overflow:visible;padding:0}
   <span style='display:flex;align-items:center;gap:8px'>
   <span id='scanElapsed' title='Time elapsed since the current scan started (resets on each Scan click)' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
   <span id='lifetimeStats' title='How many times a template has been displayed while stepping/playing through results, across all Scan clicks this session' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
-  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260807k</span>
+  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260807m</span>
   </span>
 </div>
 <input id='local'type='file'style='display:none'onchange='OpFl()'>
@@ -792,7 +792,9 @@ ix1=s.indexOf("\n",ix)
 ArIx.push(s.substr(ix+10,ix1-ix-10)-0)
 ArIx.push(len)
 }
-y=arS[0].slice(G('host').innerHTML==''?0:1).
+// Escape the capture's text first, then add our own markup — otherwise the
+// header itself can carry tags into the pane.
+y=EscH(arS[0].slice(G('host').innerHTML==''?0:1)).
 replaceAll(/template/ig,"<a onclick='DpT()'>template</a>").replaceAll("\n","<br>")+"h"
 for(i=0;i<ArIx.length/2;i++)y=y.replace("DpT()","DpT("+i+")")
 if(y.substr(0,4)=='<br>')y=y.substr(4)
@@ -1253,6 +1255,17 @@ W(G('lTab'),qr)}
 // right, and it flows through the existing CSV export untouched.
 HdrView=false
 EscH=s=>String(s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]))
+// Every template builds its rows by concatenating strings into innerHTML, and
+// much of what goes in comes straight out of the .bin — model numbers, vendor
+// strings, ASCII blocks. A printable-range filter (32..126) lets '<' and '>'
+// through, so a crafted capture could put real markup into the page: an
+// injected element runs script in this page's origin, and this origin's
+// IndexedDB holds the Scan directory handle, which would let it read the whole
+// capture folder. Escaping at the byte-to-character step closes that for every
+// template at once, including any added later, rather than relying on each
+// call site to remember. The DOM still ends up holding the true character, so
+// PDF export, CSV and compare all see the real value.
+AscCh=c=>c===38?'&amp;':c===60?'&lt;':c===62?'&gt;':String.fromCharCode(c)
 // Hovering a header field highlights the bytes it occupies, the same gesture
 // the template views already use. The header is ASCII, so a character offset in
 // the decoded text is a byte offset in the file.
@@ -1665,20 +1678,20 @@ let hex='';for(let k=7;k>=0;k--)hex+=U(A[F+off+k]*1,1)
 val=hex
 }else if(ty=='ascii'){
 let fq=FarmVal(off),s=''
-for(let k=6;k>=0;k--)s+=(A[F+off+k]>=32&&A[F+off+k]<=126)?String.fromCharCode(A[F+off+k]*1):''
+for(let k=6;k>=0;k--)s+=(A[F+off+k]>=32&&A[F+off+k]<=126)?AscCh(A[F+off+k]*1):''
 val=fq.sup?(s||'(empty)'):'(not supported)'
 }else if(ty=='ascii2'){
 let s=''
-for(let k=6;k>=0;k--)s+=(A[F+off+k]>=32&&A[F+off+k]<=126)?String.fromCharCode(A[F+off+k]*1):''
-for(let k=6;k>=0;k--)s+=(A[F+off+8+k]>=32&&A[F+off+8+k]<=126)?String.fromCharCode(A[F+off+8+k]*1):''
+for(let k=6;k>=0;k--)s+=(A[F+off+k]>=32&&A[F+off+k]<=126)?AscCh(A[F+off+k]*1):''
+for(let k=6;k>=0;k--)s+=(A[F+off+8+k]>=32&&A[F+off+8+k]<=126)?AscCh(A[F+off+8+k]*1):''
 val=s||'(empty)'
 }else if(ty=='model'){
 let s=''
-for(let qi=0;qi<10;qi++)for(let k=6;k>=0;k--)s+=(A[F+off+qi*8+k]>=32&&A[F+off+qi*8+k]<=126)?String.fromCharCode(A[F+off+qi*8+k]*1):''
+for(let qi=0;qi<10;qi++)for(let k=6;k>=0;k--)s+=(A[F+off+qi*8+k]>=32&&A[F+off+qi*8+k]<=126)?AscCh(A[F+off+qi*8+k]*1):''
 val=s.trim()||'(empty)'
 }else if(ty=='yyww'){
 let fq=FarmVal(off),s=''
-for(let k=3;k>=0;k--)s+=(A[F+off+k]>=32&&A[F+off+k]<=126)?String.fromCharCode(A[F+off+k]*1):'?'
+for(let k=3;k>=0;k--)s+=(A[F+off+k]>=32&&A[F+off+k]<=126)?AscCh(A[F+off+k]*1):'?'
 val=fq.hex+(fq.sup?' (20'+s.slice(0,2)+' week '+s.slice(2,4)+')':' (not supported)')
 }else if(ty=='rectype'){
 let sb=A[F+off]*1
@@ -2062,7 +2075,7 @@ let off=0,i
 for(i=0;i<ArIx.length;i+=2){if(ArIx[i]==1)break;off+=ArIx[i+1]}
 if(i>=ArIx.length)return ''
 let s='',k
-for(k=0;k<20;k++)s+=String.fromCharCode(A[off+54+k*2+1]*1)+String.fromCharCode(A[off+54+k*2]*1)
+for(k=0;k<20;k++)s+=AscCh(A[off+54+k*2+1]*1)+AscCh(A[off+54+k*2]*1)
 return s.trim()}
 
 BuildTitle=()=>{
@@ -2304,7 +2317,7 @@ for(k=cr[c];k<cr[c+1];k++)x=x*256+A[F+l+k]*1
 if(c==4&&x==4294967295)x='Defective Track'
 }else for(k=0;k<len;k++)x+=U(A[F+l+k]*1,1)
 Row=0
-if(T==58&&q>7&&q<12){for(k=0,s=x,x='';k<s.length;k+=2)x+=String.fromCharCode(parseInt(s.slice(k,k+2),16))}
+if(T==58&&q>7&&q<12){for(k=0,s=x,x='';k<s.length;k+=2)x+=AscCh(parseInt(s.slice(k,k+2),16))}
 SHex=x
 x=(T==1&&i/3>4||T==23&&(i/3>4||i/3<1)||[24,25,26,27,43,44].includes(T)||T>46||f||f1)?x:DpIxx(range,q)
 if([4,6,7,8,9,20,21].includes(T)){
@@ -2646,7 +2659,7 @@ extraAnno=' (Words230-233='+Cx(lba)+' sectors, '+Cx(gi+(gf>=50n?1n:0n))+' GB)'
 extraAnno=' (Words160-167 are reserved for CFA \u2014 not applicable to standard ATA/SATA hard drives)'
 }else if(T==1&&arS[q]=='Current media serial number'){
 let s='',allZero=true
-for(let k=0;k<x.length;k+=2){let cc=parseInt(x.slice(k,k+2),16);if(cc!=0)allZero=false;s+=(cc>=32&&cc<=126)?String.fromCharCode(cc):''}
+for(let k=0;k<x.length;k+=2){let cc=parseInt(x.slice(k,k+2),16);if(cc!=0)allZero=false;s+=(cc>=32&&cc<=126)?AscCh(cc):''}
 extraAnno=allZero?' (not set by this drive)':' ("'+s.trim()+'")'
 }else if(T==1&&arS[q]=='SCT Command Transport'&&x.length==4){
 let w206=parseInt(x,16),flags=[]
@@ -2694,7 +2707,7 @@ if(T==23){
 if(nm2=='NVM Subsystem NVMe Qualified Name'){
 let bytes=[]
 for(let k=0;k<256;k++){let b=A[F+768+k]*1;if(b==0)break;bytes.push(b)}
-let ascii=bytes.map(b=>String.fromCharCode(b)).join('').trim()
+let ascii=bytes.map(b=>AscCh(b)).join('').trim()
 x=ascii?ascii.slice(0,64):'(not set \u2014 all zero/space)'
 }else if(nm2=='PSD Header'){
 let w=[70,45,50,75,75,40,40,40,40,70,40,70,40,40]
@@ -2750,7 +2763,7 @@ let badge='['+protPfx+'Assoc: '+(assocN[assoc]||assoc)+' | '+(dtypeN[dtype]||'Ty
 // For UTF-8 / ASCII code sets: show ASCII text
 if(cs==2||cs==3){
   let ascii='',done=false
-  for(let k=0;k<b3&&!done;k++){let cc=+A[F+hdrOff+4+k];if(cc==0)done=true;else ascii+=(cc>=32&&cc<=126)?String.fromCharCode(cc):'.'}
+  for(let k=0;k<b3&&!done;k++){let cc=+A[F+hdrOff+4+k];if(cc==0)done=true;else ascii+=(cc>=32&&cc<=126)?AscCh(cc):'.'}
   x='"'+ascii+'" '+badge
 }else if(dtype==3&&b3>=8){
   // NAA identifier: first byte upper nibble is NAA type
@@ -2859,7 +2872,7 @@ x=x+' ('+(ffNames[ff]||'Reserved')+')'
 }
 if(T==58&&len==48){
 let off=a[q]*1,ascii=''
-for(let k=0;k<len;k++){let cc=A[F+off+k]*1;ascii+=(cc>=32&&cc<=126)?String.fromCharCode(cc):'.'}
+for(let k=0;k<len;k++){let cc=A[F+off+k]*1;ascii+=(cc>=32&&cc<=126)?AscCh(cc):'.'}
 x=x+'<br>ASCII: '+ascii
 }
 if([4,6,7,8,9,20,21].includes(T)&&c==3){
@@ -2968,11 +2981,11 @@ else if(T==49)r1=Row%2
 else if(T==50||T==51)r1=0
 else r1=arI[Row].includes("+")?arI[Row].slice(1):Row
 arName=arI[r1].split(",")
-if(T==45){for(;n<SHex.length;n+=2)s+=String.fromCharCode(parseInt(SHex.slice(n,n+2),16));return s}
+if(T==45){for(;n<SHex.length;n+=2)s+=AscCh(parseInt(SHex.slice(n,n+2),16));return s}
 if(T==1&&Row<4||T==23&&Row<4){
 sv=''
 for(n=SHex.length;n>=0;n-=2){
-t=String.fromCharCode(parseInt(SHex.slice(n,n+2),16))
+t=AscCh(parseInt(SHex.slice(n,n+2),16))
 if(T==23)s+=t
 else{if(n%4==2)sv=t;else s+=t+sv}
 }
@@ -2981,8 +2994,8 @@ else{if(n%4==2)sv=t;else s+=t+sv}
 t=(M>45&&M<49)?SHex.slice(8,24):SHex.slice(M>32&&M<37?ArSz[r+(T<18?0:(T<19?4:(T<20?18:27)))]:8)
 if(T!=36||r>1)return t
 let yh=t.slice(0,8),wh=t.slice(8,12),ys='',ws='',yOk=true,wOk=true
-for(n=0;n<8;n+=2){let cc=parseInt(yh.slice(n,n+2),16);if(cc<48||cc>57)yOk=false;ys+=(cc>=32&&cc<=126)?String.fromCharCode(cc):'.'}
-for(n=0;n<4;n+=2){let cc=parseInt(wh.slice(n,n+2),16);if(cc<48||cc>57)wOk=false;ws+=(cc>=32&&cc<=126)?String.fromCharCode(cc):'.'}
+for(n=0;n<8;n+=2){let cc=parseInt(yh.slice(n,n+2),16);if(cc<48||cc>57)yOk=false;ys+=(cc>=32&&cc<=126)?AscCh(cc):'.'}
+for(n=0;n<4;n+=2){let cc=parseInt(wh.slice(n,n+2),16);if(cc<48||cc>57)wOk=false;ws+=(cc>=32&&cc<=126)?AscCh(cc):'.'}
 return 'Year: '+ys+(yOk?'':' (not specified)')+', Week: '+ws+(wOk?'':' (not specified)')
 
 }else{
