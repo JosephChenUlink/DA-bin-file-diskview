@@ -1,0 +1,75 @@
+DA Drive Analyzer — Bin File Viewer
+Copyright (c) 2026 ULINK Technology, Inc. All rights reserved.
+
+
+TERMS OF USE
+
+This software and its accompanying documentation ("the Software") are the
+confidential and proprietary property of ULINK Technology, Inc. ("ULINK").
+The Software is made available for use, not transferred or sold.
+
+You MAY:
+
+  * Use the Software, as hosted by ULINK, to view and analyse DA Drive
+    Analyzer capture files.
+  * Retain the reports it generates, and share those reports freely. Output
+    you create with the Software is yours.
+
+You MAY NOT, without prior written permission from ULINK:
+
+  * Copy, host, republish, redistribute or sublicense the Software, in whole
+    or in part, including on any public or private server.
+  * Create derivative works from it, or incorporate any part of it —
+    including its data-decoding tables, field definitions and interpretation
+    logic — into another product or service.
+  * Remove, obscure or alter this notice or any copyright notice within the
+    Software.
+
+Publication of the Software's source at a public web address is a technical
+consequence of it being a browser-based tool: a web browser cannot run code
+it has not received. Such publication is NOT a grant of licence, does not
+place the Software in the public domain, and does not waive any right.
+
+NO WARRANTY
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
+ULINK BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN
+ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
+WITH THE SOFTWARE OR ITS USE.
+
+The Software reads capture files locally in the browser and transmits no file
+content. It is an analysis aid; it does not constitute a warranty of any
+drive's condition, and decisions about storage hardware remain the user's.
+
+CONTACT
+
+  ULINK Technology, Inc. — https://ulinktech.com
+  joseph.chen@ulinktech.com
+
+
+---------------------------------------------------------------------------
+THIRD-PARTY COMPONENTS
+
+The Software includes the following open-source libraries. They remain the
+property of their respective authors and are used under their own licences,
+which are reproduced in full within the library source embedded in the
+distributed file. The terms above apply to ULINK's own code, NOT to these
+components.
+
+  jsPDF                     MIT License
+                            Copyright (c) 2010-2021 James Hall and
+                            contributors
+                            https://github.com/parallax/jsPDF
+
+  jsPDF-AutoTable           MIT License
+                            Copyright (c) Simon Bengtsson
+                            https://github.com/simonbengtsson/jsPDF-AutoTable
+
+  fflate                    MIT License
+                            Copyright (c) Arjun Barrett
+                            https://github.com/101arrowz/fflate
+
+jsPDF additionally references optional components (html2canvas, canvg) that
+are covered by their own MIT licences where present.
