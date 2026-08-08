@@ -88,7 +88,7 @@ body.guideOpen #guideDoc{overflow:visible;padding:0}
   <span style='display:flex;align-items:center;gap:8px'>
   <span id='scanElapsed' title='Time elapsed since the current scan started (resets on each Scan click)' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
   <span id='lifetimeStats' title='How many times a template has been displayed while stepping/playing through results, across all Scan clicks this session' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
-  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260807i</span>
+  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260807j</span>
   </span>
 </div>
 <input id='local'type='file'style='display:none'onchange='OpFl()'>
@@ -3747,7 +3747,7 @@ _ScanWalkErrors.push((prefix||'(root)')+' — iteration error: '+e.message)
 
 ScanEnsureReady=async()=>{
 if(window.self!==window.top){
-alert('Scan requires the downloaded standalone file.\n\nDownload Diskview18a_standalone.html, open it in Chrome or Edge.')
+alert('Scan is not available while the viewer is embedded in a frame.\n\nOpen the page directly in Chrome or Edge.')
 return false
 }
 // Try to restore dir handle from IndexedDB
@@ -4232,7 +4232,7 @@ W(G('ruSide'),s)}}
 
 GetPDF=z=>{
 if(!window.jspdf||!window.jspdf.jsPDF){
-alert('PDF library (jsPDF) is not loaded.\n\nThis usually happens when:\n1. You are using the in-chat preview — please download the file and open it locally in Chrome.\n2. Your network is blocking the CDN.\n\nSolution: Use the Diskview18a_standalone.html version which has all libraries built-in and works offline.')
+alert('PDF export is unavailable because the PDF library did not load.\n\nReload the page in Chrome or Edge. If it keeps failing, your network may be blocking part of the site.')
 return
 }
 try{PdfAll()}catch(e){alert('PDF generation failed: '+e.message)}
