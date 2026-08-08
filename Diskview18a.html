@@ -88,7 +88,7 @@ body.guideOpen #guideDoc{overflow:visible;padding:0}
   <span style='display:flex;align-items:center;gap:8px'>
   <span id='scanElapsed' title='Time elapsed since the current scan started (resets on each Scan click)' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
   <span id='lifetimeStats' title='How many times a template has been displayed while stepping/playing through results, across all Scan clicks this session' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
-  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260807h</span>
+  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260807i</span>
   </span>
 </div>
 <input id='local'type='file'style='display:none'onchange='OpFl()'>
@@ -126,13 +126,9 @@ body.guideOpen #guideDoc{overflow:visible;padding:0}
 <p class='note'><b>Nothing leaves your machine.</b> The viewer is a single HTML page that runs entirely in your browser. No file data is uploaded, and no server is contacted to read a capture.</p>
 
 <h2>2. Getting started</h2>
-<table class='g'>
-<tr><th>Online</th><td>https://josephchenulink.github.io/DA-bin-file-diskview/</td></tr>
-<tr><th>Offline</th><td>Download <code>Diskview18a_standalone.html</code> and open it locally</td></tr>
-</table>
-<p>Both addresses serve the same standalone build, which has every library embedded and works with no network at all. There is also <code>Diskview18a.html</code>, which loads its PDF libraries from a CDN &mdash; smaller, but it needs internet access for PDF export. <b>If in doubt, use the standalone.</b></p>
-<p>Use <b>Chrome</b> or <b>Edge</b>. Viewing and PDF export work in any modern browser, but <b>Scan</b> needs the folder-picker API that only Chromium-based browsers provide, and it must be a <i>downloaded</i> copy of the standalone file.</p>
+<p>Open <b>https://josephchenulink.github.io/DA-bin-file-diskview/</b> in <b>Chrome</b> or <b>Edge</b>.</p>
 <p>Click <b>File</b> and choose a <code>.bin</code> file. The filename appears beside the button and the first template loads automatically.</p>
+<p>Viewing, comparing and PDF export work in any modern browser. <b>Scan</b> additionally needs the folder-picker that only Chromium-based browsers provide, so use Chrome or Edge if you intend to sweep a folder.</p>
 
 <h2>3. The screen</h2>
 <ul>
@@ -185,7 +181,7 @@ body.guideOpen #guideDoc{overflow:visible;padding:0}
 </table>
 <p>The folder is remembered between sessions, so the next Scan starts where you left off. Two counters sit near the version badge: <b>elapsed time</b> since you clicked Scan, and <b>Displayed</b>, how many templates you have viewed since that click.</p>
 <p><b>Scan with Compare</b> is a useful pairing: turn on Compare during a scan and each new capture is measured against the one you started from.</p>
-<p class='note'><b>Scan requires the downloaded standalone file</b>, opened locally in Chrome or Edge. It will not run from the in-browser preview.</p>
+<p class='note'><b>Scan requires Chrome or Edge.</b> Other browsers do not provide the folder-picker it uses.</p>
 
 <h2>8. Exporting a PDF</h2>
 <p>Click <b>PDF</b>. The report contains, in order:</p>
@@ -206,9 +202,8 @@ body.guideOpen #guideDoc{overflow:visible;padding:0}
 
 <h2>9. Troubleshooting</h2>
 <table class='g'>
-<tr><th>&quot;PDF library (jsPDF) is not loaded&quot;</th><td>You are running <code>Diskview18a.html</code> without internet access. Use <code>Diskview18a_standalone.html</code> instead &mdash; it has the libraries built in.</td></tr>
-<tr><th>&quot;Scan requires the downloaded standalone file&quot;</th><td>Scan needs a real local file and a Chromium-based browser. Download the standalone build, then open it from your disk.</td></tr>
-<tr><th>The short URL shows an old version</th><td>Your browser cached the previous build. Hard-refresh with <b>Ctrl-Shift-R</b>, or open a private window, and check the version badge.</td></tr>
+<tr><th>Scan does not start</th><td>Scan needs the folder-picker that only Chrome and Edge provide. Open the viewer in one of those.</td></tr>
+<tr><th>The page shows an old version</th><td>Your browser cached the previous build. Hard-refresh with <b>Ctrl-Shift-R</b>, or open a private window, and check the version badge.</td></tr>
 <tr><th>A field shows &mdash; or is blank</th><td>The capture does not contain that field. SCSI headers, for example, carry no <code>Is HDD</code> field, so HDD/SSD is derived from the drive's rotation rate instead &mdash; and where neither is available the viewer shows a dash rather than guessing.</td></tr>
 <tr><th>A template looks empty</th><td>Some logs genuinely have no entries; those are labelled <i>(no entries in this log)</i> rather than left blank.</td></tr>
 </table>
