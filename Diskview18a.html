@@ -107,7 +107,7 @@ body.guideOpen #guideDoc{overflow:visible;padding:0}
   <span style='display:flex;align-items:center;gap:8px'>
   <span id='scanElapsed' title='Time elapsed since the current scan started (resets on each Scan click)' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
   <span id='lifetimeStats' title='How many times a template has been displayed while stepping/playing through results, across all Scan clicks this session' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
-  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260826a</span>
+  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260826b</span>
   </span>
 </div>
 <input id='local'type='file'style='display:none'onchange='OpFl()'>
@@ -3831,6 +3831,10 @@ if(u.includes('SAS')||u.includes('SCSI'))return nums.filter(n=>(n>=301&&n<=335)|
 return nums}
 
 PickTemplateResume=(rawT,idx)=>{
+// rawT -1 selects the header pseudo-template. ScanRawT -1 already means "no
+// template filter", so every file matches, and DpT's own guard stops the
+// per-step display from overwriting ScanRawT while HdrView is set.
+HdrView=(rawT===-1)
 if(_PickResumeMode==='scan'){
 // Matching is interface-only now, so any template valid for this interface is
 // a legitimate thing to search for — not just ones present in the file
@@ -3871,14 +3875,19 @@ let s
 if(_PickResumeMode==='scan'){
 let nums=GetTemplatesForInterface(ScanIntf).sort((a,b)=>a-b)
 s=`<b>${modeLabel} paused.</b> Pick a template to resume scanning for (${ScanIntf||'all interfaces'}):<br>`
+// Header first, as in the normal template list. Every capture has one, so it
+// never filters a file out — useful for sweeping a folder to compare hosts,
+// drives and capture dates.
+s+=`<a onclick="PickTemplateResume(-1,-1)">Header</a> | `
 nums.forEach((n,j)=>{
-let pre=j===0?'':(j%3===0?'<br>':' | ')
+let pre=j===0?'':((j+1)%3===0?'<br>':' | ')
 s+=pre+`<a onclick="PickTemplateResume(${n},-1)">T${n} ${TmplNames[n]||''}</a>`
 })
 }else{
 s=`<b>${modeLabel} paused.</b> Pick a template to resume (found in this file):<br>`
+s+=`<a onclick="PickTemplateResume(-1,-1)">Header</a> | `
 items.forEach((e,j)=>{
-let pre=j===0?'':(j%3===0?'<br>':' | ')
+let pre=j===0?'':((j+1)%3===0?'<br>':' | ')
 s+=pre+`<a onclick="PickTemplateResume(${e.num},${e.idx})">T${e.num} ${TmplNames[e.num]||''}</a>`
 })
 }
