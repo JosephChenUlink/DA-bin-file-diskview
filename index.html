@@ -107,7 +107,7 @@ body.guideOpen #guideDoc{overflow:visible;padding:0}
   <span style='display:flex;align-items:center;gap:8px'>
   <span id='scanElapsed' title='Time elapsed since the current scan started (resets on each Scan click)' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
   <span id='lifetimeStats' title='How many times a template has been displayed while stepping/playing through results, across all Scan clicks this session' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
-  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260826c</span>
+  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260826d</span>
   </span>
 </div>
 <input id='local'type='file'style='display:none'onchange='OpFl()'>
@@ -3519,7 +3519,7 @@ _UpdateScanElapsed()
 ScanCollectAbort=false
 G('scanCtrl').style.display='inline-flex';G('scanBtn').style.display='none'
 G('s0').style.display='none';G('s1').style.display='none';G('s3').style.display='none';G('s4').style.display='none'
-let ready=await ScanEnsureReady()
+let ready=await ScanEnsureReady(true)
 G('s0').style.display='';G('s1').style.display='';G('s3').style.display='';G('s4').style.display=''
 if(!ready){
 // Cancelled picker, no files found, or collection was aborted — revert to idle button
@@ -3588,6 +3588,12 @@ RevTimer=setInterval(()=>Adv(1),Number(G('revSpeed').value)*1000)
 // ── Scan: crawl folder, same template & interface, step or auto ──────────────
 let ScanEntries=[],ScanIdx=0,ScanTimer=null,ScanTimerRAF=false,ScanActive=false,ScanStepMode=false,
     ScanRawT=-1,ScanIntf='',ScanDirHandle=null,ScanFileHandle=null,ScanTotal=0,
+    // The folder handle is persisted in IndexedDB, and Chrome can keep its read
+    // permission across sessions, so a reloaded page could resume scanning a
+    // folder silently -- the user had no idea what was being read. This is a
+    // plain variable, so it is false again on every page load: the first Scan of
+    // a session always asks, and later Scan clicks reuse the answer.
+    _ScanFolderConfirmed=false,
     _ScanLoading=false,ScanOrigBuf=null,ScanOrigName='',ScanLastBuf=null,ScanLastName='',ScanDirection=1,ScanCollectAbort=false,ScanMatchedCount=0,ScanExaminedCount=0,_ScanDirsVisited=0,_ScanFilesSeen=0,_ScanWalkErrors=[],_ScanExtCounts={},_ScanSampleNames=[],
         _ScanLifetimeDisplayed=0,_ScanLifetimeRuns=0,
     _ScanStartTime=0,_ScanElapsedTimer=null,_ScanWalkLastYield=0,_ScanLastStepTime=0,TrueFileSize=0,_lastStatusUpdate=0,
@@ -3816,6 +3822,7 @@ ScanChangeFolder=async(e)=>{
 if(e){e.preventDefault();e.stopPropagation()}
 ScanStop&&ScanStop()
 ScanDirHandle=null;ScanBinList=[];ScanEntries=[];ScanTotal=0;ScanIdx=0
+_ScanFolderConfirmed=false
 try{await _ScanDB.clear()}catch(_){}
 if(G('scanFolderLabel'))W(G('scanFolderLabel'),'')
 if(G('scanFolderChg'))G('scanFolderChg').style.display='none'
@@ -3823,13 +3830,19 @@ if(G('scanFolderChg'))G('scanFolderChg').style.display='none'
 // picker. Called from a click, so the browser still sees a user gesture.
 ScanSetup&&ScanSetup()}
 
-ScanEnsureReady=async()=>{
+ScanEnsureReady=async(forcePick)=>{
+// forcePick is set only by a fresh Scan click. Stepping, Play and resume all
+// call this too, and must keep using the folder already in hand.
+if(forcePick&&!_ScanFolderConfirmed&&ScanDirHandle){
+ScanDirHandle=null;ScanBinList=[];ScanEntries=[];ScanTotal=0;ScanIdx=0
+}
 if(window.self!==window.top){
 alert('Scan is not available while the viewer is embedded in a frame.\n\nOpen the page directly in Chrome or Edge.')
 return false
 }
-// Try to restore dir handle from IndexedDB
-if(!ScanDirHandle)ScanDirHandle=await _ScanDB.load()
+// Try to restore dir handle from IndexedDB, unless this session has yet to
+// confirm a folder and the caller wants the user asked.
+if(!ScanDirHandle&&!(forcePick&&!_ScanFolderConfirmed))ScanDirHandle=await _ScanDB.load()
 // Check permission on stored handle (silent if same folder, no dialog)
 if(ScanDirHandle){
 let perm=await ScanDirHandle.queryPermission({mode:'read'}).catch(()=>'prompt')
@@ -3847,6 +3860,7 @@ inp.onchange=()=>{
 ScanBinList=Array.from(inp.files).filter(f=>_IsBinLike(f.name)).map(f=>({name:f.webkitRelativePath||f.name,file:f}))
 ScanBinList.sort((a,b)=>_NameCollator.compare(a.name,b.name))
 ScanEntries=[...ScanBinList];ScanTotal=ScanEntries.length;ScanIdx=0
+_ScanFolderConfirmed=true
 let firstRelPath=inp.files[0]?.webkitRelativePath||''
 let folderName=firstRelPath.includes('/')?firstRelPath.split('/')[0]:'(selected folder)'
 if(document.getElementById('scanFolderLabel'))document.getElementById('scanFolderLabel').innerHTML=`📁 ${folderName} (+ subfolders)`
@@ -3863,11 +3877,13 @@ if(dirHint)startOpts.startIn=dirHint
 else if(ScanFileHandle)startOpts.startIn=ScanFileHandle
 else startOpts.startIn='downloads'
 try{ScanDirHandle=await showDirectoryPicker({...startOpts,mode:'read'})}catch(e){return false}
+_ScanFolderConfirmed=true
 await _ScanDB.save(ScanDirHandle)
 await _ScanDB.saveDirHint(ScanDirHandle)  // update hint with newly chosen folder
 ScanBinList=[]  // reset to re-collect
 }
 // Show which folder is being scanned, including subfolders
+_ScanFolderConfirmed=true
 if(document.getElementById('scanFolderLabel'))document.getElementById('scanFolderLabel').innerHTML=`📁 ${ScanDirHandle.name} (+ subfolders)`
 if(document.getElementById('scanFolderChg'))document.getElementById('scanFolderChg').style.display='inline'
 // Collect .bin files from the folder and all subfolders
