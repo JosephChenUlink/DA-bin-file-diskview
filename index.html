@@ -107,7 +107,7 @@ body.guideOpen #guideDoc{overflow:visible;padding:0}
   <span style='display:flex;align-items:center;gap:8px'>
   <span id='scanElapsed' title='Time elapsed since the current scan started (resets on each Scan click)' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
   <span id='lifetimeStats' title='How many times a template has been displayed while stepping/playing through results, across all Scan clicks this session' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
-  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260807n</span>
+  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260826a</span>
   </span>
 </div>
 <input id='local'type='file'style='display:none'onchange='OpFl()'>
@@ -1673,6 +1673,34 @@ W(G('lTab'),qr)}
 // right, and it flows through the existing CSV export untouched.
 HdrView=false
 EscH=s=>String(s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]))
+// ── Temperature plausibility ────────────────────────────────────────────────
+// Mirrors parser/template_nvme_smart.py in the DA Analytics Platform, so the
+// viewer and the platform never disagree about the same bytes.
+//
+// From that parser's own notes, derived from a full-day fleet report: garbage
+// bytes in malformed captures produced readings like 0K (which means "not
+// reported", not absolute zero) and 36K, and later 14,561 / 25,600 / 255-style
+// values through the SATA T8, SCSI T306 and NVMe T101 paths. A wrong-but-
+// believable temperature is worse than no temperature in a diagnostic tool, so
+// anything outside the window is left undecoded rather than shown.
+//
+// K-273, not K-273.15: NVMe reports whole Kelvin at 1 K resolution, so a
+// decimal place is precision the reading does not have. This also matches the
+// platform and smartctl.
+KtoC=k=>(k>=200&&k<=400)?(k-273):null
+// Celsius readings that arrive already in Celsius. -60..127 is the platform's
+// window; real drive temperatures sit well inside it.
+PlausC=v=>(v!=null&&v>=-60&&v<=127)?v:null
+// ATA Device Statistics temperature entries (ACS-4) carry a signed byte in
+// bits 7:0, with bits 55:8 reserved and zero. A non-zero upper region means the
+// entry is malformed, so masking to a byte would invent a plausible-looking
+// value from garbage -- 14,561 masks to -31 C. Reject on the full value first,
+// then interpret the low byte as signed so genuine sub-zero readings survive.
+AtaTempC=dv=>{
+let v=Number(dv&0x00FFFFFFFFFFFFFFn)
+if(v>255)return null
+return PlausC(v>127?v-256:v)
+}
 // Every template builds its rows by concatenating strings into innerHTML, and
 // much of what goes in comes straight out of the .bin — model numbers, vendor
 // strings, ASCII blocks. A printable-range filter (32..126) lets '<' and '>'
@@ -2124,8 +2152,8 @@ val=fq.hex+(fq.sup?' ('+Cx(fq.dv)+'h = '+Cx(fq.dv/24n)+'d '+(fq.dv%24n)+'h)':' (
 let fq=FarmVal(off)
 val=fq.hex+(fq.sup?' ('+Cx(fq.dv)+' min)':' (not supported)')
 }else if(ty=='temp'){
-let fq=FarmVal(off),v=Number(fq.dv&0xFFFFn),sv=v>32767?v-65536:v
-val=fq.hex+(fq.sup?' ('+sv+'\u00b0C)':' (not supported)')
+let fq=FarmVal(off),v=Number(fq.dv&0xFFFFn),sv=PlausC(v>32767?v-65536:v)
+val=fq.hex+(fq.sup?(sv!=null?' ('+sv+'\u00b0C)':''):' (not supported)')
 }else if(ty=='gb'){
 let fq=FarmVal(off),by=fq.dv*512n,gi=by/1000000000n,gf=(by%1000000000n)*100n/1000000000n
 val=fq.hex+(fq.sup?' ('+Cx(fq.dv)+' sectors, '+Cx(gi+(gf>=50n?1n:0n))+' GB)':' (not supported)')
@@ -2940,11 +2968,11 @@ extraAnno=(v&3)==0?' (SGL not supported)':' (SGL supported'+((v&3)==1?', dword a
 }else if(T==23&&['Number of Namespaces','RTD3 Resume Latency per us','RTD3 Entry Latency per us'].includes(nm)){
 extraAnno=' ('+Cx(BigInt('0x'+x))+')'
 }else if(T==23&&['Warning Composite Temperature Threshold','Critical Composite Temperature Threshold','Minimum Thermal Management Temperature','Maximum Thermal Management Temperature'].includes(nm)){
-let k=parseInt(x,16)
-if(k>0)extraAnno=' ('+(k-273.15).toFixed(1)+'\u00b0C)'
+let c=KtoC(parseInt(x,16))
+if(c!=null)extraAnno=' ('+c+'\u00b0C)'
 }else if(T==25&&(nm.indexOf('Temperature Sensor')==0||nm.indexOf('Composite Temperature')==0)){
-let k=parseInt(x,16)
-if(k>0)extraAnno=' ('+(k-273.15).toFixed(1)+'\u00b0C)'
+let c=KtoC(parseInt(x,16))
+if(c!=null)extraAnno=' ('+c+'\u00b0C)'
 }else if(T==25&&(nm=='Data Units Read(KB)'||nm=='Data Units Written(KB)')){
 let dv=BigInt('0x'+x),by=dv*512000n,gi=by/1000000000n,gf=(by%1000000000n)*100n/1000000000n
 extraAnno=' ('+Cx(dv)+' units, '+Cx(gi+(gf>=50n?1n:0n))+' GB)'
@@ -2962,7 +2990,7 @@ extraAnno=' ('+Cx(dv)+'h = '+Cx(dv/24n)+'d '+(dv%24n)+'h)'
 }
 if(scsiPC&&c==3&&/^[0-9A-Fa-f]+$/.test(x)){
 let Cx=n=>n.toString().replace(/\B(?=(\d{3})+(?!\d))/g,','),x64=x.length>16?x.slice(-16):x
-if(T==35)extraAnno=' ('+parseInt(x,16)+'\u00b0C)'
+if(T==35){let c=PlausC(parseInt(x,16));if(c!=null)extraAnno=' ('+c+'\u00b0C)'}
 else extraAnno=' ('+Cx(BigInt('0x'+x64))+(x.length>16?', last 64 bits':'')+')'
 }
 if(T==1&&arS[q]=='Capabilities 0'&&x.length==8){
@@ -3308,8 +3336,8 @@ x=Cx(dv)+' ('+Cx(dv/24n)+'d '+(dv%24n)+'h)'
 }else if(T==8&&(nm.indexOf('Time in Over-Temperature')==0||nm.indexOf('Time in Under-Temperature')==0)){
 x=Cx(dv)+' min'
 }else if(T==8&&nm.indexOf('Time in Over-Temperature')!=0&&nm.indexOf('Time in Under-Temperature')!=0){
-let b=Number(dv%256n),sv=b>127?b-256:b
-x=(sv<0?'-'+Cx(-sv):Cx(sv))+' \u00b0C'
+let sv=AtaTempC(dv)
+x=(sv==null)?Cx(dv):((sv<0?'-'+Cx(-sv):Cx(sv))+' \u00b0C')
 }else x=Cx(dv)
 }
 if(c+1==mo)l+=f?0:len}
