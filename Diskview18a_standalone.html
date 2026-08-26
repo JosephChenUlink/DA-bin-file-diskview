@@ -107,7 +107,7 @@ body.guideOpen #guideDoc{overflow:visible;padding:0}
   <span style='display:flex;align-items:center;gap:8px'>
   <span id='scanElapsed' title='Time elapsed since the current scan started (resets on each Scan click)' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
   <span id='lifetimeStats' title='How many times a template has been displayed while stepping/playing through results, across all Scan clicks this session' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
-  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260826b</span>
+  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260826c</span>
   </span>
 </div>
 <input id='local'type='file'style='display:none'onchange='OpFl()'>
@@ -115,7 +115,7 @@ body.guideOpen #guideDoc{overflow:visible;padding:0}
 <div style='display:flex;align-items:center;gap:4px;padding:3px 6px;flex-wrap:nowrap;min-width:0'>
 <button onclick="OpFlPick()" title="Select File to View" style='flex-shrink:0;background:#1a5fa8;color:#fff;border:1px solid #0d3d6e;padding:3px 10px;font-size:13px;cursor:pointer;border-radius:3px'>File</button><span id='fileLabel' style='flex:0 0 260px;padding:2px 8px;border:1px solid #999;background:#fff;font-size:12px;color:#555;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:middle'>No file chosen</span>&nbsp;<button onclick='ShowGuide()' title='Open the user guide' style='flex-shrink:0;padding:3px 10px;font-size:12px;cursor:pointer'>Guide</button>
 <span id='adv'style='display:none;flex-shrink:0;align-items:center;gap:2px'><button onclick='Adv(-1)' title="Previous Template">-</button><button id='tmpl'onclick='List()'></button><button onclick='Adv(1)' title="Next Template">+</button>&nbsp;<button id='revBtn'onclick='ToggleReview()' title="Play Templates">Play</button><span id='revSpeedWrap'>&nbsp;Speed:&nbsp;<input type='range'id='revSpeed'min='0.05'max='5'step='0.05'value='1'oninput='RevSpeedChange()'style='vertical-align:middle;width:90px'>&nbsp;<span id='revSpeedLbl'style='display:inline-block;width:30px'>1.0s</span></span>&nbsp;<span id='scanWrap'><span id='scanCtrl' style='display:none;gap:1px'><button id='s0'onclick='ScanStepBackClick()' title="Step backward">&#9198;</button><button id='s1'onclick='ScanPlayBack()' title="Play backward">&#9194;</button><button id='s2'onclick='ScanStop()' title="Stop">&#9209;</button><button id='s3'onclick='ScanPlayFwd()' title="Play forward">&#9193;</button><button id='s4'onclick='ScanStepClick()' title="Step forward">&#9197;</button></span><button id='scanBtn'onclick='ScanSetup()' title="Scan all .bin files in the selected folder and its subfolders" style='display:inline'>Scan</button></span>&nbsp;<button id='cmpBtn' onclick='CmpToggle()' title="Compare the Templates">Compare</button>&nbsp;<button onclick='GetPDF()' title="Download PDF File">PDF</button><button onclick='SaveFl()'id='btn8'hidden>&#11015;</button></span>
-<button id='host'hidden></button>&nbsp;<span id='nVer'style='font-size:12px;font-weight:bold;color:#1a5fa8'></span>&nbsp;<span id='scanFolderLabel'style='font-size:11px;color:#555'></span>
+<button id='host'hidden></button>&nbsp;<span id='nVer'style='font-size:12px;font-weight:bold;color:#1a5fa8'></span>&nbsp;<span id='scanFolderLabel'style='font-size:11px;color:#555'></span><span id='scanFolderChg' style='display:none;font-size:11px;margin-left:5px' title='Scan a different folder'><a href='#' onclick='ScanChangeFolder(event)'>change</a></span>
 </div>
 <div id='cmpSummary'style='margin:6px 0'></div>
 <div id='dvTitle2'style='display:none'></div>
@@ -3807,6 +3807,22 @@ _ScanWalkErrors.push((prefix||'(root)')+' — iteration error: '+e.message)
 }
 }
 
+// The chosen folder is remembered in IndexedDB so a later scan can resume
+// without re-picking. That is convenient until you want a different folder:
+// the handle was only ever dropped on an error path, so Scan silently reused
+// the old one forever and the picker never appeared again. This clears it and
+// re-prompts.
+ScanChangeFolder=async(e)=>{
+if(e){e.preventDefault();e.stopPropagation()}
+ScanStop&&ScanStop()
+ScanDirHandle=null;ScanBinList=[];ScanEntries=[];ScanTotal=0;ScanIdx=0
+try{await _ScanDB.clear()}catch(_){}
+if(G('scanFolderLabel'))W(G('scanFolderLabel'),'')
+if(G('scanFolderChg'))G('scanFolderChg').style.display='none'
+// Re-enter the normal setup path, which now finds no handle and opens the
+// picker. Called from a click, so the browser still sees a user gesture.
+ScanSetup&&ScanSetup()}
+
 ScanEnsureReady=async()=>{
 if(window.self!==window.top){
 alert('Scan is not available while the viewer is embedded in a frame.\n\nOpen the page directly in Chrome or Edge.')
@@ -3834,6 +3850,7 @@ ScanEntries=[...ScanBinList];ScanTotal=ScanEntries.length;ScanIdx=0
 let firstRelPath=inp.files[0]?.webkitRelativePath||''
 let folderName=firstRelPath.includes('/')?firstRelPath.split('/')[0]:'(selected folder)'
 if(document.getElementById('scanFolderLabel'))document.getElementById('scanFolderLabel').innerHTML=`📁 ${folderName} (+ subfolders)`
+if(document.getElementById('scanFolderChg'))document.getElementById('scanFolderChg').style.display='inline'
 res(ScanEntries.length>0)
 }
 inp.click()
@@ -3852,6 +3869,7 @@ ScanBinList=[]  // reset to re-collect
 }
 // Show which folder is being scanned, including subfolders
 if(document.getElementById('scanFolderLabel'))document.getElementById('scanFolderLabel').innerHTML=`📁 ${ScanDirHandle.name} (+ subfolders)`
+if(document.getElementById('scanFolderChg'))document.getElementById('scanFolderChg').style.display='inline'
 // Collect .bin files from the folder and all subfolders
 if(!ScanBinList.length){
 _ScanDirsVisited=0;_ScanFilesSeen=0;_ScanWalkErrors=[];_ScanExtCounts={};_ScanSampleNames=[]
@@ -3875,7 +3893,7 @@ let extList=Object.entries(_ScanExtCounts).sort((a,b)=>b[1]-a[1]).slice(0,8)
 if(extList.length)diag+=`\n\nFile types found instead:\n`+extList.map(([ext,n])=>`${ext} — ${n.toLocaleString()} file(s)`).join('\n')
 if(_ScanSampleNames.length)diag+=`\n\nExample filenames:\n`+_ScanSampleNames.join('\n')
 alert('No .bin files found in the selected folder (including subfolders).\n\n'+diag+'\n\nClick Scan again to choose a different folder.')
-W(G('nVer'),'');if(G('scanFolderLabel'))W(G('scanFolderLabel'),'');ScanDirHandle=null;await _ScanDB.clear();return false
+W(G('nVer'),'');if(G('scanFolderLabel'))W(G('scanFolderLabel'),'');if(G('scanFolderChg'))G('scanFolderChg').style.display='none';ScanDirHandle=null;await _ScanDB.clear();return false
 }
 
 // Determine what we're filtering for, from the currently-open file
