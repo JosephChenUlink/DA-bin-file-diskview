@@ -95,6 +95,10 @@ width:560px;max-width:calc(100vw - 24px);box-sizing:border-box}
 #rTab tr.srchHit>td{font-weight:bold}
 #rTab tr.srchHit>td:first-child{box-shadow:inset 3px 0 0 #e07000;padding-left:6px}
 #srchPanel button{font-size:12px;padding:2px 10px;cursor:pointer}
+#srchX{border:0;background:none;font-size:16px;line-height:1;padding:0 4px;color:#667}
+#srchX:hover{color:#000}
+/* 面板停留在畫面上時不應遮住掃描狀態，稍微降低不透明度並允許捲動 */
+#srchPanel{max-height:calc(100vh - 90px);overflow:auto}
 #guideOv{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9999;display:flex;align-items:center;justify-content:center}
 #guideBox{background:#fff;width:min(900px,94vw);height:90vh;display:flex;flex-direction:column;border-radius:5px;box-shadow:0 8px 40px rgba(0,0,0,.35)}
 #guideBar{display:flex;align-items:center;gap:8px;padding:8px 12px;background:#1a5fa8;color:#fff;border-radius:5px 5px 0 0;font-size:14px}
@@ -135,7 +139,7 @@ body.guideOpen #guideDoc{overflow:visible;padding:0}
   <span style='display:flex;align-items:center;gap:8px'>
   <span id='scanElapsed' title='Time elapsed since the current scan started (resets on each Scan click)' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
   <span id='lifetimeStats' title='How many times a template has been displayed while stepping/playing through results, across all Scan clicks this session' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
-  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260826s</span>
+  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260826t</span>
   </span>
 </div>
 <input id='local'type='file'style='display:none'onchange='OpFl()'>
@@ -146,7 +150,8 @@ body.guideOpen #guideDoc{overflow:visible;padding:0}
 <button id='host'hidden></button>&nbsp;<span id='nVer'style='font-size:12px;font-weight:bold;color:#1a5fa8'></span>&nbsp;<span id='scanFolderLabel'style='font-size:11px;color:#555'></span><span id='scanFolderChg' style='display:none;font-size:11px;margin-left:5px' title='Scan a different folder'><a href='#' onclick='ScanChangeFolder(event)'>change</a></span>
 <span id='srchWrap'><button id='srchBtn' onclick='SrchToggle(event)' title='Only show files matching a condition'>Search</button><span id='srchOn' style='display:none'></span>
 <div id='srchPanel'>
-<div class='srow'><b>Show only files where</b> <span class='shint'>all conditions hold</span></div>
+<div class='srow'><b>Show only files where</b> <span class='shint'>all conditions hold</span>
+<span style='flex:1'></span><button id='srchX' onclick='SrchClose()' title='Close (Esc)'>&times;</button></div>
 <div id='srchList'></div>
 <div class='srow'><button onclick='SrchAdd()'>+ Add condition</button>
 <span class='shint'>Header conditions are checked first, without decoding the file</span></div>
@@ -3872,10 +3877,15 @@ if(G('srchBtn'))W(G('srchBtn'),Srch.on?('Search'+(n>1?' \u00d7'+n:'')):'Search')
 if(G('srchMsg'))W(G('srchMsg'),Srch.on?'':'no condition set')
 _SrchSave()
 try{SrchHighlight()}catch(e){}
-SrchClose()}
-document.addEventListener('click',e=>{
-let w=G('srchWrap')
-if(w&&!w.contains(e.target))SrchClose()})
+// 不自動關閉：掃描進行中常常要一邊看結果一邊改條件，關掉會逼使用者
+// 每改一次就重開一次。改由 × 鈕、Search 鈕或 Esc 關閉。
+if(G('srchMsg'))W(G('srchMsg'),Srch.on?'applied':'no condition set')}
+// 刻意不在點擊面板外時關閉：掃描控制項、範本選擇都在面板之外，
+// 一碰就關會讓「掃描中調整條件」無法進行。改用 Esc 關閉。
+document.addEventListener('keydown',e=>{
+if(e.key==='Escape'){
+let p=G('srchPanel')
+if(p&&p.classList.contains('open'))SrchClose()}})
 
 ScanEnsureReady=async(forcePick)=>{
 // forcePick is set only by a fresh Scan click. Stepping, Play and resume all
