@@ -77,6 +77,14 @@ border:1px solid #c4ccd6;border-radius:4px;box-shadow:0 4px 14px rgba(0,0,0,.18)
 #srchPanel input[type=text],#srchPanel input:not([type]){flex:1;min-width:90px;font-size:12px;padding:2px 5px}
 #srchPanel select{font-size:12px;padding:2px}
 #srchPanel .shint{color:#778;font-size:11px;font-weight:normal}
+#srchList .scond{display:flex;gap:4px;align-items:center;margin:4px 0}
+#srchList .scond select{max-width:150px}
+#srchList .scond input{flex:1;min-width:70px;font-size:12px;padding:2px 5px}
+#srchList .sdel{cursor:pointer;color:#a00;font-weight:bold;padding:0 4px;border:0;background:none;font-size:14px}
+/* Match highlight. A left bar and bold text rather than a background, so it
+   cannot be mistaken for the compare-diff tint and does not fight the row
+   striping. It is also excluded from the PDF colour pass as transient state. */
+#rTab tr.srchHit>td{box-shadow:inset 3px 0 0 #e07000;font-weight:bold}
 #srchPanel button{font-size:12px;padding:2px 10px;cursor:pointer}
 #guideOv{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9999;display:flex;align-items:center;justify-content:center}
 #guideBox{background:#fff;width:min(900px,94vw);height:90vh;display:flex;flex-direction:column;border-radius:5px;box-shadow:0 8px 40px rgba(0,0,0,.35)}
@@ -118,7 +126,7 @@ body.guideOpen #guideDoc{overflow:visible;padding:0}
   <span style='display:flex;align-items:center;gap:8px'>
   <span id='scanElapsed' title='Time elapsed since the current scan started (resets on each Scan click)' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
   <span id='lifetimeStats' title='How many times a template has been displayed while stepping/playing through results, across all Scan clicks this session' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
-  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260826e</span>
+  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260826f</span>
   </span>
 </div>
 <input id='local'type='file'style='display:none'onchange='OpFl()'>
@@ -129,15 +137,10 @@ body.guideOpen #guideDoc{overflow:visible;padding:0}
 <button id='host'hidden></button>&nbsp;<span id='nVer'style='font-size:12px;font-weight:bold;color:#1a5fa8'></span>&nbsp;<span id='scanFolderLabel'style='font-size:11px;color:#555'></span><span id='scanFolderChg' style='display:none;font-size:11px;margin-left:5px' title='Scan a different folder'><a href='#' onclick='ScanChangeFolder(event)'>change</a></span>
 <span id='srchWrap'><button id='srchBtn' onclick='SrchToggle(event)' title='Only show files matching a condition'>Search</button><span id='srchOn' style='display:none'></span>
 <div id='srchPanel'>
-<div class='srow'><b>Header condition</b> <span class='shint'>matched on the file header only &mdash; fast, every file</span></div>
-<div class='srow'><input id='srchHF' placeholder='field, e.g. Drive Status' list='srchHFList'>
-<datalist id='srchHFList'><option value='Drive Status'><option value='Model Number'><option value='Interface'><option value='Capacity'><option value='Firmware Version'><option value='Slot Number'><option value='Date'><option value='Is HDD'><option value='Product Type'></datalist>
-<select id='srchHO'><option value=''>(any)</option><option value='contains'>contains</option><option value='eq'>equals</option><option value='ne'>does not equal</option><option value='gt'>&gt;</option><option value='lt'>&lt;</option><option value='present'>is present</option><option value='absent'>is absent</option></select>
-<input id='srchHV' placeholder='value'></div>
-<div class='srow'><b>Value condition</b> <span class='shint'>matched on the template currently shown &mdash; needs each file decoded, so slower</span></div>
-<div class='srow'><input id='srchVF' placeholder='row name, e.g. Reallocated Sectors'>
-<select id='srchVO'><option value=''>(any)</option><option value='contains'>contains</option><option value='eq'>equals</option><option value='ne'>does not equal</option><option value='gt'>&gt;</option><option value='lt'>&lt;</option><option value='present'>is present</option><option value='absent'>is absent</option></select>
-<input id='srchVV' placeholder='value'></div>
+<div class='srow'><b>Show only files where</b> <span class='shint'>all conditions hold</span></div>
+<div id='srchList'></div>
+<div class='srow'><button onclick='SrchAdd()'>+ Add condition</button>
+<span class='shint'>Header conditions are checked first, without decoding the file</span></div>
 <div class='srow'><label><input type='radio' name='srchMode' id='srchModeStop' checked> Stop at the first match</label>
 <label style='margin-left:12px'><input type='radio' name='srchMode'> Keep scanning, step through matches</label></div>
 <div class='srow' style='text-align:right'><span id='srchMsg' class='shint'></span>
@@ -1266,7 +1269,9 @@ PrevRawT=-1
 DpFl()
 // The header view builds its own File 2 columns, so CmpRenderTable would be
 // appending a second set on top of them.
-if(A2&&!HdrView)CmpRenderTable()}
+if(A2&&!HdrView)CmpRenderTable()
+// Mark whatever satisfied a condition, after the table is final.
+try{if(typeof SrchHighlight==='function')SrchHighlight()}catch(e){}}
 
 OpFl2=z=>{
 let f=G('local2').files[0],r=new FileReader()
@@ -3862,7 +3867,9 @@ ScanSetup&&ScanSetup()}
 // runs on the first 8KB of every candidate and skips non-matches before the
 // file is ever decoded, and the value condition runs against the rendered
 // decode table afterwards. A file must satisfy both to be shown.
-Srch={hf:'',ho:'',hv:'',vf:'',vo:'',vv:'',stop:true,on:false}
+// A condition is {src, field, op, val}, where src is 'H' for the file header or
+// a template number. All conditions must hold for a file to be shown.
+Srch={conds:[],stop:true,on:false}
 
 // Pulls a comparable number out of a displayed cell. The viewer writes decoded
 // values in several shapes, so the order here matters: a thousands-separated
@@ -3907,60 +3914,168 @@ let re=new RegExp('^[ \\t]*'+String(name).replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+
 let m=txt.match(re)
 return m?m[1].trim():null}
 
-// True when the header condition passes (or there isn't one).
+_SrchLive=c=>c&&c.op&&(c.field||c.op==='present'||c.op==='absent')
+_SrchHdrConds=()=>Srch.conds.filter(c=>_SrchLive(c)&&c.src==='H')
+_SrchTmplConds=()=>Srch.conds.filter(c=>_SrchLive(c)&&c.src!=='H')
+
+// True when every header condition passes. Runs on the raw bytes, so a file can
+// be rejected before it is ever decoded.
 SrchHeaderOk=buf=>{
-if(!Srch.on||!Srch.ho||!Srch.hf)return true
-try{return _SrchCmp(_SrchHdrValue(_SrchHdrText(buf),Srch.hf),Srch.ho,Srch.hv)}catch(e){return false}}
+if(!Srch.on)return true
+let cs=_SrchHdrConds()
+if(!cs.length)return true
+try{
+let txt=_SrchHdrText(buf)
+return cs.every(c=>_SrchCmp(_SrchHdrValue(txt,c.field),c.op,c.val))
+}catch(e){return false}}
 
 // True when the value condition passes, read off the table just rendered.
-SrchValueOk=()=>{
-if(!Srch.on||!Srch.vo||!Srch.vf)return true
-try{
-let want=Srch.vf.toLowerCase(),cells=null
+// Evaluates one condition against the table currently rendered.
+_SrchRowOk=c=>{
+let want=String(c.field||'').toLowerCase(),cells=null
 for(let tr of Q('#rTab tr')){
-let c=tr.cells
-if(!c||c.length<2)continue
+let cl=tr.cells
+if(!cl||cl.length<2)continue
 // The row label is not always the first column: SMART attribute tables put the
 // name last, in Description, so every cell is searched for it.
-let texts=Array.from(c).map(x=>x.textContent.trim())
+let texts=Array.from(cl).map(x=>x.textContent.trim())
 if(texts.some(t=>t.toLowerCase().includes(want))){cells=texts;break}
 }
-let op=Srch.vo
-if(op==='present')return cells!=null
-if(op==='absent')return cells==null
+if(c.op==='present')return cells!=null
+if(c.op==='absent')return cells==null
 if(!cells)return false
-if(op==='contains')return cells.join(' ').toLowerCase().includes(String(Srch.vv).toLowerCase())
-// A row spreads its figures over several columns — raw hex, normalised value,
-// worst — and which one holds the number the user means varies by template.
-// So the row matches when ANY cell satisfies the comparison, and fails 'does
-// not equal' only when no cell equals.
-if(op==='ne')return !cells.some(t=>_SrchCmp(t,'eq',Srch.vv))
-return cells.some(t=>_SrchCmp(t,op,Srch.vv))
-}catch(e){return false}}
+if(c.op==='contains')return cells.join(' ').toLowerCase().includes(String(c.val).toLowerCase())
+// A row spreads its figures over several columns -- raw hex, normalised, worst
+// -- and which one holds the number the user means varies by template. So the
+// row matches when ANY cell satisfies, and fails 'does not equal' only when no
+// cell equals.
+if(c.op==='ne')return !cells.some(t=>_SrchCmp(t,'eq',c.val))
+return cells.some(t=>_SrchCmp(t,c.op,c.val))}
+
+// True when every template condition passes. Conditions are grouped by template
+// so each one is rendered at most once, and the view is put back afterwards.
+SrchValueOk=()=>{
+if(!Srch.on)return true
+let cs=_SrchTmplConds()
+if(!cs.length)return true
+let byT={}
+cs.forEach(c=>{(byT[c.src]=byT[c.src]||[]).push(c)})
+let saveTx=Tx,ok=true
+try{
+for(let t of Object.keys(byT)){
+let idx=ArIx.findIndex((v,i)=>i%2===0&&v===Number(t))
+// A file that does not carry the template cannot satisfy a condition on it.
+if(idx<0){ok=false;break}
+if(Tx!==idx/2){Tx=idx/2;DpFl()}
+if(!byT[t].every(_SrchRowOk)){ok=false;break}
+}
+}catch(e){ok=false}
+if(Tx!==saveTx){Tx=saveTx;try{DpFl()}catch(e){}}
+return ok}
+
+// Marks the rows that satisfied a condition for whatever template is on screen.
+SrchHighlight=()=>{
+let rows=Q('#rTab tr')
+rows.forEach(tr=>tr.classList&&tr.classList.remove('srchHit'))
+if(!Srch.on)return
+let cur=(ArIx&&ArIx.length&&Tx>=0&&!HdrView)?ArIx[Tx*2]:null
+let cs=Srch.conds.filter(c=>_SrchLive(c)&&c.op!=='absent'
+&&(HdrView?c.src==='H':(c.src!=='H'&&Number(c.src)===cur)))
+if(!cs.length)return
+cs.forEach(c=>{
+let want=String(c.field||'').toLowerCase()
+for(let tr of rows){
+let cl=tr.cells
+if(!cl||cl.length<2)continue
+let texts=Array.from(cl).map(x=>x.textContent.trim())
+if(texts.some(t=>t.toLowerCase().includes(want))){tr.classList.add('srchHit');break}
+}
+})}
 
 SrchToggle=e=>{
 if(e){e.preventDefault();e.stopPropagation()}
-let p=G('srchPanel');if(p)p.classList.toggle('open')}
+let p=G('srchPanel')
+if(p){p.classList.toggle('open');if(p.classList.contains('open')){if(!Srch.conds.length)SrchAdd();else SrchRender()}}}
 SrchClose=()=>{let p=G('srchPanel');if(p)p.classList.remove('open')}
+
+// Templates offered as a condition source: those actually present in the open
+// file, so a condition can never name something this capture does not contain.
+_SrchSrcOpts=sel=>{
+let o="<option value='H'"+(sel==='H'?' selected':'')+">Header</option>"
+if(ArIx)for(let i=0;i<ArIx.length;i+=2){
+let n=ArIx[i]
+o+="<option value='"+n+"'"+(String(sel)===String(n)?' selected':'')+">T"+n+" "+EscH((TmplNames&&TmplNames[n])||'')+"</option>"
+}
+return o}
+
+let _SrchOps=[['','(any)'],['contains','contains'],['eq','equals'],['ne','does not equal'],
+['gt','>'],['lt','<'],['present','is present'],['absent','is absent']]
+
+SrchRender=()=>{
+let L=G('srchList');if(!L)return
+L.innerHTML=Srch.conds.map((c,i)=>
+"<div class='scond'>"
++"<select onchange='SrchSet("+i+",\"src\",this.value);SrchFields("+i+")'>"+_SrchSrcOpts(c.src)+"</select>"
++"<input list='srchFL"+i+"' value=\""+EscH(c.field||'')+"\" placeholder='field' oninput='SrchSet("+i+",\"field\",this.value)'>"
++"<datalist id='srchFL"+i+"'></datalist>"
++"<select onchange='SrchSet("+i+",\"op\",this.value)'>"
++_SrchOps.map(o=>"<option value='"+o[0]+"'"+(c.op===o[0]?' selected':'')+">"+o[1]+"</option>").join('')
++"</select>"
++"<input value=\""+EscH(c.val||'')+"\" placeholder='value' oninput='SrchSet("+i+",\"val\",this.value)'>"
++"<button class='sdel' title='Remove' onclick='SrchDel("+i+")'>\u00d7</button>"
++"</div>").join('')
+Srch.conds.forEach((c,i)=>SrchFields(i))}
+
+SrchSet=(i,k,v)=>{if(Srch.conds[i])Srch.conds[i][k]=v}
+SrchAdd=()=>{Srch.conds.push({src:'H',field:'',op:'',val:''});SrchRender()}
+SrchDel=i=>{Srch.conds.splice(i,1);if(!Srch.conds.length)Srch.conds.push({src:'H',field:'',op:'',val:''});SrchRender()}
+
+// Fills a condition's field suggestions. For the header these are the field
+// names in the open file; for a template they are the row labels, obtained by
+// the same save/render/read/restore probe GetDriveModel uses.
+SrchFields=i=>{
+let c=Srch.conds[i],dl=G('srchFL'+i)
+if(!c||!dl)return
+let names=[]
+try{
+if(c.src==='H'){
+;(SAll||'').split('h\n')[0].split('\n').forEach(l=>{
+let p=l.indexOf(':')
+if(p>0){let k=l.slice(0,p).trim();if(k&&!/^Record \d+ /.test(k)&&names.indexOf(k)<0)names.push(k)}
+})
+}else if(ArIx&&ArIx.length){
+let idx=ArIx.findIndex((v,k)=>k%2===0&&v===Number(c.src))
+if(idx>=0){
+let saveTx=Tx
+if(Tx!==idx/2){Tx=idx/2;DpFl()}
+for(let tr of Q('#rTab tr')){
+let cl=tr.cells;if(!cl||cl.length<2)continue
+// Prefer the longest cell text as the label: it is the first column in most
+// templates and the last (Description) in SMART attribute tables.
+let t=Array.from(cl).map(x=>x.textContent.trim()).filter(x=>x&&!/^[0-9A-Fa-f]+$/.test(x))
+.sort((a,b)=>b.length-a.length)[0]
+if(t&&t.length<70&&names.indexOf(t)<0)names.push(t)
+}
+if(Tx!==saveTx){Tx=saveTx;DpFl()}
+}
+}
+}catch(e){}
+dl.innerHTML=names.slice(0,400).map(n=>"<option value=\""+EscH(n)+"\">").join('')}
+
 SrchClear=()=>{
-;['srchHF','srchHV','srchVF','srchVV'].forEach(i=>{if(G(i))G(i).value=''})
-;['srchHO','srchVO'].forEach(i=>{if(G(i))G(i).value=''})
-Srch={hf:'',ho:'',hv:'',vf:'',vo:'',vv:'',stop:Srch.stop,on:false}
-if(G('srchOn'))G('srchOn').style.display='none'
+Srch={conds:[{src:'H',field:'',op:'',val:''}],stop:Srch.stop,on:false}
+SrchRender()
 if(G('srchMsg'))W(G('srchMsg'),'')
-if(G('srchBtn'))W(G('srchBtn'),'Search')}
+if(G('srchBtn'))W(G('srchBtn'),'Search')
+try{SrchHighlight()}catch(e){}}
+
 SrchApply=()=>{
-Srch.hf=(G('srchHF')&&G('srchHF').value||'').trim()
-Srch.ho=G('srchHO')&&G('srchHO').value||''
-Srch.hv=(G('srchHV')&&G('srchHV').value||'').trim()
-Srch.vf=(G('srchVF')&&G('srchVF').value||'').trim()
-Srch.vo=G('srchVO')&&G('srchVO').value||''
-Srch.vv=(G('srchVV')&&G('srchVV').value||'').trim()
 Srch.stop=!!(G('srchModeStop')&&G('srchModeStop').checked)
-Srch.on=!!((Srch.ho&&Srch.hf)||(Srch.vo&&Srch.vf))
-if(G('srchOn')){G('srchOn').style.display=Srch.on?'inline':'none';W(G('srchOn'),Srch.on?'\u25cf':'')}
-if(G('srchBtn'))W(G('srchBtn'),Srch.on?'Search \u25cf':'Search')
+Srch.on=Srch.conds.some(_SrchLive)
+let n=Srch.conds.filter(_SrchLive).length
+if(G('srchBtn'))W(G('srchBtn'),Srch.on?('Search \u25cf'+(n>1?' '+n:'')):'Search')
 if(G('srchMsg'))W(G('srchMsg'),Srch.on?'':'no condition set')
+try{SrchHighlight()}catch(e){}
 SrchClose()}
 document.addEventListener('click',e=>{
 let w=G('srchWrap')
@@ -4535,10 +4650,10 @@ if(_pdfStyCache[key]!==undefined)return _pdfStyCache[key]
 // .hili paints blue-on-gold for the click cursor, so the cell must be read
 // through to the element above it to get the colour it shows unselected.
 let host=c
-while(host&&host.classList&&host.classList.contains('hili')&&host.parentElement)host=host.parentElement
+while(host&&host.classList&&(host.classList.contains('hili')||host.classList.contains('srchHit'))&&host.parentElement)host=host.parentElement
 let fg=_rgb(getComputedStyle(host).color),bg=null
 for(let e=c;e&&e.tagName!=='BODY';e=e.parentElement){
-if(e.classList&&e.classList.contains('hili'))continue
+if(e.classList&&(e.classList.contains('hili')||e.classList.contains('srchHit')))continue
 bg=_rgb(getComputedStyle(e).backgroundColor)
 if(bg)break
 }
