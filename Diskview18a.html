@@ -131,7 +131,7 @@ body.guideOpen #guideDoc{overflow:visible;padding:0}
   <span style='display:flex;align-items:center;gap:8px'>
   <span id='scanElapsed' title='Time elapsed since the current scan started (resets on each Scan click)' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
   <span id='lifetimeStats' title='How many times a template has been displayed while stepping/playing through results, across all Scan clicks this session' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
-  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260826n</span>
+  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260826o</span>
   </span>
 </div>
 <input id='local'type='file'style='display:none'onchange='OpFl()'>
@@ -3483,7 +3483,15 @@ Srch={conds:[],stop:true,on:false}
 // tested against them. Separate from ScanMatchedCount, which counts everything
 // displayed whether or not a search is armed.
 SrchHits=0,SrchTested=0
-SrchResetCount=()=>{SrchHits=0;SrchTested=0;SrchBadge()}
+SrchResetCount=()=>{SrchHits=0;SrchTested=0;_lastSrchTick=0;SrchBadge()}
+// 大部分檔案都是被條件刷掉的，那條路徑上原本沒有重畫，所以計數器看起來像卡住。
+// 每個檔案都重畫在兩萬多個檔案上太昂貴，因此節流到約每 120ms 一次。
+let _lastSrchTick=0
+_SrchTick=()=>{
+let now=Date.now()
+if(now-_lastSrchTick<120)return
+_lastSrchTick=now
+SrchBadge()}
 // Conditions persist across reloads; the tally does not, since it belongs to a
 // particular sweep.
 _SrchSave=()=>{
@@ -3915,6 +3923,13 @@ W(G('nVer'),'');if(G('scanFolderLabel'))W(G('scanFolderLabel'),'');if(G('scanFol
 
 // Determine what we're filtering for, from the currently-open file
 ScanRawT=ArIx&&ArIx.length>0?ArIx[Tx*2]:-1
+// 掃描預設只看「含有目前 template」的檔案。但若搜尋條件是要找出「缺少某個
+// template」的檔案，這個前置過濾會在搜尋執行前就把目標全部丟掉，條件永遠不
+// 可能成立。這種情況下改為全部檔案都掃。
+if(Srch.on&&_SrchHasConds().some(c=>c.op==='absent')){
+ScanRawT=-1
+if(G('srchMsg'))W(G('srchMsg'),'scanning all templates')
+}
 let im=SAll.match(/Interface:\s*([^\n]+)/)
 ScanIntf=im?im[1].trim():''
 return await ScanRunPreFilter()
@@ -4118,8 +4133,8 @@ return
 }
 // 「檔案有沒有某個 template」在這裡就能判斷，完全不必讀檔。
 if(!A2&&Srch.on&&entry.templates&&!SrchTemplatesOk(entry.templates)){
-if(Srch.on)SrchTested++
-SrchBadge()
+SrchTested++
+_SrchTick()
 ScanIdx=k+1;if(ScanIdx>=ScanTotal)ScanIdx=0
 if(ScanActive)_ScanScheduleNext()
 return
@@ -4144,7 +4159,7 @@ clearTimeout(loadingTextTimer)
 // not) — uses the buffer already read above rather than reading again.
 if(ok&&ScanRawT>=0&&!A2&&!entry.templates&&!_QuickCheckTemplate(buf,ScanRawT))ok=false
 // Header condition, on the bytes already in hand — rejects without decoding.
-if(ok&&!A2&&Srch.on)SrchTested++
+if(ok&&!A2&&Srch.on){SrchTested++;_SrchTick()}
 if(ok&&!A2&&!SrchHeaderOk(buf))ok=false
 if(ok){
 _ScanLoading=true
@@ -4171,6 +4186,7 @@ return
 }
 ScanMatchedCount++
 if(Srch.on)SrchHits++
+_lastSrchTick=0
 SrchBadge()
 _ScanLifetimeDisplayed++
 _SaveLifetimeStats()
@@ -4178,6 +4194,7 @@ if(Srch.on&&Srch.stop&&ScanActive){
 // Hold on the match so it can be inspected. Stepping and Play still work from
 // here, so the scan can be continued by hand.
 _ScanClearTimer();ScanActive=false;ScanStepMode=true
+_lastSrchTick=0;SrchBadge()
 if(G('srchMsg'))W(G('srchMsg'),'')
 if(G('nVer'))W(G('nVer'),`\u2714 match ${SrchHits.toLocaleString()} of ${SrchTested.toLocaleString()} tested \u2014 ${entry.name}`)
 }
