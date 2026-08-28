@@ -135,7 +135,7 @@ body.guideOpen #guideDoc{overflow:visible;padding:0}
   <span style='display:flex;align-items:center;gap:8px'>
   <span id='scanElapsed' title='Time elapsed since the current scan started (resets on each Scan click)' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
   <span id='lifetimeStats' title='How many times a template has been displayed while stepping/playing through results, across all Scan clicks this session' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
-  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260826r</span>
+  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260826s</span>
   </span>
 </div>
 <input id='local'type='file'style='display:none'onchange='OpFl()'>
@@ -3645,20 +3645,36 @@ if(texts.some(t=>t.toLowerCase().includes(want))){cells=texts;break}
 if(c.op==='present')return cells!=null
 if(c.op==='absent')return cells==null
 if(!cells)return false
+// Device Statistics 的 Value 欄是原始編碼：旗標位元組＋原始位元組。遮掉旗標
+// 後得到的是「無號」數值，但溫度這類欄位是有號的 —— C0000000000000EC 遮罩後
+// 是 236，實際卻是 -20 °C。所以 236 > 40 會成立，而 -20 > 40 不該成立。
+// 相鄰的 Decimal 欄才是檢視器解讀後的值（含負號與單位），數值大小比較一律
+// 改用它。SMART 的 raw 欄（12 位數、最高位元組為 00）不符合這個樣式，不受影響。
+let _isDevStatRaw=t=>/^[0-9A-Fa-f]{16}$/.test(String(t).trim())
+&&parseInt(String(t).trim().slice(0,2),16)>=0x80
+let _decoded=k=>(k+1<cells.length&&_SrchNum(cells[k+1])!=null)?cells[k+1]:null
+let ord=cells.map((t,k)=>{let d=_isDevStatRaw(t)?_decoded(k):null;return d==null?t:d})
+
 // A specific column was named, so compare only that one.
 let ci=(c.col===''||c.col==null)?null:Number(c.col)
 if(ci!=null&&isFinite(ci)){
-let cell=cells[ci]
-if(cell==null)return false
-if(c.op==='ne')return !_SrchCmp(cell,'eq',c.val)
-return _SrchCmp(cell,c.op,c.val)
+if(cells[ci]==null)return false
+// 大小比較用解讀值；等於／不等於兩種都試，這樣直接搜原始十六進位仍然可行。
+if(c.op==='gt'||c.op==='lt')return _SrchCmp(ord[ci],c.op,c.val)
+if(c.op==='ne')return !(_SrchCmp(cells[ci],'eq',c.val)||_SrchCmp(ord[ci],'eq',c.val))
+if(c.op==='eq')return _SrchCmp(cells[ci],'eq',c.val)||_SrchCmp(ord[ci],'eq',c.val)
+return _SrchCmp(cells[ci],c.op,c.val)
 }
 if(c.op==='contains')return cells.join(' ').toLowerCase().includes(String(c.val).toLowerCase())
 // Otherwise a row spreads its figures over several columns -- raw hex,
 // normalised, worst -- and which one holds the intended number varies by
 // template, so the row matches when ANY cell satisfies.
-if(c.op==='ne')return !cells.some(t=>_SrchCmp(t,'eq',c.val))
-return cells.some(t=>_SrchCmp(t,c.op,c.val))}
+// 未指定欄位時，跳過「剛好 4 位十六進位、沒有其他內容」的格子：那是 Index
+// 偏移量或旗標位元，從來不是數量。0068 曾被解成 68 而讓 >40 成立。
+if(c.op==='gt'||c.op==='lt')
+return ord.some((t,k)=>!/^[0-9A-Fa-f]{4}$/.test(String(cells[k]).trim())&&_SrchCmp(t,c.op,c.val))
+if(c.op==='ne')return !cells.some((t,k)=>_SrchCmp(t,'eq',c.val)||_SrchCmp(ord[k],'eq',c.val))
+return cells.some((t,k)=>_SrchCmp(t,c.op,c.val)||_SrchCmp(ord[k],c.op,c.val))}
 
 // True when every template condition passes. Conditions are grouped by template
 // so each one is rendered at most once, and the view is put back afterwards.
