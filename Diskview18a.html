@@ -131,7 +131,7 @@ body.guideOpen #guideDoc{overflow:visible;padding:0}
   <span style='display:flex;align-items:center;gap:8px'>
   <span id='scanElapsed' title='Time elapsed since the current scan started (resets on each Scan click)' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
   <span id='lifetimeStats' title='How many times a template has been displayed while stepping/playing through results, across all Scan clicks this session' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
-  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260826m</span>
+  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260826n</span>
   </span>
 </div>
 <input id='local'type='file'style='display:none'onchange='OpFl()'>
@@ -3700,6 +3700,22 @@ let _SrchOps=[['','(any)'],['contains','contains'],['eq','equals'],['ne','does n
 // satisfied by the raw hex cell -- in ATA device statistics the raw carries a
 // C0 flags prefix, so it parses as ~1.4e19 and makes every "greater than" true.
 // Naming the column removes that ambiguity.
+// 欄位名稱是可以列舉的，所以用下拉選單而不是輸入框＋datalist：datalist 會依
+// 已輸入的文字過濾，一旦選過一個欄位就再也看不到其他欄位，等於沒辦法瀏覽。
+// 探不到清單時（尚未開檔、或這個檔案沒有該 template）才退回文字輸入。
+_SrchFieldCache={}
+_SrchFieldCtl=(c,i)=>{
+let names=_SrchFieldCache[i]||[]
+if(!names.length)
+return "<input id='srchF"+i+"' value=\""+EscH(c.field||'')+"\" placeholder='field' oninput='SrchSet("+i+",\"field\",this.value)'>"
+let o="<option value=''>(choose a field)</option>"
+// 目前的值若不在清單裡（例如上次存下來的，或換了 template），仍保留為選項，
+// 免得一重畫就被悄悄清掉。
+if(c.field&&names.indexOf(c.field)<0)
+o+="<option value=\""+EscH(c.field)+"\" selected>"+EscH(c.field)+"</option>"
+names.forEach(n=>{o+="<option value=\""+EscH(n)+"\""+(c.field===n?' selected':'')+">"+EscH(n)+"</option>"})
+return "<select id='srchF"+i+"' onchange='SrchSet("+i+",\"field\",this.value)'>"+o+"</select>"}
+
 _SrchColOpts=c=>{
 let cols=(c.src!=='H')&&_SrchColCache[c.src]
 let o="<option value=''"+(c.col===''||c.col==null?' selected':'')+">any column</option>"
@@ -3714,8 +3730,7 @@ let L=G('srchList');if(!L)return
 L.innerHTML=Srch.conds.map((c,i)=>
 "<div class='scond'>"
 +"<select onchange='SrchSet("+i+",\"src\",this.value);SrchFields("+i+")'>"+_SrchSrcOpts(c.src)+"</select>"
-+"<input list='srchFL"+i+"' value=\""+EscH(c.field||'')+"\" placeholder='field' oninput='SrchSet("+i+",\"field\",this.value)'>"
-+"<datalist id='srchFL"+i+"'></datalist>"
++"<span id='srchFW"+i+"'>"+_SrchFieldCtl(c,i)+"</span>"
 +"<select onchange='SrchSet("+i+",\"op\",this.value);SrchOpUI("+i+")'>"
 +_SrchOps.map(o=>"<option value='"+o[0]+"'"+(c.op===o[0]?' selected':'')+">"+o[1]+"</option>").join('')
 +"</select>"
@@ -3747,8 +3762,8 @@ SrchDel=i=>{Srch.conds.splice(i,1);if(!Srch.conds.length)Srch.conds.push({src:'H
 // condition can name the exact column to compare.
 _SrchColCache={}
 SrchFields=i=>{
-let c=Srch.conds[i],dl=G('srchFL'+i)
-if(!c||!dl)return
+let c=Srch.conds[i]
+if(!c)return
 let names=[]
 try{
 if(c.src==='H'){
@@ -3756,6 +3771,7 @@ if(c.src==='H'){
 let p=l.indexOf(':')
 if(p>0){let k=l.slice(0,p).trim();if(k&&!/^Record \d+ /.test(k)&&names.indexOf(k)<0)names.push(k)}
 })
+names.sort()
 }else if(ArIx&&ArIx.length){
 let idx=ArIx.findIndex((v,k)=>k%2===0&&v===Number(c.src))
 if(idx>=0){
@@ -3765,6 +3781,8 @@ let hdr=Q('#rTab tr th')
 if(hdr&&hdr.length)_SrchColCache[c.src]=Array.from(hdr).map(x=>x.textContent.trim())
 for(let tr of Q('#rTab tr')){
 let cl=tr.cells;if(!cl||cl.length<2)continue
+// 標題列不是資料，跳過，否則欄名（如 Decimal）會混進欄位清單。
+if(tr.querySelector('th'))continue
 // Prefer the longest cell text as the label: it is the first column in most
 // templates and the last (Description) in SMART attribute tables.
 let t=Array.from(cl).map(x=>x.textContent.trim()).filter(x=>x&&!/^[0-9A-Fa-f]+$/.test(x))
@@ -3775,7 +3793,9 @@ if(Tx!==saveTx){Tx=saveTx;DpFl()}
 }
 }
 }catch(e){}
-dl.innerHTML=names.slice(0,400).map(n=>"<option value=\""+EscH(n)+"\">").join('')}
+_SrchFieldCache[i]=names.slice(0,400)
+let wrap=G('srchFW'+i)
+if(wrap)wrap.innerHTML=_SrchFieldCtl(Srch.conds[i],i)}
 
 SrchClear=()=>{
 Srch={conds:[{src:'H',field:'',op:'',val:''}],stop:Srch.stop,on:false}
