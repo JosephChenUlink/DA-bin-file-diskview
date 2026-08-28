@@ -88,8 +88,12 @@ width:560px;max-width:calc(100vw - 24px);box-sizing:border-box}
 #srchList .sdel{cursor:pointer;color:#a00;font-weight:bold;padding:0 4px;border:0;background:none;font-size:14px}
 /* Match highlight. A left bar and bold text rather than a background, so it
    cannot be mistaken for the compare-diff tint and does not fight the row
-   striping. It is also excluded from the PDF colour pass as transient state. */
-#rTab tr.srchHit>td{box-shadow:inset 3px 0 0 #e07000;font-weight:bold}
+   striping. It is also excluded from the PDF colour pass as transient state.
+   The bar goes on the first cell only, with padding to clear it: drawn inside
+   every cell it painted over the first character, which silently swallowed the
+   minus sign of a negative value -- "-20 °C" read as "20 °C". */
+#rTab tr.srchHit>td{font-weight:bold}
+#rTab tr.srchHit>td:first-child{box-shadow:inset 3px 0 0 #e07000;padding-left:6px}
 #srchPanel button{font-size:12px;padding:2px 10px;cursor:pointer}
 #guideOv{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9999;display:flex;align-items:center;justify-content:center}
 #guideBox{background:#fff;width:min(900px,94vw);height:90vh;display:flex;flex-direction:column;border-radius:5px;box-shadow:0 8px 40px rgba(0,0,0,.35)}
@@ -131,7 +135,7 @@ body.guideOpen #guideDoc{overflow:visible;padding:0}
   <span style='display:flex;align-items:center;gap:8px'>
   <span id='scanElapsed' title='Time elapsed since the current scan started (resets on each Scan click)' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
   <span id='lifetimeStats' title='How many times a template has been displayed while stepping/playing through results, across all Scan clicks this session' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
-  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260826q</span>
+  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260826r</span>
   </span>
 </div>
 <input id='local'type='file'style='display:none'onchange='OpFl()'>
