@@ -131,7 +131,7 @@ body.guideOpen #guideDoc{overflow:visible;padding:0}
   <span style='display:flex;align-items:center;gap:8px'>
   <span id='scanElapsed' title='Time elapsed since the current scan started (resets on each Scan click)' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
   <span id='lifetimeStats' title='How many times a template has been displayed while stepping/playing through results, across all Scan clicks this session' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
-  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260826i</span>
+  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260826j</span>
   </span>
 </div>
 <input id='local'type='file'style='display:none'onchange='OpFl()'>
@@ -3483,6 +3483,37 @@ Srch={conds:[],stop:true,on:false}
 // displayed whether or not a search is armed.
 SrchHits=0,SrchTested=0
 SrchResetCount=()=>{SrchHits=0;SrchTested=0;SrchBadge()}
+// Conditions persist across reloads; the tally does not, since it belongs to a
+// particular sweep.
+_SrchSave=()=>{
+try{localStorage.setItem('dv_search',JSON.stringify({c:Srch.conds,s:Srch.stop,o:Srch.on}))}catch(e){}}
+// localStorage is editable by hand, so everything read back is re-checked
+// rather than trusted: unknown operators, non-string fields and over-long
+// values are dropped instead of being fed to the matcher.
+_SrchOpSet=['','contains','eq','ne','gt','lt','present','absent']
+_SrchLoad=()=>{
+let raw
+try{raw=localStorage.getItem('dv_search')}catch(e){return}
+if(!raw)return
+let d
+try{d=JSON.parse(raw)}catch(e){return}
+if(!d||!Array.isArray(d.c))return
+let out=[]
+d.c.slice(0,20).forEach(c=>{
+if(!c||typeof c!=='object')return
+let src=(c.src==='H')?'H':(isFinite(Number(c.src))?Number(c.src):null)
+if(src===null)return
+let op=(typeof c.op==='string'&&_SrchOpSet.indexOf(c.op)>=0)?c.op:''
+out.push({src:src,
+field:String(c.field==null?'':c.field).slice(0,120),
+op:op,
+val:String(c.val==null?'':c.val).slice(0,120)})
+})
+if(!out.length)return
+Srch.conds=out
+Srch.stop=(d.s!==false)
+Srch.on=!!d.o&&out.some(_SrchLive)
+}
 // Shown next to the Search button so the tally is visible with the panel shut.
 SrchBadge=()=>{
 let b=G('srchOn')
@@ -3648,8 +3679,8 @@ L.innerHTML=Srch.conds.map((c,i)=>
 Srch.conds.forEach((c,i)=>SrchFields(i))}
 
 SrchSet=(i,k,v)=>{if(Srch.conds[i])Srch.conds[i][k]=v}
-SrchAdd=()=>{Srch.conds.push({src:'H',field:'',op:'',val:''});SrchRender()}
-SrchDel=i=>{Srch.conds.splice(i,1);if(!Srch.conds.length)Srch.conds.push({src:'H',field:'',op:'',val:''});SrchRender()}
+SrchAdd=()=>{Srch.conds.push({src:'H',field:'',op:'',val:''});SrchRender();_SrchSave()}
+SrchDel=i=>{Srch.conds.splice(i,1);if(!Srch.conds.length)Srch.conds.push({src:'H',field:'',op:'',val:''});SrchRender();_SrchSave()}
 
 // Fills a condition's field suggestions. For the header these are the field
 // names in the open file; for a template they are the row labels, obtained by
@@ -3689,10 +3720,12 @@ SrchRender()
 if(G('srchMsg'))W(G('srchMsg'),'')
 if(G('srchBtn'))W(G('srchBtn'),'Search')
 SrchResetCount()
+_SrchSave()
 try{SrchHighlight()}catch(e){}}
 
 SrchMode=v=>{
 Srch.stop=!!v
+_SrchSave()
 // Changing to "keep scanning" while parked on a match resumes from there,
 // which is what choosing it at that moment plainly means.
 if(!Srch.stop&&Srch.on&&ScanStepMode&&!ScanActive&&ScanEntries&&ScanEntries.length){
@@ -3708,6 +3741,7 @@ let n=Srch.conds.filter(_SrchLive).length
 SrchResetCount()
 if(G('srchBtn'))W(G('srchBtn'),Srch.on?('Search'+(n>1?' \u00d7'+n:'')):'Search')
 if(G('srchMsg'))W(G('srchMsg'),Srch.on?'':'no condition set')
+_SrchSave()
 try{SrchHighlight()}catch(e){}
 SrchClose()}
 document.addEventListener('click',e=>{
@@ -4891,6 +4925,18 @@ DcFl0(B642Buf(b64))
 if(Tx*2>=ArIx.length){Tx=0;DcFl()}
 W(G('nVer'),'')}
 InitLast()
+// Restore any saved search. The badge is drawn straight away so a search left
+// armed in an earlier session is visible before the first Scan, rather than
+// silently filtering the sweep.
+try{
+_SrchLoad()
+if(G('srchModeStop'))G('srchModeStop').checked=Srch.stop
+let other=document.querySelectorAll("input[name='srchMode']")[1]
+if(other)other.checked=!Srch.stop
+let n=Srch.conds.filter(_SrchLive).length
+if(G('srchBtn'))W(G('srchBtn'),Srch.on?('Search'+(n>1?' \u00d7'+n:'')):'Search')
+SrchBadge()
+}catch(e){}
 // Restore the persisted scan speed setting
 try{
 let savedSpeed=localStorage.getItem('dv_scanSpeed')
