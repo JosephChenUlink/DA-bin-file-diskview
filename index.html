@@ -131,7 +131,7 @@ body.guideOpen #guideDoc{overflow:visible;padding:0}
   <span style='display:flex;align-items:center;gap:8px'>
   <span id='scanElapsed' title='Time elapsed since the current scan started (resets on each Scan click)' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
   <span id='lifetimeStats' title='How many times a template has been displayed while stepping/playing through results, across all Scan clicks this session' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
-  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260826h</span>
+  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260826i</span>
   </span>
 </div>
 <input id='local'type='file'style='display:none'onchange='OpFl()'>
@@ -3545,6 +3545,8 @@ if(RevTimer){clearInterval(RevTimer);RevTimer=null;W(G('revBtn'),'Play')}
 // counter tracks "how many templates displayed since I last clicked Scan", not a
 // true lifetime total).
 _ScanLifetimeDisplayed=0;_SaveLifetimeStats(true)
+// A new sweep starts a new tally.
+SrchResetCount()
 W(G('lifetimeStats'),`Displayed: 0 (${_ScanLifetimeRuns} scan${_ScanLifetimeRuns===1?'':'s'})`)
 // Reset and (re)start the elapsed-time clock for this scan
 _ScanStartTime=Date.now()
@@ -3875,6 +3877,19 @@ ScanSetup&&ScanSetup()}
 // A condition is {src, field, op, val}, where src is 'H' for the file header or
 // a template number. All conditions must hold for a file to be shown.
 Srch={conds:[],stop:true,on:false}
+// Files that satisfied every condition, and files that got as far as being
+// tested against them. Separate from ScanMatchedCount, which counts everything
+// displayed whether or not a search is armed.
+SrchHits=0,SrchTested=0
+SrchResetCount=()=>{SrchHits=0;SrchTested=0;SrchBadge()}
+// Shown next to the Search button so the tally is visible with the panel shut.
+SrchBadge=()=>{
+let b=G('srchOn')
+if(!b)return
+if(!Srch.on){b.style.display='none';W(b,'');return}
+b.style.display='inline'
+W(b,SrchTested?('\u2714 '+SrchHits.toLocaleString()+'/'+SrchTested.toLocaleString()):'\u25cf')
+b.title=SrchTested?(SrchHits.toLocaleString()+' of '+SrchTested.toLocaleString()+' files tested matched the conditions'):'Search armed'}
 
 // Pulls a comparable number out of a displayed cell. The viewer writes decoded
 // values in several shapes, so the order here matters: a thousands-separated
@@ -4072,6 +4087,7 @@ Srch={conds:[{src:'H',field:'',op:'',val:''}],stop:Srch.stop,on:false}
 SrchRender()
 if(G('srchMsg'))W(G('srchMsg'),'')
 if(G('srchBtn'))W(G('srchBtn'),'Search')
+SrchResetCount()
 try{SrchHighlight()}catch(e){}}
 
 SrchMode=v=>{
@@ -4087,7 +4103,9 @@ SrchApply=()=>{
 Srch.stop=!!(G('srchModeStop')&&G('srchModeStop').checked)
 Srch.on=Srch.conds.some(_SrchLive)
 let n=Srch.conds.filter(_SrchLive).length
-if(G('srchBtn'))W(G('srchBtn'),Srch.on?('Search \u25cf'+(n>1?' '+n:'')):'Search')
+// Changing the conditions invalidates the running tally.
+SrchResetCount()
+if(G('srchBtn'))W(G('srchBtn'),Srch.on?('Search'+(n>1?' \u00d7'+n:'')):'Search')
 if(G('srchMsg'))W(G('srchMsg'),Srch.on?'':'no condition set')
 try{SrchHighlight()}catch(e){}
 SrchClose()}
@@ -4400,6 +4418,7 @@ clearTimeout(loadingTextTimer)
 // not) — uses the buffer already read above rather than reading again.
 if(ok&&ScanRawT>=0&&!A2&&!entry.templates&&!_QuickCheckTemplate(buf,ScanRawT))ok=false
 // Header condition, on the bytes already in hand — rejects without decoding.
+if(ok&&!A2&&Srch.on)SrchTested++
 if(ok&&!A2&&!SrchHeaderOk(buf))ok=false
 if(ok){
 _ScanLoading=true
@@ -4425,6 +4444,8 @@ if(ScanActive)_ScanScheduleNext()
 return
 }
 ScanMatchedCount++
+if(Srch.on)SrchHits++
+SrchBadge()
 _ScanLifetimeDisplayed++
 _SaveLifetimeStats()
 if(Srch.on&&Srch.stop&&ScanActive){
@@ -4432,16 +4453,17 @@ if(Srch.on&&Srch.stop&&ScanActive){
 // here, so the scan can be continued by hand.
 _ScanClearTimer();ScanActive=false;ScanStepMode=true
 if(G('srchMsg'))W(G('srchMsg'),'')
-if(G('nVer'))W(G('nVer'),`\u2714 match \u2014 ${entry.name}`)
+if(G('nVer'))W(G('nVer'),`\u2714 match ${SrchHits.toLocaleString()} of ${SrchTested.toLocaleString()} tested \u2014 ${entry.name}`)
 }
 W(G('lifetimeStats'),`Displayed: ${_ScanLifetimeDisplayed.toLocaleString()} (${_ScanLifetimeRuns} scan${_ScanLifetimeRuns===1?'':'s'})`)
 ScanIdx=k+1;if(ScanIdx>=ScanTotal)ScanIdx=0
 let modeLabel=(ScanStepMode?(dir<0?' ◀ Back':' ▶ Step'):'')
 let speedNote=(ScanActive&&ScanTimerRAF)?' ⚡full speed':''
+let srchNote=Srch.on?` \u2714 ${SrchHits.toLocaleString()} found of ${SrchTested.toLocaleString()} tested`:''
 let _now=Date.now()
 if(!ScanActive||_now-_lastStatusUpdate>=100){
 _lastStatusUpdate=_now
-W(G('nVer'),`▶ [${seqNum.toLocaleString()}/${ScanTotal.toLocaleString()} matches, ${ScanExaminedCount.toLocaleString()} scanned]${ScanIntf?' '+ScanIntf:''}${modeLabel}${speedNote}`)
+W(G('nVer'),`▶ [${seqNum.toLocaleString()}/${ScanTotal.toLocaleString()} matches, ${ScanExaminedCount.toLocaleString()} scanned]${ScanIntf?' '+ScanIntf:''}${modeLabel}${speedNote}${srchNote}`)
 }
 if(ScanActive)_ScanScheduleNext()
 }
