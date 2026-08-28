@@ -70,14 +70,19 @@ td button:not(.nbtn),th button{width:20px;height:20px}
 #srchWrap{position:relative;display:inline-block;flex-shrink:0;margin-left:4px}
 #srchBtn{padding:3px 10px;font-size:12px;cursor:pointer}
 #srchOn{font-size:11px;color:#1a5fa8;margin-left:4px;font-weight:bold}
-#srchPanel{display:none;position:absolute;top:100%;left:0;margin-top:2px;z-index:9997;background:#fff;
-border:1px solid #c4ccd6;border-radius:4px;box-shadow:0 4px 14px rgba(0,0,0,.18);padding:8px 10px;width:560px}
+/* Anchored to the wrapper's right edge, not its left: the Search button sits at
+   the far right of the toolbar, so a left-anchored panel ran off the screen and
+   clipped the value box, the hint and the mode radios. Opening leftward keeps it
+   on screen, and the max-width stops it overflowing on a narrow window. */
+#srchPanel{display:none;position:absolute;top:100%;right:0;left:auto;margin-top:2px;z-index:9997;background:#fff;
+border:1px solid #c4ccd6;border-radius:4px;box-shadow:0 4px 14px rgba(0,0,0,.18);padding:8px 10px;
+width:560px;max-width:calc(100vw - 24px);box-sizing:border-box}
 #srchPanel.open{display:block}
 #srchPanel .srow{margin:5px 0;font-size:12px;display:flex;gap:5px;align-items:center;flex-wrap:wrap}
 #srchPanel input[type=text],#srchPanel input:not([type]){flex:1;min-width:90px;font-size:12px;padding:2px 5px}
 #srchPanel select{font-size:12px;padding:2px}
 #srchPanel .shint{color:#778;font-size:11px;font-weight:normal}
-#srchList .scond{display:flex;gap:4px;align-items:center;margin:4px 0}
+#srchList .scond{display:flex;gap:4px;align-items:center;margin:4px 0;flex-wrap:wrap}
 #srchList .scond select{max-width:150px}
 #srchList .scond input{flex:1;min-width:70px;font-size:12px;padding:2px 5px}
 #srchList .sdel{cursor:pointer;color:#a00;font-weight:bold;padding:0 4px;border:0;background:none;font-size:14px}
@@ -126,7 +131,7 @@ body.guideOpen #guideDoc{overflow:visible;padding:0}
   <span style='display:flex;align-items:center;gap:8px'>
   <span id='scanElapsed' title='Time elapsed since the current scan started (resets on each Scan click)' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
   <span id='lifetimeStats' title='How many times a template has been displayed while stepping/playing through results, across all Scan clicks this session' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
-  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260826g</span>
+  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260826h</span>
   </span>
 </div>
 <input id='local'type='file'style='display:none'onchange='OpFl()'>
