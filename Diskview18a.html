@@ -131,7 +131,7 @@ body.guideOpen #guideDoc{overflow:visible;padding:0}
   <span style='display:flex;align-items:center;gap:8px'>
   <span id='scanElapsed' title='Time elapsed since the current scan started (resets on each Scan click)' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
   <span id='lifetimeStats' title='How many times a template has been displayed while stepping/playing through results, across all Scan clicks this session' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
-  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260826l</span>
+  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260826m</span>
   </span>
 </div>
 <input id='local'type='file'style='display:none'onchange='OpFl()'>
@@ -146,7 +146,7 @@ body.guideOpen #guideDoc{overflow:visible;padding:0}
 <div id='srchList'></div>
 <div class='srow'><button onclick='SrchAdd()'>+ Add condition</button>
 <span class='shint'>Header conditions are checked first, without decoding the file</span></div>
-<div class='srow'><span class='shint'>&ldquo;is absent&rdquo; suits header fields, and templates whose rows vary with the data (T2 SMART attributes, T104, T332/T333). Fixed-layout templates such as T8 always show every row.</span></div>
+<div class='srow'><span class='shint'>Leave the field blank with &ldquo;is present&rdquo; / &ldquo;is absent&rdquo; to ask whether the file contains that template at all. With a field name, they ask whether that row exists &mdash; useful for header fields and for templates whose rows vary with the data (T2, T104, T332/T333), but not for fixed-layout ones such as T8, which always show every row.</span></div>
 <div class='srow'><label><input type='radio' name='srchMode' id='srchModeStop' checked onchange='SrchMode(1)'> Stop at the first match</label>
 <label style='margin-left:12px'><input type='radio' name='srchMode' onchange='SrchMode(0)'> Keep scanning, step through matches</label></div>
 <div class='srow' style='text-align:right'><span id='srchMsg' class='shint'></span>
@@ -3571,7 +3571,23 @@ return m?m[1].trim():null}
 
 _SrchLive=c=>c&&c.op&&(c.field||c.op==='present'||c.op==='absent')
 _SrchHdrConds=()=>Srch.conds.filter(c=>_SrchLive(c)&&c.src==='H')
-_SrchTmplConds=()=>Srch.conds.filter(c=>_SrchLive(c)&&c.src!=='H')
+// 沒有填欄位、只問 present/absent 的 template 條件 = 「這個檔案有沒有這個
+// template」。收集資料夾時已經把每個檔案的 template 清單存進 entry.templates，
+// 所以這種條件連檔案都不用讀，更不用解碼。
+_SrchHasConds=()=>Srch.conds.filter(c=>_SrchLive(c)&&c.src!=='H'
+&&!String(c.field||'').trim()&&(c.op==='present'||c.op==='absent'))
+// 其餘的 template 條件要比對某一列的值，必須先解碼。
+_SrchTmplConds=()=>Srch.conds.filter(c=>_SrchLive(c)&&c.src!=='H'
+&&!(!String(c.field||'').trim()&&(c.op==='present'||c.op==='absent')))
+
+// 只看 template 清單，不讀檔。list 為 null 表示尚未知道，交給後面的檢查。
+SrchTemplatesOk=list=>{
+if(!Srch.on)return true
+let cs=_SrchHasConds()
+if(!cs.length||!list)return true
+return cs.every(c=>{
+let has=list.indexOf(Number(c.src))>=0
+return c.op==='present'?has:!has})}
 
 // True when every header condition passes. Runs on the raw bytes, so a file can
 // be rejected before it is ever decoded.
@@ -3618,6 +3634,13 @@ return cells.some(t=>_SrchCmp(t,c.op,c.val))}
 // so each one is rendered at most once, and the view is put back afterwards.
 SrchValueOk=()=>{
 if(!Srch.on)return true
+// 先用已載入檔案的 template 清單處理「有沒有這個 template」。
+let has=_SrchHasConds()
+if(has.length&&ArIx){
+let list=[]
+for(let i=0;i<ArIx.length;i+=2)list.push(ArIx[i])
+if(!SrchTemplatesOk(list))return false
+}
 let cs=_SrchTmplConds()
 if(!cs.length)return true
 let byT={}
@@ -3626,7 +3649,7 @@ let saveTx=Tx,ok=true
 try{
 for(let t of Object.keys(byT)){
 let idx=ArIx.findIndex((v,i)=>i%2===0&&v===Number(t))
-// A file that does not carry the template cannot satisfy a condition on it.
+// 要比對某一列的值，檔案就必須真的有這個 template。
 if(idx<0){ok=false;break}
 if(Tx!==idx/2){Tx=idx/2;DpFl()}
 if(!byT[t].every(_SrchRowOk)){ok=false;break}
@@ -4069,6 +4092,14 @@ let entry=ScanEntries[k],seqNum=k+1
 // if it wasn't a match, which dominated stepping time whenever files were
 // bigger than the ~8KB actually needed for that check.
 if(ScanRawT>=0&&!A2&&entry.templates&&!entry.templates.includes(ScanRawT)){
+ScanIdx=k+1;if(ScanIdx>=ScanTotal)ScanIdx=0
+if(ScanActive)_ScanScheduleNext()
+return
+}
+// 「檔案有沒有某個 template」在這裡就能判斷，完全不必讀檔。
+if(!A2&&Srch.on&&entry.templates&&!SrchTemplatesOk(entry.templates)){
+if(Srch.on)SrchTested++
+SrchBadge()
 ScanIdx=k+1;if(ScanIdx>=ScanTotal)ScanIdx=0
 if(ScanActive)_ScanScheduleNext()
 return
