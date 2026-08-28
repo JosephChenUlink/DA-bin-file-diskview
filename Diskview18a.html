@@ -131,7 +131,7 @@ body.guideOpen #guideDoc{overflow:visible;padding:0}
   <span style='display:flex;align-items:center;gap:8px'>
   <span id='scanElapsed' title='Time elapsed since the current scan started (resets on each Scan click)' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
   <span id='lifetimeStats' title='How many times a template has been displayed while stepping/playing through results, across all Scan clicks this session' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
-  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260826j</span>
+  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260826l</span>
   </span>
 </div>
 <input id='local'type='file'style='display:none'onchange='OpFl()'>
@@ -146,6 +146,7 @@ body.guideOpen #guideDoc{overflow:visible;padding:0}
 <div id='srchList'></div>
 <div class='srow'><button onclick='SrchAdd()'>+ Add condition</button>
 <span class='shint'>Header conditions are checked first, without decoding the file</span></div>
+<div class='srow'><span class='shint'>&ldquo;is absent&rdquo; suits header fields, and templates whose rows vary with the data (T2 SMART attributes, T104, T332/T333). Fixed-layout templates such as T8 always show every row.</span></div>
 <div class='srow'><label><input type='radio' name='srchMode' id='srchModeStop' checked onchange='SrchMode(1)'> Stop at the first match</label>
 <label style='margin-left:12px'><input type='radio' name='srchMode' onchange='SrchMode(0)'> Keep scanning, step through matches</label></div>
 <div class='srow' style='text-align:right'><span id='srchMsg' class='shint'></span>
@@ -3504,10 +3505,12 @@ if(!c||typeof c!=='object')return
 let src=(c.src==='H')?'H':(isFinite(Number(c.src))?Number(c.src):null)
 if(src===null)return
 let op=(typeof c.op==='string'&&_SrchOpSet.indexOf(c.op)>=0)?c.op:''
+let col=(c.col===''||c.col==null)?'':(isFinite(Number(c.col))?Number(c.col):'')
 out.push({src:src,
 field:String(c.field==null?'':c.field).slice(0,120),
 op:op,
-val:String(c.val==null?'':c.val).slice(0,120)})
+val:String(c.val==null?'':c.val).slice(0,120),
+col:col})
 })
 if(!out.length)return
 Srch.conds=out
@@ -3596,11 +3599,18 @@ if(texts.some(t=>t.toLowerCase().includes(want))){cells=texts;break}
 if(c.op==='present')return cells!=null
 if(c.op==='absent')return cells==null
 if(!cells)return false
+// A specific column was named, so compare only that one.
+let ci=(c.col===''||c.col==null)?null:Number(c.col)
+if(ci!=null&&isFinite(ci)){
+let cell=cells[ci]
+if(cell==null)return false
+if(c.op==='ne')return !_SrchCmp(cell,'eq',c.val)
+return _SrchCmp(cell,c.op,c.val)
+}
 if(c.op==='contains')return cells.join(' ').toLowerCase().includes(String(c.val).toLowerCase())
-// A row spreads its figures over several columns -- raw hex, normalised, worst
-// -- and which one holds the number the user means varies by template. So the
-// row matches when ANY cell satisfies, and fails 'does not equal' only when no
-// cell equals.
+// Otherwise a row spreads its figures over several columns -- raw hex,
+// normalised, worst -- and which one holds the intended number varies by
+// template, so the row matches when ANY cell satisfies.
 if(c.op==='ne')return !cells.some(t=>_SrchCmp(t,'eq',c.val))
 return cells.some(t=>_SrchCmp(t,c.op,c.val))}
 
@@ -3663,6 +3673,19 @@ return o}
 let _SrchOps=[['','(any)'],['contains','contains'],['eq','equals'],['ne','does not equal'],
 ['gt','>'],['lt','<'],['present','is present'],['absent','is absent']]
 
+// Which column a comparison reads. Left on "any column" a numeric test can be
+// satisfied by the raw hex cell -- in ATA device statistics the raw carries a
+// C0 flags prefix, so it parses as ~1.4e19 and makes every "greater than" true.
+// Naming the column removes that ambiguity.
+_SrchColOpts=c=>{
+let cols=(c.src!=='H')&&_SrchColCache[c.src]
+let o="<option value=''"+(c.col===''||c.col==null?' selected':'')+">any column</option>"
+if(cols)cols.forEach((h,k)=>{
+if(k===0)return
+o+="<option value='"+k+"'"+(String(c.col)===String(k)?' selected':'')+">"+EscH(h)+"</option>"
+})
+return o}
+
 SrchRender=()=>{
 let L=G('srchList');if(!L)return
 L.innerHTML=Srch.conds.map((c,i)=>
@@ -3670,21 +3693,36 @@ L.innerHTML=Srch.conds.map((c,i)=>
 +"<select onchange='SrchSet("+i+",\"src\",this.value);SrchFields("+i+")'>"+_SrchSrcOpts(c.src)+"</select>"
 +"<input list='srchFL"+i+"' value=\""+EscH(c.field||'')+"\" placeholder='field' oninput='SrchSet("+i+",\"field\",this.value)'>"
 +"<datalist id='srchFL"+i+"'></datalist>"
-+"<select onchange='SrchSet("+i+",\"op\",this.value)'>"
++"<select onchange='SrchSet("+i+",\"op\",this.value);SrchOpUI("+i+")'>"
 +_SrchOps.map(o=>"<option value='"+o[0]+"'"+(c.op===o[0]?' selected':'')+">"+o[1]+"</option>").join('')
 +"</select>"
-+"<input value=\""+EscH(c.val||'')+"\" placeholder='value' oninput='SrchSet("+i+",\"val\",this.value)'>"
++"<select id='srchC"+i+"' title='Which column to compare' onchange='SrchSet("+i+",\"col\",this.value)'>"+_SrchColOpts(c)+"</select>"
++"<input id='srchV"+i+"' value=\""+EscH(c.val||'')+"\" placeholder='value' oninput='SrchSet("+i+",\"val\",this.value)'>"
 +"<button class='sdel' title='Remove' onclick='SrchDel("+i+")'>\u00d7</button>"
 +"</div>").join('')
-Srch.conds.forEach((c,i)=>SrchFields(i))}
+Srch.conds.forEach((c,i)=>{SrchFields(i);SrchOpUI(i)})}
+
+// present/absent test only whether the row exists, so the value box is disabled
+// for them rather than left editable and quietly ignored.
+SrchOpUI=i=>{
+let c=Srch.conds[i],v=G('srchV'+i)
+if(!c||!v)return
+let noVal=(c.op==='present'||c.op==='absent'||!c.op)
+v.disabled=noVal
+v.style.background=noVal?'#f0f2f5':''
+v.placeholder=noVal?'not used':'value'
+v.title=noVal?'This comparison only checks whether the field exists, so no value is needed':''}
 
 SrchSet=(i,k,v)=>{if(Srch.conds[i])Srch.conds[i][k]=v}
-SrchAdd=()=>{Srch.conds.push({src:'H',field:'',op:'',val:''});SrchRender();_SrchSave()}
+SrchAdd=()=>{Srch.conds.push({src:'H',field:'',op:'',val:'',col:''});SrchRender();_SrchSave()}
 SrchDel=i=>{Srch.conds.splice(i,1);if(!Srch.conds.length)Srch.conds.push({src:'H',field:'',op:'',val:''});SrchRender();_SrchSave()}
 
 // Fills a condition's field suggestions. For the header these are the field
 // names in the open file; for a template they are the row labels, obtained by
 // the same save/render/read/restore probe GetDriveModel uses.
+// Column headers per template, filled in while probing field names, so a
+// condition can name the exact column to compare.
+_SrchColCache={}
 SrchFields=i=>{
 let c=Srch.conds[i],dl=G('srchFL'+i)
 if(!c||!dl)return
@@ -3700,6 +3738,8 @@ let idx=ArIx.findIndex((v,k)=>k%2===0&&v===Number(c.src))
 if(idx>=0){
 let saveTx=Tx
 if(Tx!==idx/2){Tx=idx/2;DpFl()}
+let hdr=Q('#rTab tr th')
+if(hdr&&hdr.length)_SrchColCache[c.src]=Array.from(hdr).map(x=>x.textContent.trim())
 for(let tr of Q('#rTab tr')){
 let cl=tr.cells;if(!cl||cl.length<2)continue
 // Prefer the longest cell text as the label: it is the first column in most
