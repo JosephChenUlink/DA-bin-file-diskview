@@ -131,7 +131,7 @@ body.guideOpen #guideDoc{overflow:visible;padding:0}
   <span style='display:flex;align-items:center;gap:8px'>
   <span id='scanElapsed' title='Time elapsed since the current scan started (resets on each Scan click)' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
   <span id='lifetimeStats' title='How many times a template has been displayed while stepping/playing through results, across all Scan clicks this session' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
-  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260826p</span>
+  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260826q</span>
   </span>
 </div>
 <input id='local'type='file'style='display:none'onchange='OpFl()'>
@@ -2406,7 +2406,13 @@ if(T==58&&q>7&&q<12){for(k=0,s=x,x='';k<s.length;k+=2)x+=AscCh(parseInt(s.slice(
 SHex=x
 x=(T==1&&i/3>4||T==23&&(i/3>4||i/3<1)||[24,25,26,27,43,44].includes(T)||T>46||f||f1)?x:DpIxx(range,q)
 if([4,6,7,8,9,20,21].includes(T)){
-let nm=arS[q]||'',nx=(T==4&&['Logical Sectors Written','Number of Write Commands','Logical Sectors Read','Number of Read Commands','Date and Time Timestamp'].some(p=>nm.indexOf(p)==0))?SHex.slice(4):x
+// ATA Device Statistics（ACS-4）每筆是 8 位元組：bits 63:56 是旗標
+// （bit7 supported、bit6 valid、bit5 normalized），bits 55:0 才是數值。
+// 原本只有 T4 的五個硬編碼欄位會取完整的值，其餘欄位落到只有 32 位元的
+// 路徑，於是任何超過 2^32 的統計值都被截斷 —— 例如
+// E000008B8D064FE7 顯示成 2,366,001,127，實際是 599,366,455,271。
+// 改為一律剝掉旗標位元組，與平台端 VALUE_MASK 0x00FFFFFFFFFFFFFF 一致。
+let nm=arS[q]||'',nx=(typeof SHex==='string'&&SHex.length===16)?SHex.slice(2):x
 if(c==2)DecVal=nx
 if(![20,21].includes(T))x=SHex
 }
