@@ -126,7 +126,7 @@ body.guideOpen #guideDoc{overflow:visible;padding:0}
   <span style='display:flex;align-items:center;gap:8px'>
   <span id='scanElapsed' title='Time elapsed since the current scan started (resets on each Scan click)' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
   <span id='lifetimeStats' title='How many times a template has been displayed while stepping/playing through results, across all Scan clicks this session' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
-  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260826f</span>
+  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260826g</span>
   </span>
 </div>
 <input id='local'type='file'style='display:none'onchange='OpFl()'>
@@ -141,8 +141,8 @@ body.guideOpen #guideDoc{overflow:visible;padding:0}
 <div id='srchList'></div>
 <div class='srow'><button onclick='SrchAdd()'>+ Add condition</button>
 <span class='shint'>Header conditions are checked first, without decoding the file</span></div>
-<div class='srow'><label><input type='radio' name='srchMode' id='srchModeStop' checked> Stop at the first match</label>
-<label style='margin-left:12px'><input type='radio' name='srchMode'> Keep scanning, step through matches</label></div>
+<div class='srow'><label><input type='radio' name='srchMode' id='srchModeStop' checked onchange='SrchMode(1)'> Stop at the first match</label>
+<label style='margin-left:12px'><input type='radio' name='srchMode' onchange='SrchMode(0)'> Keep scanning, step through matches</label></div>
 <div class='srow' style='text-align:right'><span id='srchMsg' class='shint'></span>
 <button onclick='SrchClear()'>Clear</button> <button onclick='SrchApply()'><b>Apply</b></button></div>
 </div></span>
@@ -3670,6 +3670,15 @@ if(G('srchMsg'))W(G('srchMsg'),'')
 if(G('srchBtn'))W(G('srchBtn'),'Search')
 try{SrchHighlight()}catch(e){}}
 
+SrchMode=v=>{
+Srch.stop=!!v
+// Changing to "keep scanning" while parked on a match resumes from there,
+// which is what choosing it at that moment plainly means.
+if(!Srch.stop&&Srch.on&&ScanStepMode&&!ScanActive&&ScanEntries&&ScanEntries.length){
+ScanActive=true;ScanStepMode=false
+try{_SetScanBtn&&_SetScanBtn(1)}catch(e){}
+try{_ScanScheduleNext()}catch(e){}
+}}
 SrchApply=()=>{
 Srch.stop=!!(G('srchModeStop')&&G('srchModeStop').checked)
 Srch.on=Srch.conds.some(_SrchLive)
