@@ -139,7 +139,7 @@ body.guideOpen #guideDoc{overflow:visible;padding:0}
   <span style='display:flex;align-items:center;gap:8px'>
   <span id='scanElapsed' title='Time elapsed since the current scan started (resets on each Scan click)' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
   <span id='lifetimeStats' title='How many times a template has been displayed while stepping/playing through results, across all Scan clicks this session' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
-  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260826t</span>
+  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260826u</span>
   </span>
 </div>
 <input id='local'type='file'style='display:none'onchange='OpFl()'>
@@ -3928,11 +3928,15 @@ let src=(c.src==='H')?'H':(isFinite(Number(c.src))?Number(c.src):null)
 if(src===null)return
 let op=(typeof c.op==='string'&&_SrchOpSet.indexOf(c.op)>=0)?c.op:''
 let col=(c.col===''||c.col==null)?'':(isFinite(Number(c.col))?Number(c.col):'')
+let rcol=(c.rcol===''||c.rcol==null)?'':(isFinite(Number(c.rcol))?Number(c.rcol):'')
 out.push({src:src,
 field:String(c.field==null?'':c.field).slice(0,120),
 op:op,
 val:String(c.val==null?'':c.val).slice(0,120),
-col:col})
+col:col,
+rhs:(c.rhs==='f')?'f':'',
+rfield:String(c.rfield==null?'':c.rfield).slice(0,120),
+rcol:rcol})
 })
 if(!out.length)return
 Srch.conds=out
@@ -4035,50 +4039,75 @@ return cs.every(c=>_SrchCmp(_SrchHdrValue(txt,c.field),c.op,c.val))
 }catch(e){return false}}
 
 // True when the value condition passes, read off the table just rendered.
-// Evaluates one condition against the table currently rendered.
-_SrchRowOk=c=>{
-let want=String(c.field||'').toLowerCase(),cells=null
+// 找出標籤符合的那一列，並算出可比較的內容。
+// cells 是原始文字；ord 是「排序用」文字：Device Statistics 的 Value 欄是原始
+// 編碼（遮掉旗標後仍是無號），改用隔壁解讀後的 Decimal 欄，負值才會正確。
+_SrchIsIdx=t=>/^[0-9A-Fa-f]{4}$/.test(String(t).trim())
+_SrchFindRow=name=>{
+let want=String(name||'').toLowerCase()
+if(!want)return null
 for(let tr of Q('#rTab tr')){
 let cl=tr.cells
 if(!cl||cl.length<2)continue
-// The row label is not always the first column: SMART attribute tables put the
-// name last, in Description, so every cell is searched for it.
-let texts=Array.from(cl).map(x=>x.textContent.trim())
-if(texts.some(t=>t.toLowerCase().includes(want))){cells=texts;break}
+let cells=Array.from(cl).map(x=>x.textContent.trim())
+// 列標籤不一定在第一欄：SMART 屬性表把名稱放在最後的 Description。
+if(!cells.some(t=>t.toLowerCase().includes(want)))continue
+let isRaw=t=>/^[0-9A-Fa-f]{16}$/.test(String(t).trim())&&parseInt(String(t).trim().slice(0,2),16)>=0x80
+let ord=cells.map((t,k)=>{
+if(!isRaw(t))return t
+let nxt=cells[k+1]
+return (nxt!=null&&_SrchNum(nxt)!=null)?nxt:t})
+return {cells,ord}
 }
-if(c.op==='present')return cells!=null
-if(c.op==='absent')return cells==null
-if(!cells)return false
-// Device Statistics 的 Value 欄是原始編碼：旗標位元組＋原始位元組。遮掉旗標
-// 後得到的是「無號」數值，但溫度這類欄位是有號的 —— C0000000000000EC 遮罩後
-// 是 236，實際卻是 -20 °C。所以 236 > 40 會成立，而 -20 > 40 不該成立。
-// 相鄰的 Decimal 欄才是檢視器解讀後的值（含負號與單位），數值大小比較一律
-// 改用它。SMART 的 raw 欄（12 位數、最高位元組為 00）不符合這個樣式，不受影響。
-let _isDevStatRaw=t=>/^[0-9A-Fa-f]{16}$/.test(String(t).trim())
-&&parseInt(String(t).trim().slice(0,2),16)>=0x80
-let _decoded=k=>(k+1<cells.length&&_SrchNum(cells[k+1])!=null)?cells[k+1]:null
-let ord=cells.map((t,k)=>{let d=_isDevStatRaw(t)?_decoded(k):null;return d==null?t:d})
+return null}
 
-// A specific column was named, so compare only that one.
+// 取出一列裡可用來比較的數值文字。指定欄位就用那一欄，否則取第一個
+// 「不是索引偏移量、且解得出數字」的格子。
+_SrchRowVal=(R,col)=>{
+if(!R)return null
+if(col!==''&&col!=null&&isFinite(Number(col))){
+let v=R.ord[Number(col)]
+return v==null?null:v
+}
+for(let k=0;k<R.ord.length;k++){
+if(_SrchIsIdx(R.cells[k]))continue
+if(_SrchNum(R.ord[k])!=null)return R.ord[k]
+}
+return null}
+
+// Evaluates one condition against the table currently rendered.
+_SrchRowOk=c=>{
+let L=_SrchFindRow(c.field)
+if(c.op==='present')return L!=null
+if(c.op==='absent')return L==null
+if(!L)return false
+let cells=L.cells,ord=L.ord
+
+// 比較的右邊可以是固定值，也可以是同一份檔案裡的另一個欄位 —— 例如
+// 「Current Temperature > Specified Maximum Operating Temperature」，
+// 門檻因機種而異，寫死數字問不出這種問題。
+let val=c.val
+if(c.rhs==='f'){
+let R=_SrchFindRow(c.rfield)
+if(!R)return false
+val=_SrchRowVal(R,c.rcol)
+if(val==null)return false
+}
+
 let ci=(c.col===''||c.col==null)?null:Number(c.col)
 if(ci!=null&&isFinite(ci)){
 if(cells[ci]==null)return false
-// 大小比較用解讀值；等於／不等於兩種都試，這樣直接搜原始十六進位仍然可行。
-if(c.op==='gt'||c.op==='lt')return _SrchCmp(ord[ci],c.op,c.val)
-if(c.op==='ne')return !(_SrchCmp(cells[ci],'eq',c.val)||_SrchCmp(ord[ci],'eq',c.val))
-if(c.op==='eq')return _SrchCmp(cells[ci],'eq',c.val)||_SrchCmp(ord[ci],'eq',c.val)
-return _SrchCmp(cells[ci],c.op,c.val)
+if(c.op==='gt'||c.op==='lt')return _SrchCmp(ord[ci],c.op,val)
+if(c.op==='ne')return !(_SrchCmp(cells[ci],'eq',val)||_SrchCmp(ord[ci],'eq',val))
+if(c.op==='eq')return _SrchCmp(cells[ci],'eq',val)||_SrchCmp(ord[ci],'eq',val)
+return _SrchCmp(cells[ci],c.op,val)
 }
-if(c.op==='contains')return cells.join(' ').toLowerCase().includes(String(c.val).toLowerCase())
-// Otherwise a row spreads its figures over several columns -- raw hex,
-// normalised, worst -- and which one holds the intended number varies by
-// template, so the row matches when ANY cell satisfies.
-// 未指定欄位時，跳過「剛好 4 位十六進位、沒有其他內容」的格子：那是 Index
-// 偏移量或旗標位元，從來不是數量。0068 曾被解成 68 而讓 >40 成立。
+if(c.op==='contains')return cells.join(' ').toLowerCase().includes(String(val).toLowerCase())
+// 未指定欄位時跳過「剛好 4 位十六進位」的格子：那是索引偏移量或旗標位元。
 if(c.op==='gt'||c.op==='lt')
-return ord.some((t,k)=>!/^[0-9A-Fa-f]{4}$/.test(String(cells[k]).trim())&&_SrchCmp(t,c.op,c.val))
-if(c.op==='ne')return !cells.some((t,k)=>_SrchCmp(t,'eq',c.val)||_SrchCmp(ord[k],'eq',c.val))
-return cells.some((t,k)=>_SrchCmp(t,c.op,c.val)||_SrchCmp(ord[k],c.op,c.val))}
+return ord.some((t,k)=>!_SrchIsIdx(cells[k])&&_SrchCmp(t,c.op,val))
+if(c.op==='ne')return !cells.some((t,k)=>_SrchCmp(t,'eq',val)||_SrchCmp(ord[k],'eq',val))
+return cells.some((t,k)=>_SrchCmp(t,c.op,val)||_SrchCmp(ord[k],c.op,val))}
 
 // True when every template condition passes. Conditions are grouped by template
 // so each one is rendered at most once, and the view is put back afterwards.
@@ -4166,6 +4195,17 @@ o+="<option value=\""+EscH(c.field)+"\" selected>"+EscH(c.field)+"</option>"
 names.forEach(n=>{o+="<option value=\""+EscH(n)+"\""+(c.field===n?' selected':'')+">"+EscH(n)+"</option>"})
 return "<select id='srchF"+i+"' onchange='SrchSet("+i+",\"field\",this.value)'>"+o+"</select>"}
 
+// 右邊若選「另一個欄位」，用同一份欄位清單（同一個 template）。
+_SrchRhsCtl=(c,i)=>{
+let names=_SrchFieldCache[i]||[]
+if(!names.length)
+return "<input id='srchRF"+i+"' value=\""+EscH(c.rfield||'')+"\" placeholder='other field' oninput='SrchSet("+i+",\"rfield\",this.value)'>"
+let o="<option value=''>(choose a field)</option>"
+if(c.rfield&&names.indexOf(c.rfield)<0)
+o+="<option value=\""+EscH(c.rfield)+"\" selected>"+EscH(c.rfield)+"</option>"
+names.forEach(n=>{o+="<option value=\""+EscH(n)+"\""+(c.rfield===n?' selected':'')+">"+EscH(n)+"</option>"})
+return "<select id='srchRF"+i+"' onchange='SrchSet("+i+",\"rfield\",this.value)'>"+o+"</select>"}
+
 _SrchColOpts=c=>{
 let cols=(c.src!=='H')&&_SrchColCache[c.src]
 let o="<option value=''"+(c.col===''||c.col==null?' selected':'')+">any column</option>"
@@ -4185,7 +4225,12 @@ L.innerHTML=Srch.conds.map((c,i)=>
 +_SrchOps.map(o=>"<option value='"+o[0]+"'"+(c.op===o[0]?' selected':'')+">"+o[1]+"</option>").join('')
 +"</select>"
 +"<select id='srchC"+i+"' title='Which column to compare' onchange='SrchSet("+i+",\"col\",this.value)'>"+_SrchColOpts(c)+"</select>"
-+"<input id='srchV"+i+"' value=\""+EscH(c.val||'')+"\" placeholder='value' oninput='SrchSet("+i+",\"val\",this.value)'>"
++"<select id='srchR"+i+"' title='Compare against a fixed value, or another field in the same file' onchange='SrchSet("+i+",\"rhs\",this.value);SrchRender()'>"
++"<option value=''"+(c.rhs==='f'?'':' selected')+">a value</option>"
++"<option value='f'"+(c.rhs==='f'?' selected':'')+">another field</option></select>"
++(c.rhs==='f'
+?"<span id='srchRW"+i+"'>"+_SrchRhsCtl(c,i)+"</span>"
+:"<input id='srchV"+i+"' value=\""+EscH(c.val||'')+"\" placeholder='value' oninput='SrchSet("+i+",\"val\",this.value)'>")
 +"<button class='sdel' title='Remove' onclick='SrchDel("+i+")'>\u00d7</button>"
 +"</div>").join('')
 Srch.conds.forEach((c,i)=>{SrchFields(i);SrchOpUI(i)})}
@@ -4202,8 +4247,8 @@ v.placeholder=noVal?'not used':'value'
 v.title=noVal?'This comparison only checks whether the field exists, so no value is needed':''}
 
 SrchSet=(i,k,v)=>{if(Srch.conds[i])Srch.conds[i][k]=v}
-SrchAdd=()=>{Srch.conds.push({src:'H',field:'',op:'',val:'',col:''});SrchRender();_SrchSave()}
-SrchDel=i=>{Srch.conds.splice(i,1);if(!Srch.conds.length)Srch.conds.push({src:'H',field:'',op:'',val:''});SrchRender();_SrchSave()}
+SrchAdd=()=>{Srch.conds.push({src:'H',field:'',op:'',val:'',col:'',rhs:'',rfield:'',rcol:''});SrchRender();_SrchSave()}
+SrchDel=i=>{Srch.conds.splice(i,1);if(!Srch.conds.length)Srch.conds.push({src:'H',field:'',op:'',val:'',col:'',rhs:'',rfield:'',rcol:''});SrchRender();_SrchSave()}
 
 // Fills a condition's field suggestions. For the header these are the field
 // names in the open file; for a template they are the row labels, obtained by
@@ -4245,10 +4290,12 @@ if(Tx!==saveTx){Tx=saveTx;DpFl()}
 }catch(e){}
 _SrchFieldCache[i]=names.slice(0,400)
 let wrap=G('srchFW'+i)
-if(wrap)wrap.innerHTML=_SrchFieldCtl(Srch.conds[i],i)}
+if(wrap)wrap.innerHTML=_SrchFieldCtl(Srch.conds[i],i)
+let rw=G('srchRW'+i)
+if(rw)rw.innerHTML=_SrchRhsCtl(Srch.conds[i],i)}
 
 SrchClear=()=>{
-Srch={conds:[{src:'H',field:'',op:'',val:''}],stop:Srch.stop,on:false}
+Srch={conds:[{src:'H',field:'',op:'',val:'',col:'',rhs:'',rfield:'',rcol:''}],stop:Srch.stop,on:false}
 SrchRender()
 if(G('srchMsg'))W(G('srchMsg'),'')
 if(G('srchBtn'))W(G('srchBtn'),'Search')
