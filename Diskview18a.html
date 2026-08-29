@@ -139,7 +139,7 @@ body.guideOpen #guideDoc{overflow:visible;padding:0}
   <span style='display:flex;align-items:center;gap:8px'>
   <span id='scanElapsed' title='Time elapsed since the current scan started (resets on each Scan click)' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
   <span id='lifetimeStats' title='How many times a template has been displayed while stepping/playing through results, across all Scan clicks this session' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
-  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260826v</span>
+  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260826w</span>
   </span>
 </div>
 <input id='local'type='file'style='display:none'onchange='OpFl()'>
@@ -4482,10 +4482,32 @@ if(ScanLastBuf&&ScanLastName===CurFile)buf=ScanLastBuf
 else if(ScanOrigBuf&&ScanOrigName===CurFile)buf=ScanOrigBuf
 else buf=ScanLastBuf||ScanOrigBuf
 if(!buf){alert('No capture is open.');return}
-// zip 內的項目名稱帶有路徑，取最後一段當檔名；瀏覽器下載不接受路徑分隔字元。
-let nm=String(CurFile||ScanLastName||ScanOrigName||'capture')
+// 檔名由擷取內容組成：介面、磁碟型號、擷取時間、存檔時間。
+// 型號取自磁碟自己的 identify 資料（SATA T1／NVMe T101／SCSI T334 Product），
+// 不是檔頭的 Model Number —— 後者是執行擷取的主機，不是磁碟。
+let _sn=v=>String(v==null?'':v).trim().replace(/[^A-Za-z0-9._-]+/g,'_').replace(/^_+|_+$/g,'')
+let hdr1=(SAll||'').split('h\n')[0]
+let hf=n=>{try{return CmpField(hdr1,n)||''}catch(e){return ''}}
+let model=''
+try{model=GetDriveModel(A,ArIx,From)||''}catch(e){model=''}
+let intf=_sn(hf('Interface'))
+let cap=_sn(hf('Date')).replace(/-/g,'')+(hf('Time')?'T'+_sn(hf('Time')).replace(/[:_]/g,''):'')
+let d=new Date(),p2=n=>String(n).padStart(2,'0')
+let saved=d.getFullYear()+p2(d.getMonth()+1)+p2(d.getDate())+'T'+p2(d.getHours())+p2(d.getMinutes())+p2(d.getSeconds())
+// 型號截到 40 字元：資料毀損時這個欄位可能是一長串亂碼，
+// 檔名過長在部分檔案系統上會直接失敗。
+let parts=[intf,_sn(model).slice(0,40),cap].filter(x=>x)
+let nm
+// 一定要有擷取時間才用組合出來的檔名：少了它就不符合命名目的，
+// 這時保留原始檔名反而更有用（那是回溯來源的唯一線索）。
+if(cap&&parts.length){
+nm=parts.join('_')+'_saved'+saved+'.bin'
+}else{
+// 檔頭讀不出來時，退回原本的檔名。zip 內的項目名稱帶路徑，只取最後一段。
+nm=String(CurFile||ScanLastName||ScanOrigName||'capture')
 nm=nm.split(/[\\/]/).pop().replace(/[^A-Za-z0-9._-]/g,'_')||'capture'
 if(!/\.bin$/i.test(nm))nm+='.bin'
+}
 try{
 let b=new Blob([buf],{type:'application/octet-stream'})
 let u=URL.createObjectURL(b)
