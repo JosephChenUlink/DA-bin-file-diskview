@@ -139,7 +139,7 @@ body.guideOpen #guideDoc{overflow:visible;padding:0}
   <span style='display:flex;align-items:center;gap:8px'>
   <span id='scanElapsed' title='Time elapsed since the current scan started (resets on each Scan click)' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
   <span id='lifetimeStats' title='How many times a template has been displayed while stepping/playing through results, across all Scan clicks this session' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
-  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260826x</span>
+  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260903a</span>
   </span>
 </div>
 <input id='local'type='file'style='display:none'onchange='OpFl()'>
@@ -1285,8 +1285,47 @@ DpFl()
 // The header view builds its own File 2 columns, so CmpRenderTable would be
 // appending a second set on top of them.
 if(A2&&!HdrView)CmpRenderTable()
+// T309 的欄位解碼放在表格完成之後，這樣比較欄與搜尋都看得到解碼結果。
+try{_PostSelfTest()}catch(e){}
 // Mark whatever satisfied a condition, after the table is final.
 try{if(typeof SrchHighlight==='function')SrchHighlight()}catch(e){}}
+
+// ── T309 Self-Test Results（SPC-4 log page 10h）──────────────────────────
+// 每筆 20 位元組：byte 8 的 bits 7:5 是 self-test code、bits 3:0 是 result，
+// byte 9 是 self-test number，bytes A..B 是累計通電小時（16 位元）。
+// 原本只顯示 byte 8..9 的十六進位（如 2000），看不出是哪種測試、結果為何。
+_STCode=['Default','Background short','Background extended','(reserved 3)',
+'Abort background','Foreground short','Foreground extended','(reserved 7)']
+_STResult={0:'Completed, no error',1:'Aborted by SEND DIAGNOSTIC',2:'Aborted by other method',
+3:'Unknown error, not completed',4:'Completed, unknown segment failed',5:'Completed, 1st segment failed',
+6:'Completed, 2nd segment failed',7:'Completed, other segment failed',15:'Self-test in progress'}
+_PostSelfTest=()=>{
+let t=G('rTab');if(!t)return
+let hdr=t.querySelector('tr')
+if(!hdr)return
+let ths=Array.from(hdr.querySelectorAll('th')).map(x=>x.textContent.trim())
+let iST=ths.indexOf('SelfTest'),iPOH=ths.indexOf('PowerOnHour')
+if(iST<0||iPOH<0)return
+if(ths.indexOf('Code')>=0)return   // 已處理過
+let stTh=hdr.querySelectorAll('th')[iST]
+stTh.insertAdjacentHTML('afterend','<th>Code</th><th>Result</th>')
+let Cx=n=>n.toLocaleString('en-US')
+Array.from(t.querySelectorAll('tr')).slice(1).forEach(tr=>{
+let c=tr.cells;if(!c||c.length<=iPOH||tr.querySelector('th'))return
+let st=c[iST],raw=String(st.textContent).trim()
+let b8=parseInt(raw.slice(0,2),16)
+let code='',res=''
+if(isFinite(b8)&&/^[0-9A-Fa-f]{4}$/.test(raw)){
+let cd=(b8>>5)&7,rs=b8&15
+// 全 0 的項目是未使用的槽位，不要替它編出「Default / Completed」。
+if(raw!=='0000'){code=_STCode[cd]||('code '+cd);res=_STResult[rs]||('result '+rs)}
+}
+st.insertAdjacentHTML('afterend','<td>'+EscH(code)+'</td><td>'+EscH(res)+'</td>')
+// 插入兩格後 PowerOnHour 往右移了兩格
+let poh=c[iPOH+2],h=parseInt(String(poh.textContent).trim(),16)
+if(isFinite(h)&&/^[0-9A-Fa-f]{1,4}$/.test(String(poh.textContent).trim())&&h>0)
+poh.innerHTML=EscH(poh.textContent.trim())+' <span style=\'color:#555\'>('+Cx(h)+' h = '+Cx(Math.floor(h/24))+'d '+(h%24)+'h)</span>'
+})}
 
 OpFl2=z=>{
 let f=G('local2').files[0],r=new FileReader()
@@ -4049,6 +4088,9 @@ if(!want)return null
 for(let tr of Q('#rTab tr')){
 let cl=tr.cells
 if(!cl||cl.length<2)continue
+// 標題列不是資料：否則欄名（PowerOnHour）會被當成列標籤找到，
+// 欄模式就永遠進不去。
+if(tr.querySelector('th'))continue
 let cells=Array.from(cl).map(x=>x.textContent.trim())
 // 列標籤不一定在第一欄：SMART 屬性表把名稱放在最後的 Description。
 if(!cells.some(t=>t.toLowerCase().includes(want)))continue
@@ -4075,9 +4117,41 @@ if(_SrchNum(R.ord[k])!=null)return R.ord[k]
 }
 return null}
 
+// 有些表是「每列一筆、欄位名在標題」（T309 自我測試結果、T104 錯誤紀錄）。
+// 這種表沒有列標籤可找，所以條件若對到某個欄名，就改成逐列比較那一欄，
+// 任一列符合即成立 —— 「PowerOnHour > 0」的意思正是「有任何一筆通電時數大於 0」。
+_SrchFindCol=name=>{
+let want=String(name||'').toLowerCase().trim()
+if(!want)return -1
+let hdr=Q('#rTab tr')[0];if(!hdr)return -1
+let ths=Array.from(hdr.querySelectorAll('th')).map(x=>x.textContent.trim().toLowerCase())
+let i=ths.indexOf(want);if(i>=0)return i
+return ths.findIndex(t=>t&&t.includes(want))}
+_SrchColOk=(c,ci)=>{
+let rows=Array.from(Q('#rTab tr')).filter(tr=>tr.cells&&tr.cells.length>ci&&!tr.querySelector('th'))
+if(c.op==='present')return rows.some(tr=>tr.cells[ci].textContent.trim()!=='')
+if(c.op==='absent')return !rows.some(tr=>tr.cells[ci].textContent.trim()!=='')
+let val=c.val
+if(c.rhs==='f'){
+// 欄對欄：同一列裡的另一個欄
+let cj=_SrchFindCol(c.rfield);if(cj<0)return false
+return rows.some(tr=>{
+let a=tr.cells[ci].textContent.trim(),b=tr.cells[cj].textContent.trim()
+if(!a||!b)return false
+if(c.op==='ne')return !_SrchCmp(a,'eq',b)
+return _SrchCmp(a,c.op,b)})
+}
+return rows.some(tr=>{
+let a=tr.cells[ci].textContent.trim()
+if(!a)return false
+if(c.op==='ne')return !_SrchCmp(a,'eq',val)
+return _SrchCmp(a,c.op,val)})}
+
 // Evaluates one condition against the table currently rendered.
 _SrchRowOk=c=>{
 let L=_SrchFindRow(c.field)
+// 找不到列標籤時，看欄名是否符合；欄名優先於「找不到就失敗」。
+if(!L){let ci=_SrchFindCol(c.field);if(ci>=0)return _SrchColOk(c,ci)}
 if(c.op==='present')return L!=null
 if(c.op==='absent')return L==null
 if(!L)return false
@@ -4148,11 +4222,22 @@ let cs=Srch.conds.filter(c=>_SrchLive(c)&&c.op!=='absent'
 if(!cs.length)return
 cs.forEach(c=>{
 let want=String(c.field||'').toLowerCase()
+let found=false
 for(let tr of rows){
 let cl=tr.cells
-if(!cl||cl.length<2)continue
+if(!cl||cl.length<2||tr.querySelector('th'))continue
 let texts=Array.from(cl).map(x=>x.textContent.trim())
-if(texts.some(t=>t.toLowerCase().includes(want))){tr.classList.add('srchHit');break}
+if(texts.some(t=>t.toLowerCase().includes(want))){tr.classList.add('srchHit');found=true;break}
+}
+// 欄模式：標示那一欄符合條件的每一列
+if(!found){
+let ci=_SrchFindCol(c.field)
+if(ci>=0)Array.from(rows).forEach(tr=>{
+if(!tr.cells||tr.cells.length<=ci||tr.querySelector('th'))return
+let a=tr.cells[ci].textContent.trim()
+if(!a)return
+let ok=c.op==='present'?true:(c.op==='ne'?!_SrchCmp(a,'eq',c.val):_SrchCmp(a,c.op,c.val))
+if(ok)tr.classList.add('srchHit')})
 }
 })}
 
@@ -4274,7 +4359,13 @@ let saveTx=Tx
 if(Tx!==idx/2){Tx=idx/2;DpFl()}
 let hdr=Q('#rTab tr th')
 if(hdr&&hdr.length)_SrchColCache[c.src]=Array.from(hdr).map(x=>x.textContent.trim())
-for(let tr of Q('#rTab tr')){
+// 每列一筆的表（T309 自我測試、T104 錯誤紀錄）：第一欄是流水號 1,2,3…，
+// 欄位名在標題列。這種表的「欄位」就是欄名，不要把解碼後的值當成列標籤。
+let dataRows=Array.from(Q('#rTab tr')).filter(tr=>tr.cells&&tr.cells.length>1&&!tr.querySelector('th'))
+let isEntryTable=dataRows.length>=2&&dataRows.slice(0,3).every((tr,k)=>String(tr.cells[0].textContent).trim()===String(k+1))
+if(isEntryTable){
+Array.from(hdr||[]).forEach(x=>{let t=x.textContent.trim();if(t&&!/^(Item|Index)$/i.test(t)&&names.indexOf(t)<0)names.push(t)})
+}else for(let tr of Q('#rTab tr')){
 let cl=tr.cells;if(!cl||cl.length<2)continue
 // 標題列不是資料，跳過，否則欄名（如 Decimal）會混進欄位清單。
 if(tr.querySelector('th'))continue
@@ -4283,6 +4374,12 @@ if(tr.querySelector('th'))continue
 let t=Array.from(cl).map(x=>x.textContent.trim()).filter(x=>x&&!/^[0-9A-Fa-f]+$/.test(x))
 .sort((a,b)=>b.length-a.length)[0]
 if(t&&t.length<70&&names.indexOf(t)<0)names.push(t)
+}
+// 每列一筆的表（如 T309）沒有列標籤，改把欄名列出來讓使用者挑。
+if(!names.length){
+let hdr=Q('#rTab tr')[0]
+if(hdr)Array.from(hdr.querySelectorAll('th')).forEach(x=>{
+let t=x.textContent.trim();if(t&&!/^(Item|Index)$/i.test(t)&&names.indexOf(t)<0)names.push(t)})
 }
 if(Tx!==saveTx){Tx=saveTx;DpFl()}
 }
