@@ -139,7 +139,7 @@ body.guideOpen #guideDoc{overflow:visible;padding:0}
   <span style='display:flex;align-items:center;gap:8px'>
   <span id='scanElapsed' title='Time elapsed since the current scan started (resets on each Scan click)' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
   <span id='lifetimeStats' title='How many times a template has been displayed while stepping/playing through results, across all Scan clicks this session' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
-  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260903b</span>
+  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260903c</span>
   </span>
 </div>
 <input id='local'type='file'style='display:none'onchange='OpFl()'>
@@ -375,7 +375,7 @@ body.guideOpen #guideDoc{overflow:visible;padding:0}
 @-32Write-Read-Verify Sector Count Mode 2,63Contents of the QWord are valid
 @-36Unique ID,36,-24IEEE OUI,60,-4NAA,127Shall be set to 1
 @0Device supports Trim bit of the DSM Command,8,-8Logical Block Markups support,(0) Feature not supported,(1) SCSI Block Commands logical block markup descriptor format supported,(C0h) Only the operating system file logical block markup descriptor values are supported<hr>,63Shall be set to 1
-@-32Utilization A field,32,-32Utilization B field,96,-8Utilization Interval,(0Ah) per day,(0Eh) per year<hr>,104,-8Utilization Units,(2) MB,(3) GB,(4) TB,(5) PB,(6) EB<hr>,112,-8Utilization Type,(1) Combined Writes and Reads,(2) Writes Only,(3) Seperate Writes and Reads<hr>,127Contents of the DQWord are valid
+@-32Utilization A field,32,-32Utilization B field,96,-8Utilization Interval,(0Ah) per day,(0Eh) per year<hr>,104,-8Utilization Units,(2) MB,(3) GB,(4) TB,(5) PB,(6) EB<hr>,112,-8Utilization Type,(1) Combined Writes and Reads,(2) Writes Only,(3) Separate Writes and Reads<hr>,127Contents of the DQWord are valid
 @0Date/Time Rate Basis is supported,4Power On hours Rate Basis is supported,8Since Power On Rate Basis is supported,23Setting Rate Basis is supported,63Contents of the QWord are valid
 @-2Zoned field,(0) Not Reported,(1) Device supports Host Aware Zones,(2) Device supports device managed zoned device<hr>,63Contents of the QWord are valid
 @0Non-Data Report Zones Ext supported,1Non-Data Open Zone Ext supported,2Non-Data Close Zone Ext supported,3Non-Data Finish Zone Ext supported,4Non-Data Reset Write Pointers EXT supported,63Contents of the QWord are valid
@@ -459,11 +459,11 @@ body.guideOpen #guideDoc{overflow:visible;padding:0}
 <div id='I39'>56,-8Percentage Used Endurance Indicator(%)</div>
 <div id='I40'>32,-32Accumulated Power On Minutes,64,-16Background Scan Status,80,-16Number of Background Scans performed,96,-16Background Scan Progress,112,-16Number of Background Medium Scans performed</div>
 <div id='I40A'>32,-32Accumulated Power On Minutes,64,-2Sense Keys,68,-1Reassign Status,72,-8Additional Sense Code,80,-8Additional Sense Code Qualifier,88,-40Vendor Specific,128,-64Logic Block Address</div>
-<div id='I41'>40,-24Maximum Nonvilatile Time(min)</div>
+<div id='I41'>40,-24Maximum Nonvolatile Time (min)</div>
 <div id='I42'>-8Generation Code,8,-8 Number of PHYs,16,-16PHY Identifier,32,-16SAS PHY Log Descriptor Length!
-@-4Attached Reason,4,-3Attached Device Type,8,-4Negotiated Logical Link Rate,12,-4Reason,16,-4(b1)Attch SMP Initiator (b2)Attch STP Initiator (b3)Attch SSP Initiator,24,-4(b1)Attch SMP Target (b2)Attch STP Target (b3)Attch SSP Target,32,-64SAS Address!!
-@-64Atached SAS Address,64,-8Attached PHY Identifier,128,-32Invalid DWord Count,160,-32Running Disparity Error Count!!!
-@-32Loss Of DWord Synchronization,32,-32PHY Reset problem,80,-8PHY Event Descriptor Length,88,-8NUmber of PHP Event Descriptors!!!!
+@-4Attached Reason,4,-3Attached Device Type,8,-4Negotiated Logical Link Rate,12,-4Reason,16,-4(b1)Attached SMP Initiator (b2)Attached STP Initiator (b3)Attached SSP Initiator,24,-4(b1)Attached SMP Target (b2)Attached STP Target (b3)Attached SSP Target,32,-64SAS Address!!
+@-64Attached SAS Address,64,-8Attached PHY Identifier,128,-32Invalid DWord Count,160,-32Running Disparity Error Count!!!
+@-32Loss Of DWord Synchronization,32,-32PHY Reset problem,80,-8PHY Event Descriptor Length,88,-8Number of Phy Event Descriptors!!!!
 @-8PHY Event Source,8,-32PHY Event,40,-32Peak Value Detector Threshold
 @-8PHY Event Source,8,-32PHY Event,40,-32Peak Value Detector Threshold
 @-8PHY Event Source,8,-32PHY Event,40,-32Peak Value Detector Threshold
@@ -1304,7 +1304,7 @@ let t=G('rTab');if(!t)return
 let hdr=t.querySelector('tr')
 if(!hdr)return
 let ths=Array.from(hdr.querySelectorAll('th')).map(x=>x.textContent.trim())
-let iST=ths.indexOf('SelfTest'),iPOH=ths.indexOf('PowerOnHour')
+let iST=ths.indexOf('Self-test Raw'),iPOH=ths.indexOf('Accumulated POH')
 if(iST<0||iPOH<0)return
 if(ths.indexOf('Code')>=0)return   // 已處理過
 let stTh=hdr.querySelectorAll('th')[iST]
@@ -2332,7 +2332,7 @@ qr+="<tr id='r0'><td colspan='8'>Current Self-test Operation (offset 0): "+opStr
 ArRange.push('0-1');rowIdx++
 qr+="<tr id='r1'><td colspan='8'>Current Self-test Completion (offset 1): "+compStr+"</td></tr>"
 ArRange.push('1-1');rowIdx++
-qr+="</tbody><tbody><tr class='c4'><th>Entry</th><th>Offset</th><th>Result</th><th>Test Type</th><th>POH</th><th>NSID</th><th>LBA</th><th>Status</th></tr>"
+qr+="</tbody><tbody><tr class='c4'><th>Entry</th><th>Offset</th><th>Result</th><th>Test Type</th><th>Power-On Hours</th><th>NSID</th><th>LBA</th><th>Status</th></tr>"
 const codeNames={1:'Short',2:'Extended',0xe:'Vendor'}
 const resNames={0:'Completed without error',1:'Aborted by Self-test command',2:'Aborted by Controller Level Reset',3:'Aborted due to namespace removal',4:'Aborted due to Format NVM command',5:'Fatal or unknown error',6:'Completed with segment failure',7:'Completed with segment failure and unknown segment',8:'Aborted for unknown reason',9:'Aborted due to sanitize operation'}
 for(let e=0;e<nEnt;e++){
@@ -2363,7 +2363,7 @@ SyncH()
 }
 
 Dp2=z=>{
-let qd,qr="<tr><th>ID</th><th>Flag(hex)</th><th>Attr</th><th>Worst</th><th>Raw Value(hex)</th><th>Rsv(hex)</th><th>Description</th></tr>",i,j,y
+let qd,qr="<tr><th>ID</th><th>Flags (hex)</th><th>Current</th><th>Worst</th><th>Raw Value (hex)</th><th>Reserved (hex)</th><th>Description</th></tr>",i,j,y
 // The scan stops at the first zero attribute ID, but a truncated capture — or a
 // record that fills every slot — need not contain one. Unbounded, the index
 // walks past the end of A, where undefined==0 is false, so the loop never
@@ -2486,7 +2486,7 @@ j++
 })}
 
 DpD=z=>{
-let qd,qr=`<tr><th>SMART ID</th><th>Thresholds Data</th><th>Description</th></tr>`
+let qd,qr=`<tr><th>SMART ID</th><th>Threshold</th><th>Description</th></tr>`
 // The scan stops at the first zero attribute ID, but a truncated capture — or a
 // record that fills every slot — need not contain one. Unbounded, the index
 // walks past the end of A, where undefined==0 is false, so the loop never
@@ -2683,7 +2683,7 @@ Bytes 4-7: Defect List Length = `+Cx(listLen)+` bytes<br>
 let arM=`DriveSerial,,Firmware revision,Model number,Maximum number of sectors that shall be transferred,Trusted Computing feature set option,Capabilities 0,,Capabilities 1,,Capabilities 2,,Capabilities 3,PIO DMA Additional Support,,Queue Depth & Serial ATA capabilities,Major version & Minor revision number,Commands and feature set supported 1,Ultra DMA modes,Advanced power management,Stream Transfer,NAA IEEE OUI UniqueID,,Words per Logical Sector,Commands and feature set supported 2,,Security Status,CFA power mode 1,Device Nominal Form Factor,,Current media serial number,SCT Command Transport,,Alignment of logical blocks within a larger physical block,NV Cache Capabilities,Transport revision number,,Extended Number of User Addressable Sectors
 Spindle Motor Power-on Hours=>T2.3,Head Flying Hours,Head Loaded Events=>T2.193 225,Number of Reallocation Logical Sectors=>T2.5,Read Recovery Attempts,Number of Mechanical Start Failures=>T2.10,Number of Reallocation Candidate Logical Sectors=>T2.197,Number of High Priority Unload Events
 Device Capacity,Physical/Logical Sector Size,Logical Sector Size,Nominal Buffer Size
-Supported Capabilities,Download Micocode Capa Max(2B)-Min(2B),Nominal Media Rotation Rate,Nominal Form Factor,Write-Read-Verify Sector Count Mode 3,Write-Read-Verify Sector Count Mode 2,World wide name NAA(1NB) OUI(6NB) UID(9NB),Data Set Management,Utilization Per Unit Time B(4B) A(4B),Utilization Usage Rate Support,Zoned Capabilities,Supported ZAC Capabilities,,Vendor Specific Supported Capabilities
+Supported Capabilities,Download Microcode Capa Max(2B)-Min(2B),Nominal Media Rotation Rate,Nominal Form Factor,Write-Read-Verify Sector Count Mode 3,Write-Read-Verify Sector Count Mode 2,World wide name NAA(1NB) OUI(6NB) UID(9NB),Data Set Management,Utilization Per Unit Time B(4B) A(4B),Utilization Usage Rate Support,Zoned Capabilities,Supported ZAC Capabilities,,Vendor Specific Supported Capabilities
 Current Settings,Feature Settings APM-Level(1B) W-R-V(1B),DMA Host Interface Sector Times,PIO Host Interface Sector Times,Streaming minimum request size,Streaming access latency,Streaming Performance Granularity,Free-fall Control Sensitivity,Device Maintenance Schedule min(2B) sec(2B)
 RAID/Group ID Classifier,RAID/Group ID,RAID Type,RAID CAPACITY,RAID STATUS=2 or 3
 PCI Vendor ID & Subsystem Vendor ID,Serial Number,Model Number,Firmware Revision,Recommended Arbitration Burst,IEEE OUI Identifier,Controller Multi-Path I/O and Namespace Sharing Capabilities,Maximum Data Transfer Size,Controller ID,Major and Minor version of the NVM Express specification supported,RTD3 Resume Latency per us,RTD3 Entry Latency per us,Optional Asynchronous Events Supported,Controller Attributes,,FRU Globally Unique Identifier,,Refer to NVMe Management Interface,Optional Admin Command Support,Abort Command Limit,Asynchronous Event Request Limit,Firmware Updates,Log Page Attributes,Error Log Page Entries,Number of Power States Support,Admin Vendor Specific Command Configuration,Autonomous Power State Transition Attributes,Warning Composite Temperature Threshold,Critical Composite Temperature Threshold,Maximum Time for Firmware Activation,Host Memory Buffer Preferred Size,Host Memory Buffer Minimum Size,Total NVM Capacity,Unallocated NVM Capacity,Replay Protected Memory Block Support,Extended Device Self-test Time,Device Self-test Options,Firmware Update Granularity,Keep Alive Support per 100ms,Host Controlled Thermal Management Attributes,Minimum Thermal Management Temperature,Maximum Thermal Management Temperature,Sanitize Capabilities,,Submission Queue Entry Size,Completion Queue Entry Size,Maximum Outstanding Commands,Number of Namespaces,Optional NVM Command Support,Fused Operation Support,Format NVM Attributes,Volatile Write Cache,Atomic Write Unit Normal,Atomic Write Unit Power Fail,NVM Vendor Specific Command Configuration,,Atomic Compare 0 Write Unit,,SGL Support,,NVM Subsystem NVMe Qualified Name,,Refer to the NVMe over Fabrics,PSD Header,PSD 1,PSD 2,PSD 3,PSD 4,PSD 5,PSD 6,PSD 7,PSD 8,PSD 9,PSD 10,PSD 11,PSD 12,PSD 13,PSD 14,PSD 15,PSD 16,PSD 17,PSD 18,PSD 19,PSD 20,PSD 21,PSD 22,PSD 23,PSD 24,PSD 25,PSD 26,PSD 27,PSD 28,PSD 29,PSD 30,PSD 31,PSD 32,Vendor Specific
@@ -2769,12 +2769,12 @@ n=f2?Math.min(H2D(F+5,-1)*8192+(H2D(F+7,-1)>>3),ArIx[Tx*2+1]/8-1,nRow):0
 a=arL
 qr=(T>29&&T<54?`<tr class='c4'onclick='CkHead()'>`:`<tr class='c0'>`)+`<th>Item</th><th>Index</th><th>`+(M>14&&(M<21||M>23)?(M==18?`Designator`:`Value`):
 (`Error Count,Power On Hours,Write Error Count,Read Error Count,Verify Error Count,Non-Medium Error Count,Format Data Out,Temperature,Value,Parameter Value`+
-`,SelfTest</th><th>PowerOnHour</th><th>FailAddr</th><th>SenseKey</th><th>Vendor,Percentage Used Endurance Indicator(%),AccPowerOnMinute</th><th>BackgroundScan_Status</th><th>No.BS_Performed</th><th>BS_Progress</th><th>No.BMS_Performed</th></tr>`+
-`<tr><th></th><th></th><th>AccPowerOnMinute</th><th>SenseKey ReAssignStatus</th><th>AdditionalSenseCode&Qualifier</th><th>Vendor</th><th>LogicBlockAddr,Maximum Nonvilatile Time(min)`+
+`,Self-test Raw</th><th>Accumulated POH</th><th>Address of First Failure</th><th>Sense Key</th><th>Vendor Specific,Percentage Used Endurance Indicator(%),Accumulated Power-On Minutes</th><th>Background Scan Status</th><th>Background Scans Performed</th><th>Background Scan Progress</th><th>Background Medium Scans Performed</th></tr>`+
+`<tr><th></th><th></th><th>Accumulated Power-On Minutes</th><th>Reassign Status / Sense Key</th><th>ASC / ASCQ</th><th>Vendor Specific</th><th>Logical Block Address,Maximum Nonvolatile Time (min)`+
 `,Generation Code</th><th>Number Of Phys</th><th>Phy Identifier</th><th>SAS Phy Lo Descriptor Length</th><th></th></tr>`+
-`<tr class='c1'><th>.1</th><th></th><th>Attached Reason & Device Type</th><th>Negotiated Logical LinkRate & Reason</th><th>Attch Initiator & Target</th><th>SAS Address</th><th></th></tr>`+
-`<tr class='c2'><th>.2</th><th></th><th>Atached SAS Address</th><th>Attached Phy Identifier</th><th>Invalid DWord Count</th><th>Running Disparity Error Count</th><th></th></tr>`+
-`<tr class='c3'><th>.3</th><th></th><th>Loss Of DWord Synchronization</th><th>Phy Reset Problem</th><th>Phy Event Descriptor Length</th><th>NUmber Of PhyEvent Descriptors</th><th></th></tr>`+
+`<tr class='c1'><th>.1</th><th></th><th>Attached Reason & Device Type</th><th>Negotiated Logical LinkRate & Reason</th><th>Attached Initiator & Target</th><th>SAS Address</th><th></th></tr>`+
+`<tr class='c2'><th>.2</th><th></th><th>Attached SAS Address</th><th>Attached Phy Identifier</th><th>Invalid DWord Count</th><th>Running Disparity Error Count</th><th></th></tr>`+
+`<tr class='c3'><th>.3</th><th></th><th>Loss Of DWord Synchronization</th><th>Phy Reset Problem</th><th>Phy Event Descriptor Length</th><th>Number of Phy Event Descriptors</th><th></th></tr>`+
 `<tr><th>.4-.7</th><th></th><th>Phy Event Source</th><th>Phy Event</th><th>Peak Value Detector Threshold</th><th></th><th>`+
 `,,,,,,,RelativePortId</th><th>InitiatorPortTransportIdLength</th><th>InitiatorPortTransportId</th><th>TargetPortDescriptorLength</th><th></th></tr>`+
 `<tr class='c1'><th colspan="2"rowspan="1"></th><th>CodeSet&ProtocolId</th><th>DesignatorType&Association&PIV</th><th>DesignatorLength</th><th>Designator</th><th></th></tr>`+
@@ -2809,10 +2809,10 @@ if(T>49)arL.push(a[q+1]-a[q]+'')
 if(ix=[36,48,52,53,54,55,58].indexOf(T)+1)x=[,'Manufacture YearWeek,Accounting YearWeek,Lifetime Cycle Count,Acc Start Stop Cycles,Lifetime Load Unload Count,Acc Load-Unload Cycles'
 ,'Policy Page Code,Policy Subpage Code,Mode Page Policy,Reserved'
 ,'Write Same Non-Zero bit 0,Max Compare&Write Length,Optimal Transfer Length Granularity,Max Transfer Length,Optimal Transfer Length,Max Prefetch XDR/W Transfer Length,Max UnMap LBA Count,Max UnMap Block Descriptor Count,Optimal UnMap Granularity,UnMap Granularity Alignment,Max Write Same Length,Reserved'
-,'Medium Rotation Rate,Product Type,Norminal Form Factor; WACEREQ; WABEREQ,FUAB VBULS,Reserved'
+,'Medium Rotation Rate,Product Type,Nominal Form Factor; WACEREQ; WABEREQ,FUAB VBULS,Reserved'
 ,'Logical Block Address,Logical Block Length'
 ,'Logical Blk Address,Logical Blk Length,Prot_En P_Type,Logical Blks Per Physical Blk Exponent P_I_Exponent,Lowest Aligned Logical Blk Address LBPRZ LBPME,Reserved'
-,'Peripheral Qualifier Peripheral_Device_TYpe,Removable_Medium LU_Cong,Version,Normal_ACA_Support Hierarchical_Suppor Response_Data_Format,Additional Length,SCC ACC Support Bits,Enc Support Bits,CMDQUE bits,Vendor,Product,Revision,Vendor Specific,Clocking Bits,,Version 1,Version 2,Version 3,Version 4,Version 5,Version 6,Version 7,Version 8,,Vendor Specific'][ix].split(',')[q]
+,'Peripheral Qualifier Peripheral Device Type,Removable Medium / LU_CONG,Version,Normal_ACA_Support Hierarchical Support / Response Data Format,Additional Length,SCC ACC Support Bits,Enc Support Bits,CMDQUE bits,Vendor,Product,Revision,Vendor Specific,Clocking Bits,,Version 1,Version 2,Version 3,Version 4,Version 5,Version 6,Version 7,Version 8,,Vendor Specific'][ix].split(',')[q]
 else if(Gp==4)x=(f&&g>1?((q-q%g)/g+'.'+q%g):q+1)
 else x=arS[q]
 if(x=='')e.parentElement.style.display='none'
