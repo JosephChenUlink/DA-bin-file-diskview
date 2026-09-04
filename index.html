@@ -139,7 +139,7 @@ body.guideOpen #guideDoc{overflow:visible;padding:0}
   <span style='display:flex;align-items:center;gap:8px'>
   <span id='scanElapsed' title='Time elapsed since the current scan started (resets on each Scan click)' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
   <span id='lifetimeStats' title='How many times a template has been displayed while stepping/playing through results, across all Scan clicks this session' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
-  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260903a</span>
+  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260903b</span>
   </span>
 </div>
 <input id='local'type='file'style='display:none'onchange='OpFl()'>
@@ -2425,8 +2425,8 @@ Self-test Execution Status values (ACS-3 Table 132):<br>
 <brow>8h: The previous self-test completed with a failed test element and the device is suspected of having handling damage</brow><br>
 <brow>9h-Eh: Reserved</brow><br>
 <brow>Fh: Self-test routine in progress</brow><br>
-<b>Entry structure</b> (ACS-3 `+(T==15?'Table A.26, Extended Self-test Log, 26 bytes/entry':'Table A.63, Self-test Log, 24 bytes/entry')+`): byte 0=LBA0, byte 1=Status, bytes 2-3=Life Timestamp (hours, word), byte 4=Self-test failure checkpoint, bytes 5-`+(T==15?'10=Failing LBA (48-bit)':'8=Failing LBA (28-bit)')+`, remaining 15 bytes=Vendor specific.`)
-let qd,ex=T==15?2:0,entSize=24+ex,hdrSize=2+ex,qr="<tr><th>LBA0</th><th>Status</th><th>Check</th><th>Fail FBA</th><th>Vendor specific</th><th>TimeStamp</th></tr>",maxTs=-1,maxIdx=-1,nEntries=0
+<b>Entry structure</b> (ACS-3 `+(T==15?'Table A.26, Extended Self-test Log, 26 bytes/entry':'Table A.63, Self-test Log, 24 bytes/entry')+`): byte 0=Self-test Code, byte 1=Exec Status, bytes 2-3=Lifetime Timestamp (hours, word), byte 4=Self-test failure checkpoint, bytes 5-`+(T==15?'10=Failing LBA (48-bit)':'8=Failing LBA (28-bit)')+`, remaining 15 bytes=Vendor specific.`)
+let qd,ex=T==15?2:0,entSize=24+ex,hdrSize=2+ex,qr="<tr><th>Self-test Code</th><th>Exec Status</th><th>Checkpoint</th><th>Failing LBA</th><th>Vendor Specific</th><th>Timestamp (POH)</th></tr>",maxTs=-1,maxIdx=-1,nEntries=0
 for(let j=0;;j++){
   let base=hdrSize+j*entSize
   if(base+entSize>LenT)break
@@ -2459,7 +2459,9 @@ W(e,U(A[F+j]*1,1))
 break
 case 1:
 let statusByte=A[F+j]*1,execNibble=(statusByte>>4)&0xf,pctNibble=statusByte&0xf
-W(e,U(statusByte,1)+' ('+(StatusDesc[execNibble]!==undefined?StatusDesc[execNibble]:'Reserved')+'; '+(pctNibble*10)+'% remaining)')
+// 狀態碼（高 nibble）放最前面，搜尋「Exec Status = 3」才對得到它；
+// 原始位元組保留在最後，contains 仍找得到。
+W(e,execNibble+' ('+(StatusDesc[execNibble]!==undefined?StatusDesc[execNibble]:'Reserved')+'; '+(pctNibble*10)+'% remaining) [0x'+U(statusByte,1)+']')
 tmp=A[F+j+2]*256+A[F+j+1]*1;j+=2
 break
 case 3:
@@ -3487,7 +3489,7 @@ case 13:
 W(G('ruSide'),`<b>SMART Threshold Data range:</b><br>0x00 always passing - threshold value to be used for code test purposes<br>0x01 minimum value for normal operation<br>0xFD maximum value for normal operation<br>0xFE invalid for threshold value - not to be used<br>0xFF always failing - threshold value to be used for code test purposes.<hr><d class='cyan'>Meaning of colored rows refer to Template 2</d>`)
 break
 case 14: case 15:
-W(G('ruSide'),`<b>LBA0: Logical Block Address byte 0.</b><br>Status: Self-test execution status byte.<br>Check: Self-test failure checkpoint byte.<br>Fail FBA: Failing LBA byte 0-3.<br>`)
+W(G('ruSide'),`<b>Self-test Code:</b> byte 0 — the self-test subcommand that was run (ACS calls this the LBA field content).<br><b>Exec Status:</b> byte 1 high nibble = execution status code, low nibble = percent remaining ×10; raw byte in brackets.<br><b>Checkpoint:</b> byte 4 — self-test failure checkpoint.<br><b>Failing LBA:</b> bytes 5–10.<br><b>Timestamp (POH):</b> bytes 2–3 — lifetime power-on hours when the entry was made.<br>`)
 break
 case 23:
 W(G('ruSide'),`<b>Power State Descriptor column abbreviations</b> (NVMe Base Spec):<br>
@@ -4362,7 +4364,15 @@ if(hdr&&hdr.length)_SrchColCache[c.src]=Array.from(hdr).map(x=>x.textContent.tri
 // 每列一筆的表（T309 自我測試、T104 錯誤紀錄）：第一欄是流水號 1,2,3…，
 // 欄位名在標題列。這種表的「欄位」就是欄名，不要把解碼後的值當成列標籤。
 let dataRows=Array.from(Q('#rTab tr')).filter(tr=>tr.cells&&tr.cells.length>1&&!tr.querySelector('th'))
-let isEntryTable=dataRows.length>=2&&dataRows.slice(0,3).every((tr,k)=>String(tr.cells[0].textContent).trim()===String(k+1))
+// 兩種特徵任一成立就是每列一筆的表：第一欄是流水號 1,2,3…（T309、T333），
+// 或者各列「標籤」大量重複（T14/T15 的每列都以同一種測試碼開頭）。
+// 有列標籤的表（T8、T2）每列標籤都不同。
+let byCounter=dataRows.length>=2&&dataRows.slice(0,3).every((tr,k)=>String(tr.cells[0].textContent).trim()===String(k+1))
+let firsts=dataRows.map(tr=>String(tr.cells[0].textContent).trim())
+// 第一欄只要有任何重複就是每列一筆的表——有列標籤的表每列都不同。
+// 不設最低列數：只做過兩三次自我測試的磁碟很常見。
+let byRepeat=dataRows.length>=2&&new Set(firsts).size<firsts.length
+let isEntryTable=byCounter||byRepeat
 if(isEntryTable){
 Array.from(hdr||[]).forEach(x=>{let t=x.textContent.trim();if(t&&!/^(Item|Index)$/i.test(t)&&names.indexOf(t)<0)names.push(t)})
 }else for(let tr of Q('#rTab tr')){
