@@ -144,7 +144,7 @@ body.guideOpen #guideDoc{overflow:visible;padding:0}
   <span style='display:flex;align-items:center;gap:8px'>
   <span id='scanElapsed' title='Time elapsed since the current scan started (resets on each Scan click)' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
   <span id='lifetimeStats' title='How many times a template has been displayed while stepping/playing through results, across all Scan clicks this session' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
-  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260905c</span>
+  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260905d</span>
   </span>
 </div>
 <input id='local'type='file'style='display:none'onchange='OpFl()'>
@@ -4316,6 +4316,24 @@ _SrchHdrConds=()=>Srch.conds.filter(c=>_SrchLive(c)&&c.src==='H')
 // 告警條件：欄位是規則代碼（t2.197、t10.1…），留空 = 任一告警；比對用前綴，
 // 所以 t2. 涵蓋所有 SMART 告警、t103.1 涵蓋六個 Critical Warning 位元。
 _SrchAlertConds=()=>Srch.conds.filter(c=>_SrchLive(c)&&c.src==='A')
+// 命中時該顯示哪一頁：依條件順序，第一條決定。Header 條件 → Header 頁；
+// 告警條件 → 第一個符合的告警所在的 template（沒有具體 template 就開告警頁）；
+// template 條件 → 該 template。回傳 null 表示維持現狀。
+SrchTargetView=()=>{
+if(!Srch.on)return null
+for(let c of Srch.conds){
+if(!_SrchLive(c))continue
+if(c.src==='H')return -1
+if(c.src==='A'){
+let L;try{L=(_AlCache.file===CurFile&&_AlCache.list)?_AlCache.list:ComputeAlerts()}catch(e){L=[]}
+let want=String(c.field||'').trim().toLowerCase()
+let a=L.find(a=>!want||a.key.toLowerCase()===want||a.key.toLowerCase().startsWith(want))
+if(a){let i=_AlIdx(a.tmpl);if(i>=0)return i}
+return -2}
+let i=_AlIdx(Number(c.src))
+if(i>=0)return i
+}
+return null}
 _SrchAlertOk=()=>{
 let cs=_SrchAlertConds()
 if(!cs.length)return true
@@ -5062,6 +5080,16 @@ try{DcFl0(buf)}catch(e){ok=false}
 // The table now holds this file, so the value condition can be read off it.
 // Failing here costs a decode, which is why the header condition runs first.
 if(ok&&!SrchValueOk())ok=false
+// 命中了就把畫面切到條件所在的頁面，讓被標示的那一列直接出現在眼前——
+// 否則掃描會停在使用者開始掃描時看的那個 template，符合的列在別頁。
+if(ok&&Srch.on){
+let tv=SrchTargetView()
+if(tv!=null){
+let cur=AlertView?-2:(HdrView?-1:Tx)
+if(tv!==cur){AlertView=(tv===-2);HdrView=(tv===-1);if(tv>=0)Tx=tv
+// 高亮掛在 DcFl 結尾；這裡直接呼叫 DpFl 就要自己補上，否則切過去的頁面沒有標示。
+try{DpFl();if(A2&&!HdrView&&!AlertView)CmpRenderTable();_PostSelfTest();SrchHighlight();AlertHighlight()}catch(e){}}
+}}
 }
 }finally{_ScanLoading=false}
 }
