@@ -67,6 +67,11 @@ td button:not(.nbtn),th button{width:20px;height:20px}
 #rTab th{text-align:left}
 #rTab tr.cmpDiff,#rTab td.cmpDiff{background:#ffe0e0}
 #rTab tr.hili>td{background:#fff3b0}
+/* 告警命中：紅色左條＋淡紅底。與搜尋命中（橘）、比較差異（粉）區分。
+   同樣不進 PDF 顏色擷取。 */
+#rTab tr.alertHit>td{background:#fdecec}
+#rTab tr.alertHit>td:first-child{box-shadow:inset 3px 0 0 #c00;padding-left:6px}
+#rTab tr.alRow:hover>td{background:#f2f7fc}
 #srchWrap{position:relative;display:inline-block;flex-shrink:0;margin-left:4px}
 #srchBtn{padding:3px 10px;font-size:12px;cursor:pointer}
 #srchOn{font-size:11px;color:#1a5fa8;margin-left:4px;font-weight:bold}
@@ -139,13 +144,13 @@ body.guideOpen #guideDoc{overflow:visible;padding:0}
   <span style='display:flex;align-items:center;gap:8px'>
   <span id='scanElapsed' title='Time elapsed since the current scan started (resets on each Scan click)' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
   <span id='lifetimeStats' title='How many times a template has been displayed while stepping/playing through results, across all Scan clicks this session' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
-  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260905a</span>
+  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260905b</span>
   </span>
 </div>
 <input id='local'type='file'style='display:none'onchange='OpFl()'>
 <input id='local2'type='file'style='display:none'onchange='OpFl2()'>
 <div style='display:flex;align-items:center;gap:4px;padding:3px 6px;flex-wrap:nowrap;min-width:0'>
-<button onclick="OpFlPick()" title="Select File to View" style='flex-shrink:0;background:#1a5fa8;color:#fff;border:1px solid #0d3d6e;padding:3px 10px;font-size:13px;cursor:pointer;border-radius:3px'>File</button><span id='fileLabel' style='flex:0 0 260px;padding:2px 8px;border:1px solid #999;background:#fff;font-size:12px;color:#555;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:middle'>No file chosen</span>&nbsp;<button onclick='ShowGuide()' title='Open the user guide' style='flex-shrink:0;padding:3px 10px;font-size:12px;cursor:pointer'>Guide</button>
+<button onclick="OpFlPick()" title="Select File to View" style='flex-shrink:0;background:#1a5fa8;color:#fff;border:1px solid #0d3d6e;padding:3px 10px;font-size:13px;cursor:pointer;border-radius:3px'>File</button><span id='fileLabel' style='flex:0 0 260px;padding:2px 8px;border:1px solid #999;background:#fff;font-size:12px;color:#555;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:middle'>No file chosen</span>&nbsp;<button onclick='ShowGuide()' title='Open the user guide' style='flex-shrink:0;padding:3px 10px;font-size:12px;cursor:pointer'>Guide</button><button id='alBack' onclick='AlertBack()' style='display:none;margin-left:4px;font-size:12px;padding:3px 10px;cursor:pointer;color:#a00' title='Back to the Alerts page'>&#9664; Alerts</button>
 <span id='adv'style='display:none;flex-shrink:0;align-items:center;gap:2px'><button onclick='Adv(-1)' title="Previous Template">-</button><button id='tmpl'onclick='List()'></button><button onclick='Adv(1)' title="Next Template">+</button>&nbsp;<button id='revBtn'onclick='ToggleReview()' title="Play Templates">Play</button><span id='revSpeedWrap'>&nbsp;Speed:&nbsp;<input type='range'id='revSpeed'min='0.05'max='5'step='0.05'value='1'oninput='RevSpeedChange()'style='vertical-align:middle;width:90px'>&nbsp;<span id='revSpeedLbl'style='display:inline-block;width:30px'>1.0s</span></span>&nbsp;<span id='scanWrap'><span id='scanCtrl' style='display:none;gap:1px'><button id='s0'onclick='ScanStepBackClick()' title="Step backward">&#9198;</button><button id='s1'onclick='ScanPlayBack()' title="Play backward">&#9194;</button><button id='s2'onclick='ScanStop()' title="Stop">&#9209;</button><button id='s3'onclick='ScanPlayFwd()' title="Play forward">&#9193;</button><button id='s4'onclick='ScanStepClick()' title="Step forward">&#9197;</button></span><button id='scanBtn'onclick='ScanSetup()' title="Scan all .bin files in the selected folder and its subfolders" style='display:inline'>Scan</button></span>&nbsp;<button id='cmpBtn' onclick='CmpToggle()' title="Compare the Templates">Compare</button>&nbsp;<button onclick='GetPDF()' title="Download PDF File">PDF</button><button onclick='DlBin()' title="Save the .bin file currently shown">Save .bin</button><button onclick='SaveFl()'id='btn8'hidden>&#11015;</button></span>
 <button id='host'hidden></button>&nbsp;<span id='nVer'style='font-size:12px;font-weight:bold;color:#1a5fa8'></span>&nbsp;<span id='scanFolderLabel'style='font-size:11px;color:#555'></span><span id='scanFolderChg' style='display:none;font-size:11px;margin-left:5px' title='Scan a different folder'><a href='#' onclick='ScanChangeFolder(event)'>change</a></span>
 <span id='srchWrap'><button id='srchBtn' onclick='SrchToggle(event)' title='Only show files matching a condition'>Search</button><span id='srchOn' style='display:none'></span>
@@ -1171,7 +1176,7 @@ if(ScanActive||ScanStepMode){ScanActive=false;ScanStepMode=false;_ScanClearTimer
 let file=await fh.getFile()
 let fname=file.name
 CurFile=fname;_SetFileLabel(fname)
-PrevRawT=(ArIx&&ArIx.length>0&&Tx>=0)?ArIx[Tx*2]:-1;Tx=0
+PrevRawT=(ArIx&&ArIx.length>0&&Tx>=0)?ArIx[Tx*2]:-1;Tx=0;_AlCache={file:null,list:null}
 let buf=await file.arrayBuffer()
 try{localStorage.setItem('dv_lastFile',Buf2B64(buf));localStorage.setItem('dv_lastFileName',fname);localStorage.setItem('dv_lastTx',0)}catch(e){}
 W(G('nVer'),'')
@@ -1185,7 +1190,7 @@ let buf
 try{let file=entry.file||(await entry.handle.getFile());buf=await file.arrayBuffer()}catch(e){return}
 ScanFileHandle=entry.handle||null
 CurFile=entry.name;_SetFileLabel(entry.name)
-PrevRawT=(ArIx&&ArIx.length>0&&Tx>=0)?ArIx[Tx*2]:-1;Tx=0
+PrevRawT=(ArIx&&ArIx.length>0&&Tx>=0)?ArIx[Tx*2]:-1;Tx=0;_AlCache={file:null,list:null}
 try{localStorage.setItem('dv_lastFile',Buf2B64(buf));localStorage.setItem('dv_lastFileName',entry.name);localStorage.setItem('dv_lastTx',0)}catch(e){}
 W(G('nVer'),'')
 ScanOrigBuf=buf;ScanOrigName=entry.name;ScanLastBuf=null;ScanLastName=''
@@ -1199,7 +1204,7 @@ if(RevTimer){clearInterval(RevTimer);RevTimer=null;W(G('revBtn'),'Play')}
 if(ScanActive||ScanStepMode){ScanActive=false;ScanStepMode=false;ScanEntries=[];_ScanClearTimer();W(G('scanBtn'),'Scan');G('scanCtrl').style.display='none';G('scanBtn').style.display='inline';W(G('nVer'),'')}
 let f=G('local').files[0],r=new FileReader()
 CurFile=f.name;_SetFileLabel(f.name)
-PrevRawT=(ArIx&&ArIx.length>0&&Tx>=0)?ArIx[Tx*2]:-1;Tx=0
+PrevRawT=(ArIx&&ArIx.length>0&&Tx>=0)?ArIx[Tx*2]:-1;Tx=0;_AlCache={file:null,list:null}
 r.onload=e=>{
 try{localStorage.setItem('dv_lastFile',Buf2B64(e.target.result));localStorage.setItem('dv_lastFileName',f.name);localStorage.setItem('dv_lastTx',Tx)}catch(err){}
 W(G('nVer'),'')
@@ -1277,7 +1282,7 @@ for(i=0;i<ArIx.length/2;i++)y=y.replace("DpT()","DpT("+i+")")
 if(y.substr(0,4)=='<br>')y=y.substr(4)
 y=y.replace(/Capacity:\s*(\d+)/,(m,p1)=>'Capacity: '+p1+' ('+(Number(p1)/1e9).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})+' GB)')
 W(G('ruSide'),y)
-if(!ArIx.length&&!HdrView){W(G('tmpl'),'(no templates)');W(G('tmplName'),'');PrevRawT=-1;return}
+if(!ArIx.length&&!HdrView&&!AlertView){W(G('tmpl'),'(no templates)');W(G('tmplName'),'');PrevRawT=-1;return}
 if(Tx*2>=ArIx.length||Tx<0)Tx=0
 if(PrevRawT>=0){
 let fi=ArIx.findIndex((v,i)=>i%2===0&&v===PrevRawT)
@@ -1290,11 +1295,12 @@ PrevRawT=-1
 DpFl()
 // The header view builds its own File 2 columns, so CmpRenderTable would be
 // appending a second set on top of them.
-if(A2&&!HdrView)CmpRenderTable()
+if(A2&&!HdrView&&!AlertView)CmpRenderTable()
 // T309 的欄位解碼放在表格完成之後，這樣比較欄與搜尋都看得到解碼結果。
 try{_PostSelfTest()}catch(e){}
 // Mark whatever satisfied a condition, after the table is final.
-try{if(typeof SrchHighlight==='function')SrchHighlight()}catch(e){}}
+try{if(typeof SrchHighlight==='function')SrchHighlight()}catch(e){}
+try{if(typeof AlertHighlight==='function')AlertHighlight()}catch(e){}}
 
 // ── T309 Self-Test Results（SPC-4 log page 10h）──────────────────────────
 // 每筆 20 位元組：byte 8 的 bits 7:5 是 self-test code、bits 3:0 是 result，
@@ -1766,6 +1772,232 @@ W(G('lTab'),qr)}
 // it behave like every other view: bytes on the left, decoded fields on the
 // right, and it flows through the existing CSV export untouched.
 HdrView=false
+AlertView=false
+AlertFrom=-1   // 從告警頁跳去某個 template 時記住，讓「返回」有地方回
+
+// ── 告警規則（來自平台端 docs/threshold_alert_rules.md，121 條 Alert=Y）───
+// 這裡只放「單一擷取檔就能判定」的規則：Value、T16、SMART N<=T，共 99 條。
+// Delta 與 Self-test 類要有前一筆擷取才能算，只在比較模式下評估（見 Delta 段）。
+// 每條規則以 template 編號＋列標籤正則定位，直接讀渲染後的表，與搜尋共用
+// 同一套取值邏輯（旗標遮罩、解讀值優先、負值正確）。
+AlertRules=[
+// Value
+{key:'t202.1',tmpl:202,intf:'',row:/Drive Not Ready/i,op:'gt',val:0,name:'drive_not_ready_failure'},
+{key:'t202.2',tmpl:202,intf:'',row:/Write Operation Failure/i,op:'gt',val:0,name:'drive_write_operation_failure'},
+{key:'t202.3',tmpl:202,intf:'',row:/Read Operation Failure/i,op:'gt',val:0,name:'drive_read_operation_failure'},
+{key:'t202.4',tmpl:202,intf:'',row:/Identify Failure/i,op:'gt',val:0,name:'identify_failure'},
+{key:'t10.1',tmpl:10,intf:'SATA',row:/Percentage Used/i,op:'gt',val:99,name:'percentage_used'},
+{key:'t310.1',tmpl:310,intf:'SCSI',row:/Percentage Used/i,op:'gt',val:99,name:'percentage_used'},
+{key:'t103.5',tmpl:103,intf:'NVME',row:/^Percentage Used/i,op:'gt',val:99,name:'percentage_used'},
+{key:'t103.3',tmpl:103,intf:'NVME',row:/^Available Spare\s*\(%\)/i,op:'lt',ref:/Available Spare Threshold/i,name:'available_spare < threshold'},
+{key:'t306.1',tmpl:306,intf:'SCSI',row:/^Current temperature/i,op:'gt',ref:/Reference temperature.*max/i,name:'current_temperature_c > spec_max'},
+{key:'t203.4',tmpl:203,intf:'',row:/RAID Status/i,op:'in',vals:['Degraded','Read Only'],name:'raid_status'},
+// T103 Critical Warning 位元（byte 0 of SMART/Health）
+{key:'t103.1.1',tmpl:103,intf:'NVME',row:/^Critical Warning$/i,op:'bit',bit:0,name:'cw_spare_below_threshold'},
+{key:'t103.1.2',tmpl:103,intf:'NVME',row:/^Critical Warning$/i,op:'bit',bit:1,name:'cw_temperature_out_of_range'},
+{key:'t103.1.3',tmpl:103,intf:'NVME',row:/^Critical Warning$/i,op:'bit',bit:2,name:'cw_reliability_degraded'},
+{key:'t103.1.4',tmpl:103,intf:'NVME',row:/^Critical Warning$/i,op:'bit',bit:3,name:'cw_read_only_mode'},
+{key:'t103.1.5',tmpl:103,intf:'NVME',row:/^Critical Warning$/i,op:'bit',bit:4,name:'cw_volatile_backup_failed'},
+{key:'t103.1.6',tmpl:103,intf:'NVME',row:/^Critical Warning$/i,op:'bit',bit:5,name:'cw_persistent_memory_unreliable'},
+// T16 SATA interface statistics（attr N > 0）
+{key:'t16.1',tmpl:16,intf:'SATA',row:/Interface CRC Error/i,op:'gt',val:0,name:'interface_crc_error_count'},
+{key:'t16.2',tmpl:16,intf:'SATA',row:/Uncorrectable Error/i,op:'gt',val:0,name:'uncorrectable_error_count'},
+{key:'t16.3',tmpl:16,intf:'SATA',row:/ID Not Found/i,op:'gt',val:0,name:'id_not_found_count'},
+{key:'t16.5',tmpl:16,intf:'SATA',row:/Address Mark Not Found/i,op:'gt',val:0,name:'address_mark_not_found'},
+{key:'t16.7',tmpl:16,intf:'SATA',row:/^CRC Error Count/i,op:'gt',val:0,name:'crc_error_count'},
+// Delta（只在比較模式；File 1 視為「之前」、File 2 視為「現在」）
+{key:'t3.1',tmpl:3,intf:'SATA',delta:1,row:/^Error Count|Device Error Count/i,name:'device_error_count'},
+{key:'t7.1',tmpl:7,intf:'SATA',delta:1,row:/Reported Uncorrectable/i,name:'uncorrectable_errors'},
+{key:'t7.2',tmpl:7,intf:'SATA',delta:1,row:/Resets Between Command/i,name:'command_resets'},
+{key:'t7.3',tmpl:7,intf:'SATA',delta:1,row:/Physical Element Status Changed/i,name:'physical_element_status_changed'},
+{key:'t9.3',tmpl:9,intf:'SATA',delta:1,row:/Interface CRC/i,name:'sata_crc_errors'},
+{key:'t5.1',tmpl:5,intf:'SATA',delta:1,row:/Free-?Fall Events/i,name:'free_fall_events'},
+{key:'t6.4',tmpl:6,intf:'SATA',delta:1,row:/Reallocated Logical Sectors/i,name:'reallocated_logical_sectors'},
+{key:'t6.6',tmpl:6,intf:'SATA',delta:1,row:/Mechanical Start Failures/i,name:'mechanical_start_failures'},
+{key:'t6.7',tmpl:6,intf:'SATA',delta:1,row:/Reallocation Candidate/i,name:'reallocation_candidate_logical_sectors'},
+{key:'t103.14',tmpl:103,intf:'NVME',delta:1,row:/Media and Data Integrity Errors/i,name:'media_errors'},
+{key:'t103.16',tmpl:103,intf:'NVME',delta:1,row:/Warning Composite Temperature Time/i,name:'warning_composite_temp_time'},
+{key:'t103.17',tmpl:103,intf:'NVME',delta:1,row:/Critical Composite Temperature Time/i,name:'critical_composite_temp_time'},
+{key:'t104.1',tmpl:104,intf:'NVME',delta:1,row:/Error Log Entries|Number of Error Information Log Entries/i,name:'nvme_error_log_entry_count'},
+{key:'t301.7',tmpl:301,intf:'SCSI',delta:1,row:/Total uncorrected errors/i,name:'uncorrectable_errors'},
+{key:'t302.7',tmpl:302,intf:'SCSI',delta:1,row:/Total uncorrected errors/i,name:'read_error_count'},
+{key:'t303.7',tmpl:303,intf:'SCSI',delta:1,row:/Total uncorrected errors/i,name:'verify_uncorrected_errors'},
+{key:'t311.3',tmpl:311,intf:'SCSI',delta:1,row:/Background Scans Performed/i,name:'background_scans_performed'},
+]
+
+// 檔案介面（大小寫正規化，平台端存 NVME）
+_AlIntf=()=>{let m=(SAll||'').split('h\n')[0].match(/^Interface:\s*(.*)$/im);return String((m||['',''])[1]).trim().toUpperCase()}
+_AlHas=t=>{if(!ArIx)return false;for(let i=0;i<ArIx.length;i+=2)if(ArIx[i]===t)return true;return false}
+_AlIdx=t=>{if(!ArIx)return -1;for(let i=0;i<ArIx.length;i+=2)if(ArIx[i]===t)return i/2;return -1}
+
+// 在目前渲染的表上評估一條規則。回傳 {hit, value, ref} 或 null（列不存在）。
+_AlEval=r=>{
+let R=_SrchFindRow(r.row)
+if(!R)return null
+let val=_SrchRowVal(R,'')
+if(r.op==='in'){
+let txt=R.cells.join(' ')
+let hit=r.vals.some(v=>txt.indexOf(v)>=0)
+return {hit,value:R.cells.slice(1).join(' ').slice(0,60)}
+}
+if(r.op==='bit'){
+let raw=R.cells.find(t=>/^[0-9A-Fa-f]{2,}$/.test(t))||''
+let n=parseInt(raw,16)
+return {hit:isFinite(n)&&((n>>r.bit)&1)===1,value:raw}
+}
+if(val==null)return null
+if(r.ref){
+let Rr=_SrchFindRow(r.ref)
+if(!Rr)return null
+let rv=_SrchRowVal(Rr,'')
+if(rv==null)return null
+return {hit:_SrchCmp(val,r.op,rv),value:val,ref:rv}
+}
+return {hit:_SrchCmp(val,r.op,String(r.val)),value:val}}
+// _SrchFindRow 接受字串；讓它也吃正則
+_SrchFindRowRx=rx=>{
+for(let tr of Q('#rTab tr')){
+let cl=tr.cells
+if(!cl||cl.length<2||tr.querySelector('th'))continue
+let cells=Array.from(cl).map(x=>x.textContent.trim())
+if(!cells.some(t=>rx.test(t)))continue
+let isRaw=t=>/^[0-9A-Fa-f]{16}$/.test(String(t).trim())&&parseInt(String(t).trim().slice(0,2),16)>=0x80
+let ord=cells.map((t,k)=>{if(!isRaw(t))return t;let nxt=cells[k+1];return (nxt!=null&&_SrchNum(nxt)!=null)?nxt:t})
+return {cells,ord,tr}
+}
+return null}
+
+// SMART N<=T：T2 的 Current 對 T13 的 Threshold（threshold>0 且 current<=threshold）
+_AlSmart=()=>{
+let out=[]
+let i2=_AlIdx(2),i13=_AlIdx(13)
+if(i2<0||i13<0)return out
+let saveTx=Tx,saveHdr=HdrView,saveAl=AlertView
+try{
+HdrView=false;AlertView=false
+Tx=i13;DpFl()
+let thr={}
+for(let tr of Q('#rTab tr')){
+let c=tr.cells;if(!c||c.length<2||tr.querySelector('th'))continue
+let id=parseInt(c[0].textContent.trim(),10),t=parseInt(String(c[1].textContent).trim(),16)
+if(isFinite(id)&&isFinite(t))thr[id]=t
+}
+Tx=i2;DpFl()
+for(let tr of Q('#rTab tr')){
+let c=tr.cells;if(!c||c.length<7||tr.querySelector('th'))continue
+let id=parseInt(c[0].textContent.trim(),10)
+let cur=parseInt(String(c[2].textContent).trim(),16)
+let flags=parseInt(String(c[1].textContent).trim(),16)
+if(!isFinite(id)||!isFinite(cur)||thr[id]==null||thr[id]<=0)continue
+if(cur<=thr[id]){
+let pre=(flags&1)?'pre-fail':'advisory'
+out.push({key:'t2.'+id,tmpl:2,name:'smart_'+id+' N<=T ('+pre+')',value:cur,ref:thr[id],
+desc:(c[6]?c[6].textContent.trim():'')+' — normalized '+cur+' <= threshold '+thr[id]})
+}
+}
+}catch(e){}
+Tx=saveTx;HdrView=saveHdr;AlertView=saveAl
+return out}
+
+// 整份檔案的告警清單。每個相關 template 探針渲染一次，結束後把畫面放回原狀。
+_AlCache={file:null,list:null}
+ComputeAlerts=()=>{
+if(_AlCache.file===CurFile&&_AlCache.list)return _AlCache.list
+let intf=_AlIntf(),list=[]
+let saveTx=Tx,saveHdr=HdrView,saveAl=AlertView
+try{
+HdrView=false;AlertView=false
+let byT={}
+AlertRules.forEach(r=>{
+if(r.delta)return
+if(r.intf&&r.intf!==intf)return
+if(!_AlHas(r.tmpl))return
+;(byT[r.tmpl]=byT[r.tmpl]||[]).push(r)})
+for(let t of Object.keys(byT)){
+Tx=_AlIdx(Number(t));DpFl()
+byT[t].forEach(r=>{
+let R=_SrchFindRowRx(r.row)
+if(!R)return
+let ev=_AlEvalRow(r,R)
+if(ev&&ev.hit)list.push({key:r.key,tmpl:r.tmpl,name:r.name,value:ev.value,ref:ev.ref,
+desc:R.cells[0]+(ev.ref!=null?' ('+ev.value+' vs '+ev.ref+')':' = '+ev.value)})
+})
+}
+list=list.concat(_AlSmart())
+// Delta：比較模式下 File 1 是之前、File 2 是現在
+if(A2&&ArIx2){
+let byT2={}
+AlertRules.forEach(r=>{if(!r.delta)return;if(r.intf&&r.intf!==intf)return;if(!_AlHas(r.tmpl))return;(byT2[r.tmpl]=byT2[r.tmpl]||[]).push(r)})
+for(let t of Object.keys(byT2)){
+Tx=_AlIdx(Number(t));DpFl();if(A2)CmpRenderTable()
+byT2[t].forEach(r=>{
+let R=_SrchFindRowRx(r.row);if(!R)return
+// 比較表：File 1 欄在前，File 2 欄（.cmpCol）在後，各取第一個解得出的數字
+let c1=[],c2=[]
+Array.from(R.tr.cells).forEach(td=>{(td.classList.contains('cmpCol')?c2:c1).push(td.textContent.trim())})
+let v1=null,v2=null
+for(let k=1;k<c1.length;k++){if(_SrchIsIdx(c1[k]))continue;let n=_SrchNum(c1[k]);if(n!=null){v1=n;break}}
+for(let k=0;k<c2.length;k++){if(_SrchIsIdx(c2[k]))continue;let n=_SrchNum(c2[k]);if(n!=null){v2=n;break}}
+if(v1==null||v2==null)return
+if(v2-v1>0)list.push({key:r.key,tmpl:r.tmpl,name:r.name+' Delta>0',value:v2,ref:v1,desc:R.cells[0]+' +'+(v2-v1)+' ('+v1+' → '+v2+')'})
+})
+}
+}
+}catch(e){}
+Tx=saveTx;HdrView=saveHdr;AlertView=saveAl
+try{DpFl();if(A2&&!HdrView&&!AlertView)CmpRenderTable()}catch(e){}
+_AlCache={file:CurFile,list:list}
+return list}
+_AlEvalRow=(r,R)=>{
+let val=_SrchRowVal(R,'')
+if(r.op==='in'){let txt=R.cells.join(' ');return {hit:r.vals.some(v=>txt.indexOf(v)>=0),value:R.cells.slice(1).join(' ').slice(0,60)}}
+if(r.op==='bit'){let raw=R.cells.find(t=>/^[0-9A-Fa-f]{2,}$/.test(t))||'';let n=parseInt(raw,16);return {hit:isFinite(n)&&((n>>r.bit)&1)===1,value:raw}}
+if(val==null)return null
+if(r.ref){let Rr=_SrchFindRowRx(r.ref);if(!Rr)return null;let rv=_SrchRowVal(Rr,'');if(rv==null)return null;return {hit:_SrchCmp(val,r.op,rv),value:val,ref:rv}}
+return {hit:_SrchCmp(val,r.op,String(r.val)),value:val}}
+
+// 目前顯示的 template 上，把觸發告警的列標起來。只評估這個 template 的規則，
+// 不做探針，所以掃描中每檔都跑也便宜。
+AlertHighlight=()=>{
+Q('#rTab tr').forEach(tr=>tr.classList&&tr.classList.remove('alertHit'))
+if(!ArIx||!ArIx.length||Tx<0||HdrView||AlertView)return
+let t=ArIx[Tx*2],intf=_AlIntf()
+if(t===2){
+// SMART：直接用快取的清單標 ID
+let L=(_AlCache.file===CurFile&&_AlCache.list)?_AlCache.list:null
+if(!L)return
+let ids=new Set(L.filter(a=>a.tmpl===2).map(a=>a.key.slice(3)))
+Q('#rTab tr').forEach(tr=>{let c=tr.cells;if(c&&c.length>1&&!tr.querySelector('th')&&ids.has(c[0].textContent.trim()))tr.classList.add('alertHit')})
+return}
+AlertRules.forEach(r=>{
+if(r.delta||r.tmpl!==t||(r.intf&&r.intf!==intf))return
+let R=_SrchFindRowRx(r.row);if(!R)return
+let ev=_AlEvalRow(r,R)
+if(ev&&ev.hit)R.tr.classList.add('alertHit')})}
+
+// 告警頁（pseudo-template -2）
+DpAlerts=()=>{
+BuildTitle()
+W(G('tmpl'),'Alerts');W(G('tmplName'),'Alerts')
+W(G('err'),"<div style='font-size:11px;color:#777;background:#fafafa;border:1px solid #e0e0e0;border-radius:3px;padding:3px 8px;margin-bottom:2px'>Threshold alert rules from the DA Analytics Platform rulebook (121 Alert=Y). Value / T16 / SMART N&le;T are judged on this capture; Delta rules need a previous capture and are evaluated only in Compare mode (File 1 = previous, File 2 = current). Double-click a row to open its template.</div>")
+Fx=0;F=0;T=0;ArRange=[];Gp=0
+SetTH(1,0,0)
+Q('#lTab td.adr').forEach(e=>W(e,''))
+G('rTab').className='wideitem'
+let L=ComputeAlerts()
+let qr="<tr><th>#</th><th>Rule</th><th>Template</th><th>Alert</th><th>Detail</th></tr>"
+if(!L.length)qr+="<tr><td colspan='5' style='color:#5a5;padding:10px'>No alert conditions met on this capture.</td></tr>"
+L.forEach((a,i)=>{
+let ti=_AlIdx(a.tmpl)
+qr+="<tr class='alRow' style='cursor:pointer' title='Double-click to open the template' ondblclick='AlertGo("+ti+")'>"
++"<td>"+(i+1)+"</td><td>"+EscH(a.key)+"</td><td>T"+a.tmpl+" "+EscH(TmplNames[a.tmpl]||'')+"</td>"
++"<td><b>"+EscH(a.name)+"</b></td><td>"+EscH(a.desc||'')+"</td></tr>"
+})
+W(G('rTab'),qr)
+W(G('nVer'),L.length?('\u26a0 '+L.length+' alert'+(L.length>1?'s':'')):'')}
+
+AlertGo=ti=>{if(ti<0)return;AlertFrom=ti;DpT(ti);let b=G('alBack');if(b)b.style.display='inline'}
+AlertBack=()=>{let b=G('alBack');if(b)b.style.display='none';AlertFrom=-1;DpT(-2)}
 EscH=s=>String(s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]))
 // ── Temperature plausibility ────────────────────────────────────────────────
 // Mirrors parser/template_nvme_smart.py in the DA Analytics Platform, so the
@@ -1962,6 +2194,7 @@ W(G('rTab'),qr)
 }
 
 DpFl=z=>{
+if(AlertView){DpAlerts();return}
 if(HdrView){DpHdr();return}
 if(!ArIx||!ArIx.length){W(G('tmpl'),'(no templates)');W(G('tmplName'),'');W(G('err'),'');W(G('ruSide'),'');W(G('rdSide'),'');return}
 BuildTitle()
@@ -3617,9 +3850,10 @@ Q('#lTab td').forEach(e=>e.classList.remove('hili','hilig'))}
 Adv=x=>{
 // -1 is the header, which sits ahead of the first record, so the cycle runs
 // -1 .. lmt and wraps back to the header rather than to template 0.
-let lmt=ArIx.length/2-1,v=(HdrView?-1:Tx)+x
-if(v>lmt)v=-1
-if(v<-1)v=lmt
+// 順序：Alerts(-2) → Header(-1) → T0 … Tn → 回到 Alerts
+let lmt=ArIx.length/2-1,v=(AlertView?-2:(HdrView?-1:Tx))+x
+if(v>lmt)v=-2
+if(v<-2)v=lmt
 DpT(v)
 if(!HdrView&&(ScanActive||ScanStepMode)&&!_ScanLoading&&!RevTimer)ScanRawT=ArIx[Tx*2]}
 
@@ -5000,7 +5234,7 @@ W(G('ruSide'),s)
 return}
 if(P())DpT(Tx)
 else{
-let s='<a onclick="DpT(-1)">Header</a>'
+let s='<a onclick="DpT(-2)">Alerts</a> | <a onclick="DpT(-1)">Header</a>'
 items.forEach((e,j)=>{
 let pre=(j+1)%5===0?'<br>':' | '
 s+=pre+`<a onclick="DpT(${e.idx})">Template`+('00'+e.num).substr(-3)+'</a>'
@@ -5108,10 +5342,10 @@ if(_pdfStyCache[key]!==undefined)return _pdfStyCache[key]
 // .hili paints blue-on-gold for the click cursor, so the cell must be read
 // through to the element above it to get the colour it shows unselected.
 let host=c
-while(host&&host.classList&&(host.classList.contains('hili')||host.classList.contains('srchHit'))&&host.parentElement)host=host.parentElement
+while(host&&host.classList&&(host.classList.contains('hili')||host.classList.contains('srchHit')||host.classList.contains('alertHit'))&&host.parentElement)host=host.parentElement
 let fg=_rgb(getComputedStyle(host).color),bg=null
 for(let e=c;e&&e.tagName!=='BODY';e=e.parentElement){
-if(e.classList&&(e.classList.contains('hili')||e.classList.contains('srchHit')))continue
+if(e.classList&&(e.classList.contains('hili')||e.classList.contains('srchHit')||e.classList.contains('alertHit')))continue
 bg=_rgb(getComputedStyle(e).backgroundColor)
 if(bg)break
 }
@@ -5655,7 +5889,7 @@ let n=parseInt(hex,16)%16
 let names=['Unknown','Sleep','Standby','Active/Idle','Executing SMART off-line or self-test','Reserved','Reserved','Reserved','Reserved','Reserved','Reserved','Vendor specific','Vendor specific','Vendor specific','Vendor specific','Vendor specific']
 return names[n]}
 G=x=>{return D.getElementById(x)}
-DpT=i=>{HdrView=(i===-1);if(!HdrView)Tx=i;DcFl();G('rdSide').scrollTop=0;try{localStorage.setItem('dv_lastTx',HdrView?-1:Tx)}catch(e){}}
+DpT=i=>{AlertView=(i===-2);HdrView=(i===-1);if(!HdrView&&!AlertView)Tx=i;if(i!==AlertFrom){let b=G('alBack');if(b&&i===-2)b.style.display='none'}DcFl();G('rdSide').scrollTop=0;try{localStorage.setItem('dv_lastTx',AlertView?-2:(HdrView?-1:Tx))}catch(e){}}
 SaveFl=z=>{saveAs(new Blob([SAll],{type: "text/plain;charset=utf-8"}),G('file').value+".csv")}
 
 H2D=(ix,y)=>{return A[ix+y]*256+A[ix]*1}
