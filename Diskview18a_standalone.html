@@ -144,7 +144,7 @@ body.guideOpen #guideDoc{overflow:visible;padding:0}
   <span style='display:flex;align-items:center;gap:8px'>
   <span id='scanElapsed' title='Time elapsed since the current scan started (resets on each Scan click)' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
   <span id='lifetimeStats' title='How many times a template has been displayed while stepping/playing through results, across all Scan clicks this session' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
-  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260905d</span>
+  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260905e</span>
   </span>
 </div>
 <input id='local'type='file'style='display:none'onchange='OpFl()'>
@@ -1901,8 +1901,13 @@ return out}
 
 // 整份檔案的告警清單。每個相關 template 探針渲染一次，結束後把畫面放回原狀。
 _AlCache={file:null,list:null}
+_AlBusy=false
 ComputeAlerts=()=>{
 if(_AlCache.file===CurFile&&_AlCache.list)return _AlCache.list
+// 重入守衛：算完後「把畫面放回原狀」的 DpFl 會在 AlertView 下再進 DpAlerts，
+// 沒有這道守衛就是無限遞迴——每一層都渲染 6–8 個 template，頁面直接卡死。
+if(_AlBusy)return []
+_AlBusy=true
 let intf=_AlIntf(),list=[]
 let saveTx=Tx,saveHdr=HdrView,saveAl=AlertView
 try{
@@ -1944,9 +1949,11 @@ if(v2-v1>0)list.push({key:r.key,tmpl:r.tmpl,name:r.name+' Delta>0',value:v2,ref:
 }
 }
 }catch(e){}
+// 快取必須在放回畫面之前寫入：放回畫面會觸發 DpAlerts，它得拿到快取而不是再算一次。
+_AlCache={file:CurFile,list:list}
+_AlBusy=false
 Tx=saveTx;HdrView=saveHdr;AlertView=saveAl
 try{DpFl();if(A2&&!HdrView&&!AlertView)CmpRenderTable()}catch(e){}
-_AlCache={file:CurFile,list:list}
 return list}
 _AlEvalRow=(r,R)=>{
 let val=_SrchRowVal(R,'')
