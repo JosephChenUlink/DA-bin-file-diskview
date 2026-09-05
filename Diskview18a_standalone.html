@@ -144,7 +144,7 @@ body.guideOpen #guideDoc{overflow:visible;padding:0}
   <span style='display:flex;align-items:center;gap:8px'>
   <span id='scanElapsed' title='Time elapsed since the current scan started (resets on each Scan click)' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
   <span id='lifetimeStats' title='How many times a template has been displayed while stepping/playing through results, across all Scan clicks this session' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
-  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260905b</span>
+  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260905c</span>
   </span>
 </div>
 <input id='local'type='file'style='display:none'onchange='OpFl()'>
@@ -4313,13 +4313,28 @@ return m?m[1].trim():null}
 
 _SrchLive=c=>c&&c.op&&(c.field||c.op==='present'||c.op==='absent')
 _SrchHdrConds=()=>Srch.conds.filter(c=>_SrchLive(c)&&c.src==='H')
+// 告警條件：欄位是規則代碼（t2.197、t10.1…），留空 = 任一告警；比對用前綴，
+// 所以 t2. 涵蓋所有 SMART 告警、t103.1 涵蓋六個 Critical Warning 位元。
+_SrchAlertConds=()=>Srch.conds.filter(c=>_SrchLive(c)&&c.src==='A')
+_SrchAlertOk=()=>{
+let cs=_SrchAlertConds()
+if(!cs.length)return true
+let L
+try{L=ComputeAlerts()}catch(e){L=[]}
+return cs.every(c=>{
+let want=String(c.field||'').trim().toLowerCase()
+let hit=L.some(a=>!want||a.key.toLowerCase()===want||a.key.toLowerCase().startsWith(want))
+if(c.op==='absent')return !hit
+if(c.op==='present')return hit
+// 其他運算子對告警沒有意義：有命中就當成立
+return hit})}
 // 沒有填欄位、只問 present/absent 的 template 條件 = 「這個檔案有沒有這個
 // template」。收集資料夾時已經把每個檔案的 template 清單存進 entry.templates，
 // 所以這種條件連檔案都不用讀，更不用解碼。
-_SrchHasConds=()=>Srch.conds.filter(c=>_SrchLive(c)&&c.src!=='H'
+_SrchHasConds=()=>Srch.conds.filter(c=>_SrchLive(c)&&c.src!=='H'&&c.src!=='A'
 &&!String(c.field||'').trim()&&(c.op==='present'||c.op==='absent'))
 // 其餘的 template 條件要比對某一列的值，必須先解碼。
-_SrchTmplConds=()=>Srch.conds.filter(c=>_SrchLive(c)&&c.src!=='H'
+_SrchTmplConds=()=>Srch.conds.filter(c=>_SrchLive(c)&&c.src!=='H'&&c.src!=='A'
 &&!(!String(c.field||'').trim()&&(c.op==='present'||c.op==='absent')))
 
 // 只看 template 清單，不讀檔。list 為 null 表示尚未知道，交給後面的檢查。
@@ -4459,6 +4474,9 @@ let list=[]
 for(let i=0;i<ArIx.length;i+=2)list.push(ArIx[i])
 if(!SrchTemplatesOk(list))return false
 }
+// 告警條件要先算整份檔案的告警清單（有快取），放在 template 條件之前，
+// 這樣「告警＋某欄位值」並用時，告警先把大多數檔案刷掉。
+if(!_SrchAlertOk())return false
 let cs=_SrchTmplConds()
 if(!cs.length)return true
 let byT={}
@@ -4515,7 +4533,8 @@ SrchClose=()=>{let p=G('srchPanel');if(p)p.classList.remove('open')}
 // Templates offered as a condition source: those actually present in the open
 // file, so a condition can never name something this capture does not contain.
 _SrchSrcOpts=sel=>{
-let o="<option value='H'"+(sel==='H'?' selected':'')+">Header</option>"
+let o="<option value='A'"+(sel==='A'?' selected':'')+">Alerts</option>"
++"<option value='H'"+(sel==='H'?' selected':'')+">Header</option>"
 if(ArIx)for(let i=0;i<ArIx.length;i+=2){
 let n=ArIx[i]
 o+="<option value='"+n+"'"+(String(sel)===String(n)?' selected':'')+">T"+n+" "+EscH((TmplNames&&TmplNames[n])||'')+"</option>"
@@ -4590,7 +4609,7 @@ Srch.conds.forEach((c,i)=>{SrchFields(i);SrchOpUI(i)})}
 SrchOpUI=i=>{
 let c=Srch.conds[i],v=G('srchV'+i)
 if(!c||!v)return
-let noVal=(c.op==='present'||c.op==='absent'||!c.op)
+let noVal=(c.op==='present'||c.op==='absent'||!c.op||c.src==='A')
 v.disabled=noVal
 v.style.background=noVal?'#f0f2f5':''
 v.placeholder=noVal?'not used':'value'
@@ -4611,7 +4630,12 @@ let c=Srch.conds[i]
 if(!c)return
 let names=[]
 try{
-if(c.src==='H'){
+if(c.src==='A'){
+// 留空 = 任一告警。之後是每條非 SMART 規則，再加常見的 SMART 屬性。
+names.push('t2.')
+AlertRules.forEach(r=>{if(names.indexOf(r.key)<0)names.push(r.key)})
+;[5,10,187,188,196,197,198,199].forEach(id=>names.push('t2.'+id))
+}else if(c.src==='H'){
 ;(SAll||'').split('h\n')[0].split('\n').forEach(l=>{
 let p=l.indexOf(':')
 if(p>0){let k=l.slice(0,p).trim();if(k&&!/^Record \d+ /.test(k)&&names.indexOf(k)<0)names.push(k)}
