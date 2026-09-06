@@ -144,7 +144,7 @@ body.guideOpen #guideDoc{overflow:visible;padding:0}
   <span style='display:flex;align-items:center;gap:8px'>
   <span id='scanElapsed' title='Time elapsed since the current scan started (resets on each Scan click)' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
   <span id='lifetimeStats' title='How many times a template has been displayed while stepping/playing through results, across all Scan clicks this session' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
-  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260906e</span>
+  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260906f</span>
   </span>
 </div>
 <input id='local'type='file'style='display:none'onchange='OpFl()'>
@@ -2289,7 +2289,12 @@ if(!c){
   ArRange.push(j+"-12")
 }else if(c==1){
   for(let k=1;k>=0;k--)x=x*256+A[F+j+k]*1
-  W(e,U(x,2))
+  // ATA/ACS SMART Attribute Table「Attribute Flags」欄位 bit 0：1＝pre-failure
+  // （這個屬性掉到門檻值代表即將故障），0＝advisory（僅供參考，不預示故障）。
+  // 把解讀結果直接接在十六進位後面，原始值仍在最前面，_SrchNum／parseInt
+  // 都只吃到第一個非十六進位字元為止，所以搜尋和告警引擎（_AlSmart）照樣
+  // 能正確解出數值，不受影響。
+  W(e,U(x,2)+' ('+((x&1)?'Pre-fail':'Advisory')+')')
   j++
 }else if(c==2||c==3){
   W(e,A[F+j])
@@ -2309,7 +2314,7 @@ j++
 G('ruSide').innerHTML=G('ruSide').innerHTML.split('<hr><b>Row color legend:</b>')[0]+`<hr><b>Row color legend:</b><br>
 <span class='hilig'style='padding:0 6px'>Gray</span> = No SMART threshold defined for this attribute (informational only)<br>
 <span class='cyan'style='padding:0 6px'>Light blue</span> = Attribute has both a SMART threshold warning condition AND a "1-day data increase" warning \u2014 i.e. any increase in this counter within a single day is itself a red flag, even before the normalized value drops to the threshold (these are typically error/failure counters like Reallocated Sectors, Command Timeout, Uncorrectable Errors, etc.)<br>
-White = Standard attribute; warning only applies if Normalized value \u2264 Threshold value (see Template 13 for threshold values)`}
+White = Standard attribute; warning only applies if Normalized value \u2264 Threshold value (see Template 13 for threshold values)<hr><b>Flags (hex):</b> bit 0 of the Attribute Flags word marks the attribute Pre-fail (reaching the threshold predicts imminent failure) or Advisory (informational only) \u2014 shown decoded in parentheses after the raw hex.`}
 
 DpEF=z=>{
 W(G('ruSide'),`Status byte (hex): high nibble = Self-test Execution Status, low nibble = Percent Self-Test Remaining (in 10% increments; 0 = complete).<br>
