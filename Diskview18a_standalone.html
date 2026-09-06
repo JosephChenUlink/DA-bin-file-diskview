@@ -144,7 +144,7 @@ body.guideOpen #guideDoc{overflow:visible;padding:0}
   <span style='display:flex;align-items:center;gap:8px'>
   <span id='scanElapsed' title='Time elapsed since the current scan started (resets on each Scan click)' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
   <span id='lifetimeStats' title='How many times a template has been displayed while stepping/playing through results, across all Scan clicks this session' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
-  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260906b</span>
+  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260906c</span>
   </span>
 </div>
 <input id='local'type='file'style='display:none'onchange='OpFl()'>
@@ -4363,7 +4363,17 @@ let re=new RegExp('^[ \\t]*'+String(name).replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+
 let m=txt.match(re)
 return m?m[1].trim():null}
 
-_SrchLive=c=>c&&c.op&&(c.field||c.op==='present'||c.op==='absent')
+// 一條件是否「生效」。一般規則：欄位＋運算子都要選（不然不知道要比什麼），
+// 或留空欄位配 is present／is absent。Alerts 例外：Value 欄位本來就永遠鎖死
+// （見 SrchOpUI），使用者選了具體告警代碼後常常不會再去點 Op，若仍要求 Op
+// 才算生效，這條件就悄悄失效——Srch.on 整個變 false，掃描的「命中就停」
+// （見 _doScanStepDir）因此永遠不會觸發，看起來像「掃描不會停」。所以 Alerts
+// 只要欄位不是空的就算生效，運算子留白也算數（_SrchAlertOk 本來就把非
+// present/absent 的運算子當成「有命中就算」）。
+_SrchLive=c=>{
+if(!c)return false
+if(c.src==='A')return !!(c.field||c.op==='present'||c.op==='absent')
+return !!(c.op&&(c.field||c.op==='present'||c.op==='absent'))}
 _SrchHdrConds=()=>Srch.conds.filter(c=>_SrchLive(c)&&c.src==='H')
 // 告警條件：欄位是規則代碼（t2.197、t10.1…），留空 = 任一告警；比對用前綴，
 // 所以 t2. 涵蓋所有 SMART 告警、t103.1 涵蓋六個 Critical Warning 位元。
