@@ -144,7 +144,7 @@ body.guideOpen #guideDoc{overflow:visible;padding:0}
   <span style='display:flex;align-items:center;gap:8px'>
   <span id='scanElapsed' title='Time elapsed since the current scan started (resets on each Scan click)' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
   <span id='lifetimeStats' title='How many times a template has been displayed while stepping/playing through results, across all Scan clicks this session' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
-  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260905e</span>
+  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260906a</span>
   </span>
 </div>
 <input id='local'type='file'style='display:none'onchange='OpFl()'>
@@ -769,7 +769,7 @@ if(ScanActive||ScanStepMode){ScanActive=false;ScanStepMode=false;_ScanClearTimer
 let file=await fh.getFile()
 let fname=file.name
 CurFile=fname;_SetFileLabel(fname)
-PrevRawT=(ArIx&&ArIx.length>0&&Tx>=0)?ArIx[Tx*2]:-1;Tx=0;_AlCache={file:null,list:null}
+PrevRawT=(ArIx&&ArIx.length>0&&Tx>=0)?ArIx[Tx*2]:-1;Tx=0;_AlCache={file:null,list:null};_T13Cache={file:null,map:null}
 let buf=await file.arrayBuffer()
 try{localStorage.setItem('dv_lastFile',Buf2B64(buf));localStorage.setItem('dv_lastFileName',fname);localStorage.setItem('dv_lastTx',0)}catch(e){}
 W(G('nVer'),'')
@@ -783,7 +783,7 @@ let buf
 try{let file=entry.file||(await entry.handle.getFile());buf=await file.arrayBuffer()}catch(e){return}
 ScanFileHandle=entry.handle||null
 CurFile=entry.name;_SetFileLabel(entry.name)
-PrevRawT=(ArIx&&ArIx.length>0&&Tx>=0)?ArIx[Tx*2]:-1;Tx=0;_AlCache={file:null,list:null}
+PrevRawT=(ArIx&&ArIx.length>0&&Tx>=0)?ArIx[Tx*2]:-1;Tx=0;_AlCache={file:null,list:null};_T13Cache={file:null,map:null}
 try{localStorage.setItem('dv_lastFile',Buf2B64(buf));localStorage.setItem('dv_lastFileName',entry.name);localStorage.setItem('dv_lastTx',0)}catch(e){}
 W(G('nVer'),'')
 ScanOrigBuf=buf;ScanOrigName=entry.name;ScanLastBuf=null;ScanLastName=''
@@ -797,7 +797,7 @@ if(RevTimer){clearInterval(RevTimer);RevTimer=null;W(G('revBtn'),'Play')}
 if(ScanActive||ScanStepMode){ScanActive=false;ScanStepMode=false;ScanEntries=[];_ScanClearTimer();W(G('scanBtn'),'Scan');G('scanCtrl').style.display='none';G('scanBtn').style.display='inline';W(G('nVer'),'')}
 let f=G('local').files[0],r=new FileReader()
 CurFile=f.name;_SetFileLabel(f.name)
-PrevRawT=(ArIx&&ArIx.length>0&&Tx>=0)?ArIx[Tx*2]:-1;Tx=0;_AlCache={file:null,list:null}
+PrevRawT=(ArIx&&ArIx.length>0&&Tx>=0)?ArIx[Tx*2]:-1;Tx=0;_AlCache={file:null,list:null};_T13Cache={file:null,map:null}
 r.onload=e=>{
 try{localStorage.setItem('dv_lastFile',Buf2B64(e.target.result));localStorage.setItem('dv_lastFileName',f.name);localStorage.setItem('dv_lastTx',Tx)}catch(err){}
 W(G('nVer'),'')
@@ -889,8 +889,9 @@ DpFl()
 // The header view builds its own File 2 columns, so CmpRenderTable would be
 // appending a second set on top of them.
 if(A2&&!HdrView&&!AlertView)CmpRenderTable()
-// T309 的欄位解碼放在表格完成之後，這樣比較欄與搜尋都看得到解碼結果。
+// T309 的欄位解碼與 T2 的門檻欄放在表格完成之後，這樣比較欄與搜尋都看得到。
 try{_PostSelfTest()}catch(e){}
+try{_PostSmart()}catch(e){}
 // Mark whatever satisfied a condition, after the table is final.
 try{if(typeof SrchHighlight==='function')SrchHighlight()}catch(e){}
 try{if(typeof AlertHighlight==='function')AlertHighlight()}catch(e){}}
@@ -1468,37 +1469,81 @@ return {cells,ord,tr}
 }
 return null}
 
-// SMART N<=T：T2 的 Current 對 T13 的 Threshold（threshold>0 且 current<=threshold）
-_AlSmart=()=>{
-let out=[]
-let i2=_AlIdx(2),i13=_AlIdx(13)
-if(i2<0||i13<0)return out
+// T13 門檻表：{SMART ID → threshold}，按檔案快取。探針渲染 T13 一次，畫面放回。
+_T13Cache={file:null,map:null}
+_T13Thr=()=>{
+if(_T13Cache.file===CurFile&&_T13Cache.map)return _T13Cache.map
+let i13=_AlIdx(13),thr={}
+if(i13<0){_T13Cache={file:CurFile,map:thr};return thr}
 let saveTx=Tx,saveHdr=HdrView,saveAl=AlertView
 try{
 HdrView=false;AlertView=false
-Tx=i13;DpFl()
-let thr={}
+if(Tx!==i13){Tx=i13;DpFl()}
 for(let tr of Q('#rTab tr')){
 let c=tr.cells;if(!c||c.length<2||tr.querySelector('th'))continue
-let id=parseInt(c[0].textContent.trim(),10),t=parseInt(String(c[1].textContent).trim(),16)
+// T13 的門檻與 T2 的 Current／Worst 都是十進位顯示（見 T13 的 Threshold 欄）。
+let id=parseInt(c[0].textContent.trim(),10),t=parseInt(String(c[1].textContent).trim(),10)
 if(isFinite(id)&&isFinite(t))thr[id]=t
 }
+}catch(e){}
+_T13Cache={file:CurFile,map:thr}
+if(Tx!==saveTx||HdrView!==saveHdr||AlertView!==saveAl){Tx=saveTx;HdrView=saveHdr;AlertView=saveAl;try{DpFl()}catch(e){}}
+return thr}
+
+// 依欄名找欄位索引：T2 加了 Threshold 欄後索引會位移，不能寫死。
+_ColIdx=name=>{let h=Q('#rTab tr')[0];if(!h)return -1;return Array.from(h.querySelectorAll('th')).findIndex(x=>x.textContent.trim()===name)}
+
+// SMART N<=T：T2 的 Current 對 T13 的 Threshold（threshold>0 且 current<=threshold）
+_AlSmart=()=>{
+let out=[]
+let i2=_AlIdx(2)
+if(i2<0||_AlIdx(13)<0)return out
+let thr=_T13Thr()
+let saveTx=Tx,saveHdr=HdrView,saveAl=AlertView
+try{
+HdrView=false;AlertView=false
 Tx=i2;DpFl()
+let iId=_ColIdx('ID'),iFl=_ColIdx('Flags (hex)'),iCur=_ColIdx('Current'),iDesc=_ColIdx('Description')
 for(let tr of Q('#rTab tr')){
-let c=tr.cells;if(!c||c.length<7||tr.querySelector('th'))continue
-let id=parseInt(c[0].textContent.trim(),10)
-let cur=parseInt(String(c[2].textContent).trim(),16)
-let flags=parseInt(String(c[1].textContent).trim(),16)
+let c=tr.cells;if(!c||c.length<5||tr.querySelector('th'))continue
+let id=parseInt(c[iId].textContent.trim(),10)
+let cur=parseInt(String(c[iCur].textContent).trim(),10)
+let flags=parseInt(String(c[iFl].textContent).trim(),16)
 if(!isFinite(id)||!isFinite(cur)||thr[id]==null||thr[id]<=0)continue
 if(cur<=thr[id]){
 let pre=(flags&1)?'pre-fail':'advisory'
 out.push({key:'t2.'+id,tmpl:2,name:'smart_'+id+' N<=T ('+pre+')',value:cur,ref:thr[id],
-desc:(c[6]?c[6].textContent.trim():'')+' — normalized '+cur+' <= threshold '+thr[id]})
+desc:(iDesc>=0&&c[iDesc]?c[iDesc].textContent.trim():'')+' — normalized '+cur+' <= threshold '+thr[id]})
 }
 }
 }catch(e){}
 Tx=saveTx;HdrView=saveHdr;AlertView=saveAl
 return out}
+
+// ── T2：在 Worst 旁插入 T13 的門檻 ───────────────────────────────────────
+// 讀 SMART 時最常做的事就是拿 Current 對門檻，卻得在 T2、T13 之間來回切。
+// 併進來之後一眼就看得出哪個屬性逼近門檻；不在 T13 裡的屬性顯示「—」。
+_PostSmart=()=>{
+let t=G('rTab');if(!t||!ArIx||Tx<0||HdrView||AlertView||ArIx[Tx*2]!==2)return
+if(_ColIdx('Threshold')>=0)return   // 已處理過
+let iW=_ColIdx('Worst'),iCur=_ColIdx('Current'),iId=_ColIdx('ID')
+if(iW<0||iCur<0||iId<0)return
+let thr=_T13Thr()
+let hdr=t.querySelector('tr');if(!hdr)return
+hdr.querySelectorAll('th')[iW].insertAdjacentHTML('afterend','<th title="From Template 13 (SMART thresholds)">Threshold</th>')
+Array.from(t.querySelectorAll('tr')).slice(1).forEach(tr=>{
+let c=tr.cells;if(!c||c.length<=iW||tr.querySelector('th'))return
+let id=parseInt(c[iId].textContent.trim(),10),cur=parseInt(String(c[iCur].textContent).trim(),10)
+let th=thr[id]
+let txt,style=''
+if(th==null)txt='<span style="color:#aaa">\u2014</span>'
+else{
+txt=String(th)
+// 逼近或觸及門檻的用紅色，讓它在整張表裡跳出來
+if(th>0&&isFinite(cur)&&cur<=th)style=' style="color:#c00;font-weight:bold"'
+}
+c[iW].insertAdjacentHTML('afterend','<td'+style+'>'+txt+'</td>')
+})}
 
 // 整份檔案的告警清單。每個相關 template 探針渲染一次，結束後把畫面放回原狀。
 _AlCache={file:null,list:null}
@@ -1554,7 +1599,7 @@ if(v2-v1>0)list.push({key:r.key,tmpl:r.tmpl,name:r.name+' Delta>0',value:v2,ref:
 _AlCache={file:CurFile,list:list}
 _AlBusy=false
 Tx=saveTx;HdrView=saveHdr;AlertView=saveAl
-try{DpFl();if(A2&&!HdrView&&!AlertView)CmpRenderTable()}catch(e){}
+try{DpFl();if(A2&&!HdrView&&!AlertView)CmpRenderTable();_PostSelfTest();_PostSmart();SrchHighlight();AlertHighlight()}catch(e){}
 return list}
 _AlEvalRow=(r,R)=>{
 let val=_SrchRowVal(R,'')
@@ -4696,7 +4741,7 @@ if(tv!=null){
 let cur=AlertView?-2:(HdrView?-1:Tx)
 if(tv!==cur){AlertView=(tv===-2);HdrView=(tv===-1);if(tv>=0)Tx=tv
 // 高亮掛在 DcFl 結尾；這裡直接呼叫 DpFl 就要自己補上，否則切過去的頁面沒有標示。
-try{DpFl();if(A2&&!HdrView&&!AlertView)CmpRenderTable();_PostSelfTest();SrchHighlight();AlertHighlight()}catch(e){}}
+try{DpFl();if(A2&&!HdrView&&!AlertView)CmpRenderTable();_PostSelfTest();_PostSmart();SrchHighlight();AlertHighlight()}catch(e){}}
 }}
 }
 }finally{_ScanLoading=false}
