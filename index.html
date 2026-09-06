@@ -144,7 +144,7 @@ body.guideOpen #guideDoc{overflow:visible;padding:0}
   <span style='display:flex;align-items:center;gap:8px'>
   <span id='scanElapsed' title='Time elapsed since the current scan started (resets on each Scan click)' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
   <span id='lifetimeStats' title='How many times a template has been displayed while stepping/playing through results, across all Scan clicks this session' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
-  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260906d</span>
+  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260906e</span>
   </span>
 </div>
 <input id='local'type='file'style='display:none'onchange='OpFl()'>
@@ -4679,22 +4679,45 @@ o+="<option value='"+k+"'"+(String(c.col)===String(k)?' selected':'')+">"+EscH(h
 })
 return o}
 
+// Alerts 沒有欄位可比較——Op、Column、Value 三格對它完全用不到，但一直以來
+// 只用灰階＋「not used」提示帶過，使用者仍得先猜這幾格到底要不要填
+// （這正是「不清楚要選什麼」的來源）。改成直接顯示 N/A 並整格鎖住。三個
+// 控制項各自包一層 <span>，讓 SrchFields（Source 一改就會呼叫）能單獨重畫，
+// 不必等到整個 SrchRender 重來一次，Source 切來切去時才會立刻反映。
+_SrchOpCtl=(c,i)=>{
+// Alerts 只問「有沒有觸發」；其餘運算子（contains、等於、大於…）語意上都
+// 等同「有命中就算」（見 _SrchAlertOk），混在一起選容易誤會成真能比較數值，
+// 所以只給三個選項。
+let ops=c.src==='A'?[['','N/A'],['present','is present'],['absent','is absent']]:_SrchOps
+return "<select onchange='SrchSet("+i+",\"op\",this.value);SrchOpUI("+i+")'>"
++ops.map(o=>"<option value='"+o[0]+"'"+(c.op===o[0]?' selected':'')+">"+o[1]+"</option>").join('')
++"</select>"}
+
+_SrchColCtl=(c,i)=>{
+if(c.src==='A')
+return "<select disabled title='Alerts has no column to compare'><option>N/A</option></select>"
+return "<select id='srchC"+i+"' title='Which column to compare' onchange='SrchSet("+i+",\"col\",this.value)'>"+_SrchColOpts(c)+"</select>"}
+
+_SrchRhsValCtl=(c,i)=>{
+if(c.src==='A')
+return "<select disabled title='Alerts has no value to compare'><option>N/A</option></select>"
++"<input value='' placeholder='N/A' disabled style='background:#f0f2f5' title='Alerts has no value to compare'>"
+return "<select id='srchR"+i+"' title='Compare against a fixed value, or another field in the same file' onchange='SrchSet("+i+",\"rhs\",this.value);SrchRender()'>"
++"<option value=''"+(c.rhs==='f'?'':' selected')+">a value</option>"
++"<option value='f'"+(c.rhs==='f'?' selected':'')+">another field</option></select>"
++(c.rhs==='f'
+?"<span id='srchRW"+i+"'>"+_SrchRhsCtl(c,i)+"</span>"
+:"<input id='srchV"+i+"' value=\""+EscH(c.val||'')+"\" placeholder='value' oninput='SrchSet("+i+",\"val\",this.value)'>")}
+
 SrchRender=()=>{
 let L=G('srchList');if(!L)return
 L.innerHTML=Srch.conds.map((c,i)=>
 "<div class='scond'>"
 +"<select onchange='SrchSet("+i+",\"src\",this.value);SrchFields("+i+")'>"+_SrchSrcOpts(c.src)+"</select>"
 +"<span id='srchFW"+i+"'>"+_SrchFieldCtl(c,i)+"</span>"
-+"<select onchange='SrchSet("+i+",\"op\",this.value);SrchOpUI("+i+")'>"
-+_SrchOps.map(o=>"<option value='"+o[0]+"'"+(c.op===o[0]?' selected':'')+">"+o[1]+"</option>").join('')
-+"</select>"
-+"<select id='srchC"+i+"' title='Which column to compare' onchange='SrchSet("+i+",\"col\",this.value)'>"+_SrchColOpts(c)+"</select>"
-+"<select id='srchR"+i+"' title='Compare against a fixed value, or another field in the same file' onchange='SrchSet("+i+",\"rhs\",this.value);SrchRender()'>"
-+"<option value=''"+(c.rhs==='f'?'':' selected')+">a value</option>"
-+"<option value='f'"+(c.rhs==='f'?' selected':'')+">another field</option></select>"
-+(c.rhs==='f'
-?"<span id='srchRW"+i+"'>"+_SrchRhsCtl(c,i)+"</span>"
-:"<input id='srchV"+i+"' value=\""+EscH(c.val||'')+"\" placeholder='value' oninput='SrchSet("+i+",\"val\",this.value)'>")
++"<span id='srchOW"+i+"'>"+_SrchOpCtl(c,i)+"</span>"
++"<span id='srchCW"+i+"'>"+_SrchColCtl(c,i)+"</span>"
++"<span id='srchRVW"+i+"'>"+_SrchRhsValCtl(c,i)+"</span>"
 +"<button class='sdel' title='Remove' onclick='SrchDel("+i+")'>\u00d7</button>"
 +"</div>").join('')
 Srch.conds.forEach((c,i)=>{SrchFields(i);SrchOpUI(i)})}
@@ -4785,8 +4808,16 @@ if(Tx!==saveTx){Tx=saveTx;DpFl()}
 _SrchFieldCache[i]=names.slice(0,400)
 let wrap=G('srchFW'+i)
 if(wrap)wrap.innerHTML=_SrchFieldCtl(Srch.conds[i],i)
-let rw=G('srchRW'+i)
-if(rw)rw.innerHTML=_SrchRhsCtl(Srch.conds[i],i)}
+// Op／Column／Value 是否可用（尤其該不該顯示 N/A）取決於 Source，Source
+// 一改就要整組重畫，不能等到下次開 Search 面板才更新（見 _SrchOpCtl／
+// _SrchColCtl／_SrchRhsValCtl）。
+let ow=G('srchOW'+i)
+if(ow)ow.innerHTML=_SrchOpCtl(Srch.conds[i],i)
+let cw=G('srchCW'+i)
+if(cw)cw.innerHTML=_SrchColCtl(Srch.conds[i],i)
+let rvw=G('srchRVW'+i)
+if(rvw)rvw.innerHTML=_SrchRhsValCtl(Srch.conds[i],i)
+try{SrchOpUI(i)}catch(e){}}
 
 SrchClear=()=>{
 Srch={conds:[{src:'H',field:'',op:'',val:'',col:'',rhs:'',rfield:'',rcol:''}],stop:Srch.stop,on:false}
