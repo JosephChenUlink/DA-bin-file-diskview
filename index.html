@@ -144,7 +144,7 @@ body.guideOpen #guideDoc{overflow:visible;padding:0}
   <span style='display:flex;align-items:center;gap:8px'>
   <span id='scanElapsed' title='Time elapsed since the current scan started (resets on each Scan click)' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
   <span id='lifetimeStats' title='How many times a template has been displayed while stepping/playing through results, across all Scan clicks this session' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
-  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260906a</span>
+  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260906b</span>
   </span>
 </div>
 <input id='local'type='file'style='display:none'onchange='OpFl()'>
@@ -160,7 +160,7 @@ body.guideOpen #guideDoc{overflow:visible;padding:0}
 <div id='srchList'></div>
 <div class='srow'><button onclick='SrchAdd()'>+ Add condition</button>
 <span class='shint'>Header conditions are checked first, without decoding the file</span></div>
-<div class='srow'><span class='shint'>Leave the field blank with &ldquo;is present&rdquo; / &ldquo;is absent&rdquo; to ask whether the file contains that template at all. With a field name, they ask whether that row exists &mdash; useful for header fields and for templates whose rows vary with the data (T2, T104, T332/T333), but not for fixed-layout ones such as T8, which always show every row.</span></div>
+<div class='srow'><span class='shint'>Leave the field blank (&ldquo;(any alert)&rdquo; for Alerts) with &ldquo;is present&rdquo; / &ldquo;is absent&rdquo; to ask whether the file contains that template at all, or, for Alerts, whether it triggers any alert at all. With a field name, they ask whether that row exists &mdash; useful for header fields and for templates whose rows vary with the data (T2, T104, T332/T333), but not for fixed-layout ones such as T8, which always show every row.</span></div>
 <div class='srow'><label><input type='radio' name='srchMode' id='srchModeStop' checked onchange='SrchMode(1)'> Stop at the first match</label>
 <label style='margin-left:12px'><input type='radio' name='srchMode' onchange='SrchMode(0)'> Keep scanning, step through matches</label></div>
 <div class='srow' style='text-align:right'><span id='srchMsg' class='shint'></span>
@@ -4622,11 +4622,23 @@ let _SrchOps=[['','(any)'],['contains','contains'],['eq','equals'],['ne','does n
 // 已輸入的文字過濾，一旦選過一個欄位就再也看不到其他欄位，等於沒辦法瀏覽。
 // 探不到清單時（尚未開檔、或這個檔案沒有該 template）才退回文字輸入。
 _SrchFieldCache={}
+// 告警規則代碼是 t<template>.<子代碼>（有些再多一層，如 t103.1.1），依數字
+// 由小到大比較，而不是逐字元比較字串（字串排序會讓 t10 排在 t2 前面）。
+_AlKeyParts=k=>String(k).replace(/^t/,'').split('.').filter(s=>s!=='').map(Number)
+_AlKeyCmp=(a,b)=>{
+let pa=_AlKeyParts(a),pb=_AlKeyParts(b),n=Math.max(pa.length,pb.length)
+for(let i=0;i<n;i++){
+let va=i<pa.length?pa[i]:-1,vb=i<pb.length?pb[i]:-1
+if(va!==vb)return va-vb
+}
+return 0}
 _SrchFieldCtl=(c,i)=>{
 let names=_SrchFieldCache[i]||[]
 if(!names.length)
 return "<input id='srchF"+i+"' value=\""+EscH(c.field||'')+"\" placeholder='field' oninput='SrchSet("+i+",\"field\",this.value)'>"
-let o="<option value=''>(choose a field)</option>"
+// Alerts 留空＋is present／is absent＝任一告警（見 SrchFields、_SrchAlertOk）；
+// 標成「(any alert)」讓這條路徑看得見，而不是沿用泛用的「(choose a field)」。
+let o="<option value=''>"+(c.src==='A'?'(any alert)':'(choose a field)')+"</option>"
 // 目前的值若不在清單裡（例如上次存下來的，或換了 template），仍保留為選項，
 // 免得一重畫就被悄悄清掉。
 if(c.field&&names.indexOf(c.field)<0)
@@ -4701,10 +4713,15 @@ if(!c)return
 let names=[]
 try{
 if(c.src==='A'){
-// 留空 = 任一告警。之後是每條非 SMART 規則，再加常見的 SMART 屬性。
+// 留空 = 任一告警。之後是每條非 SMART 規則，再加常見的 SMART 屬性，
+// 依 template 編號／子代碼由小到大排序（t1、t2…t9、t10…），方便照數字找，
+// 而不是照規則表裡湊巧的寫入順序。
+let keys=[]
+AlertRules.forEach(r=>{if(keys.indexOf(r.key)<0)keys.push(r.key)})
+;[5,10,187,188,196,197,198,199].forEach(id=>{let k='t2.'+id;if(keys.indexOf(k)<0)keys.push(k)})
+keys.sort(_AlKeyCmp)
 names.push('t2.')
-AlertRules.forEach(r=>{if(names.indexOf(r.key)<0)names.push(r.key)})
-;[5,10,187,188,196,197,198,199].forEach(id=>names.push('t2.'+id))
+names=names.concat(keys)
 }else if(c.src==='H'){
 ;(SAll||'').split('h\n')[0].split('\n').forEach(l=>{
 let p=l.indexOf(':')
