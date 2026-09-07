@@ -144,7 +144,7 @@ body.guideOpen #guideDoc{overflow:visible;padding:0}
   <span style='display:flex;align-items:center;gap:8px'>
   <span id='scanElapsed' title='Time elapsed since the current scan started (resets on each Scan click)' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
   <span id='lifetimeStats' title='How many times a template has been displayed while stepping/playing through results, across all Scan clicks this session' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
-  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260907a</span>
+  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260907b</span>
   </span>
 </div>
 <input id='local'type='file'style='display:none'onchange='OpFl()'>
@@ -4101,9 +4101,11 @@ if(!d||!Array.isArray(d.c))return
 let out=[]
 d.c.slice(0,20).forEach(c=>{
 if(!c||typeof c!=='object')return
-let src=(c.src==='H')?'H':(isFinite(Number(c.src))?Number(c.src):null)
+// 'A'（Alerts）以前沒被接受，存過的 Alerts 條件一重開頁面就消失。
+let src=(c.src==='H'||c.src==='A')?c.src:(isFinite(Number(c.src))?Number(c.src):null)
 if(src===null)return
 let op=(typeof c.op==='string'&&_SrchOpSet.indexOf(c.op)>=0)?c.op:''
+if(src==='A'&&op!=='absent')op='present'
 let col=(c.col===''||c.col==null)?'':(isFinite(Number(c.col))?Number(c.col):'')
 let rcol=(c.rcol===''||c.rcol==null)?'':(isFinite(Number(c.rcol))?Number(c.rcol):'')
 out.push({src:src,
@@ -4509,10 +4511,13 @@ return o}
 _SrchOpCtl=(c,i)=>{
 // Alerts 只問「有沒有觸發」；其餘運算子（contains、等於、大於…）語意上都
 // 等同「有命中就算」（見 _SrchAlertOk），混在一起選容易誤會成真能比較數值，
-// 所以只給三個選項。
-let ops=c.src==='A'?[['','N/A'],['present','is present'],['absent','is absent']]:_SrchOps
+// 所以只給 is present／is absent 兩個。以前還有一個 N/A，行為與 is present
+// 完全相同，只是讓人猜它到底有沒有作用，拿掉；條件一切到 Alerts 就由
+// SrchFields 把運算子定成 is present。
+let ops=c.src==='A'?[['present','is present'],['absent','is absent']]:_SrchOps
+let cur=c.src==='A'?(c.op==='absent'?'absent':'present'):c.op
 return "<select onchange='SrchSet("+i+",\"op\",this.value);SrchOpUI("+i+")'>"
-+ops.map(o=>"<option value='"+o[0]+"'"+(c.op===o[0]?' selected':'')+">"+o[1]+"</option>").join('')
++ops.map(o=>"<option value='"+o[0]+"'"+(cur===o[0]?' selected':'')+">"+o[1]+"</option>").join('')
 +"</select>"}
 
 _SrchColCtl=(c,i)=>{
@@ -4568,6 +4573,9 @@ _SrchColCache={}
 SrchFields=i=>{
 let c=Srch.conds[i]
 if(!c)return
+// Alerts 條件的運算子只有 is present／is absent；從別的來源切過來時把留下的
+// (any)／contains／> 之類定成 is present，讓畫面上的選項就是實際生效的那個。
+if(c.src==='A'&&c.op!=='absent')c.op='present'
 let names=[]
 try{
 if(c.src==='A'){
