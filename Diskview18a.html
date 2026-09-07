@@ -108,6 +108,11 @@ width:560px;max-width:calc(100vw - 24px);box-sizing:border-box}
 #guideBox{background:#fff;width:min(900px,94vw);height:90vh;display:flex;flex-direction:column;border-radius:5px;box-shadow:0 8px 40px rgba(0,0,0,.35)}
 #guideBar{display:flex;align-items:center;gap:8px;padding:8px 12px;background:#1a5fa8;color:#fff;border-radius:5px 5px 0 0;font-size:14px}
 #guideBar button{font-size:12px;padding:2px 10px;cursor:pointer}
+#scanIfOv{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9999;display:flex;align-items:center;justify-content:center}
+#scanIfBox{background:#fff;width:min(380px,94vw);border-radius:5px;box-shadow:0 8px 40px rgba(0,0,0,.35);font-size:13px}
+#scanIfBar{padding:8px 12px;background:#1a5fa8;color:#fff;border-radius:5px 5px 0 0;font-size:14px;font-weight:bold}
+#scanIfBox label{display:block;margin:5px 0;cursor:pointer}
+#scanIfBox button{font-size:12px;padding:3px 12px;cursor:pointer}
 #guideDoc{overflow:auto;padding:18px 26px;font:14px/1.65 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:#222}
 #guideDoc h1{font-size:21px;margin:0 0 2px;color:#1a5fa8}
 #guideDoc h2{font-size:16px;margin:22px 0 6px;color:#1a5fa8;border-bottom:1px solid #e0e6ee;padding-bottom:3px}
@@ -144,7 +149,7 @@ body.guideOpen #guideDoc{overflow:visible;padding:0}
   <span style='display:flex;align-items:center;gap:8px'>
   <span id='scanElapsed' title='Time elapsed since the current scan started (resets on each Scan click)' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
   <span id='lifetimeStats' title='How many times a template has been displayed while stepping/playing through results, across all Scan clicks this session' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
-  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260907b</span>
+  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260907c</span>
   </span>
 </div>
 <input id='local'type='file'style='display:none'onchange='OpFl()'>
@@ -242,7 +247,7 @@ body.guideOpen #guideDoc{overflow:visible;padding:0}
 <p>Useful for: before/after a firmware update, the same drive at two dates, or two drives from the same enclosure.</p>
 
 <h2>7. Scanning a folder</h2>
-<p><b>Scan</b> sweeps a whole folder of captures without opening them one at a time. Click <b>Scan</b>, choose a folder, and the viewer collects every <code>.bin</code> in that folder <i>and its subfolders</i>, including files inside <code>.zip</code> archives. Transport controls then replace the Scan button:</p>
+<p><b>Scan</b> sweeps a whole folder of captures without opening them one at a time. Click <b>Scan</b>, choose the interface to sweep (SATA, NVMe, SCSI, or any interface &mdash; the open capture's interface is preselected), then choose a folder, and the viewer collects every <code>.bin</code> in that folder <i>and its subfolders</i>, including files inside <code>.zip</code> archives. Only captures of the chosen interface are shown. If that interface differs from the open capture, or you chose any interface, each capture opens on its Header page; click the <b>Template</b> button during the scan to pick a template for that interface. Transport controls then replace the Scan button:</p>
 <table class='g'>
 <tr><th>&#9198; &#9197;</th><td>Step one capture back / forward</td></tr>
 <tr><th>&#9194; &#9193;</th><td>Play backwards / forwards</td></tr>
@@ -4688,6 +4693,33 @@ if(e.key==='Escape'){
 let p=G('srchPanel')
 if(p&&p.classList.contains('open'))SrchClose()}})
 
+// 介面名稱正規化：檔頭寫的可能是 NVMe／NVME、SCSI／SAS，統一成 SATA／NVME／SCSI 再比。
+_IntfKey=v=>{let u=String(v||'').toUpperCase();return u.includes('NVME')?'NVME':u.includes('SATA')?'SATA':(u.includes('SCSI')||u.includes('SAS'))?'SCSI':u}
+_IntfLabel={SATA:'SATA',NVME:'NVMe',SCSI:'SCSI / SAS','':'any interface'}
+// ── Scan：介面選擇 ────────────────────────────────────────────────────────
+// 掃描的介面以前只能來自目前開啟檔案的檔頭，想掃別種介面得先開一個那種介面的檔。
+// 現在按 Scan 後、選資料夾前先問一次：預設帶入目前檔案的介面，也可以選「任一介面」。
+// 回傳 'SATA'／'NVME'／'SCSI'、''（任一）或 null（取消）。
+_ScanIntfPick=null
+_ScanAskIntf=()=>new Promise(res=>{
+let old=G('scanIfOv');if(old)old.remove()
+let im=(SAll||'').match(/Interface:\s*([^\n]+)/),cur=im?_IntfKey(im[1]):''
+let def=(cur==='SATA'||cur==='NVME'||cur==='SCSI')?cur:''
+let ov=document.createElement('div');ov.id='scanIfOv'
+ov.innerHTML="<div id='scanIfBox'><div id='scanIfBar'>Scan which interface?</div><div style='padding:12px 16px'>"
++['SATA','NVME','SCSI',''].map(k=>"<label><input type='radio' name='scanIf' value='"+k+"'"+(k===def?' checked':'')+"> "+_IntfLabel[k]+(k===def&&cur?" <span style='color:#777'>(the open capture)</span>":'')+"</label>").join('')
++"<div style='color:#777;font-size:11px;margin-top:8px'>Only captures of this interface are scanned. With a different interface than the open capture, or any interface, each capture opens on its Header page; click the Template button during the scan to pick a template.</div></div>"
++"<div style='padding:8px 16px 12px;display:flex;gap:8px;justify-content:flex-end'><button id='scanIfCancel'>Cancel</button><button id='scanIfOk' style='background:#1a5fa8;color:#fff;border:1px solid #0d3d6e'>Continue</button></div></div>"
+document.body.appendChild(ov)
+let key=e=>{if(e.key==='Escape'){e.preventDefault();done(null)}else if(e.key==='Enter'){e.preventDefault();ok()}}
+let done=v=>{document.removeEventListener('keydown',key,true);ov.remove();res(v)}
+let ok=()=>{let r=ov.querySelector('input[name=scanIf]:checked');done(r?r.value:'')}
+G('scanIfOk').onclick=ok;G('scanIfCancel').onclick=()=>done(null)
+ov.onclick=e=>{if(e.target===ov)done(null)}
+document.addEventListener('keydown',key,true)
+let chk=ov.querySelector('input[name=scanIf]:checked');if(chk)chk.focus()
+})
+
 ScanEnsureReady=async(forcePick)=>{
 // forcePick is set only by a fresh Scan click. Stepping, Play and resume all
 // call this too, and must keep using the folder already in hand.
@@ -4698,6 +4730,11 @@ if(window.self!==window.top){
 alert('Scan is not available while the viewer is embedded in a frame.\n\nOpen the page directly in Chrome or Edge.')
 return false
 }
+// 每次重新初始化掃描（新按 Scan、換資料夾、掃完後再步進）都先問介面，再處理資料夾。
+// Continue 本身是一次點擊，接下來的資料夾選擇器與權限請求仍在使用者手勢之內。
+let pick=await _ScanAskIntf()
+if(pick===null)return false
+_ScanIntfPick=pick
 // Try to restore dir handle from IndexedDB, unless this session has yet to
 // confirm a folder and the caller wants the user asked.
 if(!ScanDirHandle&&!(forcePick&&!_ScanFolderConfirmed))ScanDirHandle=await _ScanDB.load()
@@ -4710,10 +4747,13 @@ if(perm!=='granted'){ScanDirHandle=null;await _ScanDB.clear()}
 // No folder yet — show folder picker
 if(!ScanDirHandle){
 if(!window.showDirectoryPicker){
-// Fallback: folder select (includes subfolders via webkitRelativePath)
+// Fallback: folder select (includes subfolders via webkitRelativePath).
+// 以前這條路徑選完資料夾就直接 return，沒有走到下面的介面／template 判定與
+// 前置過濾，所以沒有 File System Access API 的瀏覽器掃描時從不篩介面。
+// 現在只在這裡收檔案清單，其餘交給共用的尾段。
 let inp=document.createElement('input')
 inp.type='file';inp.webkitdirectory=true
-return await new Promise(res=>{
+let got=await new Promise(res=>{
 inp.onchange=()=>{
 ScanBinList=Array.from(inp.files).filter(f=>_IsBinLike(f.name)).map(f=>({name:f.webkitRelativePath||f.name,file:f}))
 ScanBinList.sort((a,b)=>_NameCollator.compare(a.name,b.name))
@@ -4727,7 +4767,8 @@ res(ScanEntries.length>0)
 }
 inp.click()
 })
-}
+if(!got)return false
+}else{
 // Open folder picker starting at last-used scan folder (or file location, or downloads)
 let startOpts={}
 let dirHint=await _ScanDB.loadDirHint()
@@ -4740,10 +4781,13 @@ await _ScanDB.save(ScanDirHandle)
 await _ScanDB.saveDirHint(ScanDirHandle)  // update hint with newly chosen folder
 ScanBinList=[]  // reset to re-collect
 }
-// Show which folder is being scanned, including subfolders
+}
+// Show which folder is being scanned, including subfolders（退路路徑沒有 handle，標籤已在選檔時寫好）
 _ScanFolderConfirmed=true
+if(ScanDirHandle){
 if(document.getElementById('scanFolderLabel'))document.getElementById('scanFolderLabel').innerHTML=`📁 ${ScanDirHandle.name} (+ subfolders)`
 if(document.getElementById('scanFolderChg'))document.getElementById('scanFolderChg').style.display='inline'
+}
 // Collect .bin files from the folder and all subfolders
 if(!ScanBinList.length){
 _ScanDirsVisited=0;_ScanFilesSeen=0;_ScanWalkErrors=[];_ScanExtCounts={};_ScanSampleNames=[]
@@ -4779,8 +4823,12 @@ if(Srch.on&&_SrchHasConds().some(c=>c.op==='absent')){
 ScanRawT=-1
 if(G('srchMsg'))W(G('srchMsg'),'scanning all templates')
 }
-let im=SAll.match(/Interface:\s*([^\n]+)/)
-ScanIntf=im?im[1].trim():''
+let im=SAll.match(/Interface:\s*([^\n]+)/),fileIntf=_IntfKey(im?im[1]:'')
+ScanIntf=_ScanIntfPick!=null?_ScanIntfPick:fileIntf
+// 選的介面與目前開啟的檔案不同，或選了任一介面：目前檔案的 template 對其他介面
+// 沒有意義，套下去會讓每個檔案都被略過（看起來像「掃不到」）。改成不過濾
+// template、逐檔顯示 Header 頁（每個擷取檔都有），之後用 Template 按鈕挑該介面的 template。
+if(ScanRawT>=0&&!(ScanIntf&&fileIntf&&ScanIntf===fileIntf)){ScanRawT=-1;HdrView=true;AlertView=false}
 return await ScanRunPreFilter()
 }
 
@@ -4816,7 +4864,7 @@ let im2=txt.match(/Interface:\s*([^\n]+)/);let fIntf=im2?im2[1].trim():''
 // Case-insensitive comparison — different DA tool/firmware versions report
 // interface names with inconsistent capitalization (e.g. 'NVMe' vs 'NVME'),
 // which an exact string match would silently and incorrectly reject.
-if(ScanIntf&&fIntf&&fIntf.toUpperCase()!==ScanIntf.toUpperCase())return null
+if(ScanIntf&&fIntf&&_IntfKey(fIntf)!==_IntfKey(ScanIntf))return null
 // Also extract the list of templates this file declares. Caching this now
 // (the header text is already decoded in hand) lets scan-stepping check
 // template presence later with zero file I/O, instead of re-reading and
@@ -5065,7 +5113,7 @@ let srchNote=Srch.on?` \u2714 ${SrchHits.toLocaleString()} found of ${SrchTested
 let _now=Date.now()
 if(!ScanActive||_now-_lastStatusUpdate>=100){
 _lastStatusUpdate=_now
-W(G('nVer'),`▶ [${seqNum.toLocaleString()}/${ScanTotal.toLocaleString()} matches, ${ScanExaminedCount.toLocaleString()} scanned]${ScanIntf?' '+ScanIntf:''}${modeLabel}${speedNote}${srchNote}`)
+W(G('nVer'),`▶ [${seqNum.toLocaleString()}/${ScanTotal.toLocaleString()} matches, ${ScanExaminedCount.toLocaleString()} scanned]${' '+(_IntfLabel[ScanIntf]||ScanIntf)}${modeLabel}${speedNote}${srchNote}`)
 }
 if(ScanActive)_ScanScheduleNext()
 }
@@ -5210,7 +5258,7 @@ let modeLabel=_PickResumeMode==='scan'?'Scan':'Play'
 let s
 if(_PickResumeMode==='scan'){
 let nums=GetTemplatesForInterface(ScanIntf).sort((a,b)=>a-b)
-s=`<b>${modeLabel} paused.</b> Pick a template to resume scanning for (${ScanIntf||'all interfaces'}):<br>`
+s=`<b>${modeLabel} paused.</b> Pick a template to resume scanning for (${_IntfLabel[ScanIntf]||ScanIntf}):<br>`
 // Header first, as in the normal template list. Every capture has one, so it
 // never filters a file out — useful for sweeping a folder to compare hosts,
 // drives and capture dates. Alerts is offered alongside it for the same
