@@ -149,7 +149,7 @@ body.guideOpen #guideDoc{overflow:visible;padding:0}
   <span style='display:flex;align-items:center;gap:8px'>
   <span id='scanElapsed' title='Time elapsed since the current scan started (resets on each Scan click)' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
   <span id='lifetimeStats' title='How many times a template has been displayed while stepping/playing through results, across all Scan clicks this session' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
-  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260907c</span>
+  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260907d</span>
   </span>
 </div>
 <input id='local'type='file'style='display:none'onchange='OpFl()'>
@@ -4972,7 +4972,8 @@ v.style.background=noVal?'#f0f2f5':''
 v.placeholder=noVal?'not used':'value'
 v.title=noVal?'This comparison only checks whether the field exists, so no value is needed':''}
 
-SrchSet=(i,k,v)=>{if(Srch.conds[i])Srch.conds[i][k]=v}
+// 每一次改動都直接存進 localStorage，不等 Apply：改到一半關掉頁面，下次打開仍是上次的樣子。
+SrchSet=(i,k,v)=>{if(Srch.conds[i]){Srch.conds[i][k]=v;_SrchSave()}}
 SrchAdd=()=>{Srch.conds.push({src:'H',field:'',op:'',val:'',col:'',rhs:'',rfield:'',rcol:''});SrchRender();_SrchSave()}
 SrchDel=i=>{Srch.conds.splice(i,1);if(!Srch.conds.length)Srch.conds.push({src:'H',field:'',op:'',val:'',col:'',rhs:'',rfield:'',rcol:''});SrchRender();_SrchSave()}
 
