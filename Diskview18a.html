@@ -149,7 +149,7 @@ body.guideOpen #guideDoc{overflow:visible;padding:0}
   <span style='display:flex;align-items:center;gap:8px'>
   <span id='scanElapsed' title='Time elapsed since the current scan started (resets on each Scan click)' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
   <span id='lifetimeStats' title='How many times a template has been displayed while stepping/playing through results, across all Scan clicks this session' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
-  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260907d</span>
+  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260907e</span>
   </span>
 </div>
 <input id='local'type='file'style='display:none'onchange='OpFl()'>
@@ -1387,7 +1387,7 @@ HdrView=false
 AlertView=false
 AlertFrom=-1   // 從告警頁跳去某個 template 時記住，讓「返回」有地方回
 
-// ── 告警規則（來自平台端 docs/threshold_alert_rules.md，128 種告警，平台 V3.03）──
+// ── 告警規則（來自平台端 docs/threshold_alert_rules.md，128 種告警，平台 V3.05）──
 // key 與 name 與平台端 threshold_alerts 表的 rule_key / threshold_alert_name 完全一致，
 // 兩邊對照時可以直接拿名稱互查（例如 `smart_5_2_5 N<=T (pre-fail)`）。
 // 單一擷取檔就能判定的：Value、T16、SMART N<=T。
@@ -1401,16 +1401,18 @@ AlertRules=[
 // Value
 {key:'t202.1',tmpl:202,intf:'',row:/Drive Not Ready/i,op:'gt',val:0,name:'drive_not_ready_failure_202_1 Value'},
 {key:'t202.2',tmpl:202,intf:'',row:/Write Operation Failure/i,op:'gt',val:0,name:'drive_write_operation_failure_202_2 Value'},
-{key:'t202.3',tmpl:202,intf:'',row:/Read Operation Failure/i,op:'gt',val:0,name:'drive_read_operation_failure_202_3 Value'},
+{key:'t202.3',tmpl:202,intf:'',row:/Read.*Operation Failure/i,op:'gt',val:0,name:'drive_read_operation_failure_202_3 Value'},
 {key:'t202.4',tmpl:202,intf:'',row:/Identify Failure/i,op:'gt',val:0,name:'identify_failure_202_4 Value'},
 {key:'t10.1',tmpl:10,intf:'SATA',row:/Percentage Used/i,op:'gt',val:99,name:'percentage_used_10_1 Value'},
 {key:'t310.1',tmpl:310,intf:'SCSI',row:/Percentage Used/i,op:'gt',val:99,name:'percentage_used_endurance_indicator_310_1 Value'},
 {key:'t103.5',tmpl:103,intf:'NVME',row:/^Percentage Used/i,op:'gt',val:99,name:'percentage_used_103_5 Value'},
 {key:'t103.3',tmpl:103,intf:'NVME',row:/^Available Spare\s*\(%\)/i,op:'lt',ref:/Available Spare Threshold/i,name:'available_spare_103_3 Value'},
-{key:'t306.1',tmpl:306,intf:'SCSI',row:/^Current temperature/i,op:'gt',ref:/Reference temperature.*max/i,name:'temperature_306_1 Value'},
+// 平台 V3.05：額定最高溫度要在 35..100 °C 才是真正的額定值（未支援的項目讀成 0 不是額定值，
+// 33 °C > 0 °C 曾讓上萬顆正常溫度的碟誤發告警）。refMin／refMax 在 _AlEvalRow 套用。
+{key:'t306.1',tmpl:306,intf:'SCSI',row:/Current temperature/i,op:'gt',ref:/Reference temperature.*max/i,refMin:35,refMax:100,name:'temperature_306_1 Value'},
 // 平台 V2.98：SATA 溫度改成 T8 目前溫度對額定最高工作溫度（與 SCSI 的 t306.1 同一個測試），
 // 取代原本的 SMART 190／194 N<=T。
-{key:'t8.1',tmpl:8,intf:'SATA',row:/^Current Temperature/i,op:'gt',ref:/^Specified Maximum Operating Temperature/i,name:'temperature_8_1 Value'},
+{key:'t8.1',tmpl:8,intf:'SATA',row:/^Current Temperature/i,op:'gt',ref:/^Specified Maximum Operating Temperature/i,refMin:35,refMax:100,name:'temperature_8_1 Value'},
 // alert_value 帶原始碼：2 = Degraded、3 = Read Only（Read Only 陣列已拒絕寫入，比 Degraded 更急）
 {key:'t203.4',tmpl:203,intf:'',row:/RAID Status/i,op:'in',vals:['Degraded','Read Only'],codes:{'Degraded':2,'Read Only':3},name:'raid_status_203_4 Value'},
 // T103 Critical Warning 位元（byte 0 of SMART/Health）
@@ -1426,23 +1428,26 @@ AlertRules=[
 {key:'t16.2',tmpl:16,intf:'SATA',row:/Uncorrectable Error/i,op:'gt',val:0,name:'uncorrectable_error_count_16_2 Value>0'},
 {key:'t16.3',tmpl:16,intf:'SATA',row:/ID Not Found/i,op:'gt',val:0,name:'id_not_found_count_16_3 Value>0'},
 {key:'t16.5',tmpl:16,intf:'SATA',row:/Address Mark Not Found/i,op:'gt',val:0,name:'address_mark_not_found_16_5 Value>0'},
-{key:'t16.7',tmpl:16,intf:'SATA',row:/^CRC Error Count/i,op:'gt',val:0,name:'crc_error_count_16_7 Value>0'},
+{key:'t16.7',tmpl:16,intf:'SATA',row:/SATA CRC Error/i,op:'gt',val:0,name:'crc_error_count_16_7 Value>0'},
 // Delta（只在比較模式；File 1 視為「之前」、File 2 視為「現在」）
 // Device Statistics 的項目要 Supported＋Valid 旗標都設才算數（V2.43），
 // 否則畫面顯示 (not supported)／(not valid)，取不到數字，自然不會發告警。
-{key:'t3.1',tmpl:3,intf:'SATA',delta:1,row:/^Error Count|Device Error Count/i,name:'device_error_count_3_1 Delta>0'},
+// t3.1：裝置錯誤計數不在畫面的表裡（T3 只列每筆錯誤），照平台直接讀原始位元組：T3 偏移 500、
+// T12／T11 偏移 452 的 u16 LE，優先序 T3 > T12 > T11（見 _AlDevErrCount）。
+{key:'t3.1',tmpl:3,intf:'SATA',delta:1,raw:'t3',row:/./,name:'device_error_count_3_1 Delta>0'},
 {key:'t7.1',tmpl:7,intf:'SATA',delta:1,row:/Reported Uncorrectable/i,name:'number_of_reported_uncorrectable_errors_7_1 Delta>0'},
 {key:'t7.2',tmpl:7,intf:'SATA',delta:1,row:/Resets Between Command/i,name:'number_of_resets_between_command_acceptance_and_command_completion_7_2 Delta>0'},
 {key:'t7.3',tmpl:7,intf:'SATA',delta:1,row:/Physical Element Status Changed/i,name:'physical_element_status_changed_7_3 Delta>0'},
 {key:'t9.3',tmpl:9,intf:'SATA',delta:1,row:/Interface CRC/i,name:'interface_crc_errors_9_3 Delta>0'},
 {key:'t5.1',tmpl:5,intf:'SATA',delta:1,row:/Free-?Fall Events/i,name:'number_of_free_fall_events_detected_5_1 Delta>0'},
-{key:'t6.4',tmpl:6,intf:'SATA',delta:1,row:/Reallocated Logical Sectors/i,name:'reallocated_logical_sectors_6_4 Delta>0'},
+{key:'t6.4',tmpl:6,intf:'SATA',delta:1,row:/Realloca(?:ted|tion) Logical Sectors/i,name:'reallocated_logical_sectors_6_4 Delta>0'},
 {key:'t6.6',tmpl:6,intf:'SATA',delta:1,row:/Mechanical Start Failures/i,name:'number_of_mechanical_failures_6_6 Delta>0'},
 {key:'t6.7',tmpl:6,intf:'SATA',delta:1,row:/Reallocation Candidate/i,name:'number_of_reallocation_candidate_logical_sectors_6_7 Delta>0'},
 {key:'t103.14',tmpl:103,intf:'NVME',delta:1,row:/Media and Data Integrity Errors/i,name:'media_and_data_integrity_errors_103_14 Delta>0'},
 {key:'t103.16',tmpl:103,intf:'NVME',delta:1,row:/Warning Composite Temperature Time/i,name:'warning_composite_temperature_time_103_16 Delta>0'},
 {key:'t103.17',tmpl:103,intf:'NVME',delta:1,row:/Critical Composite Temperature Time/i,name:'critical_composite_temperature_time_103_17 Delta>0'},
-{key:'t104.1',tmpl:104,intf:'NVME',delta:1,row:/Error Log Entries|Number of Error Information Log Entries/i,name:'nvme_error_log_entries_104_1 Delta>0'},
+// t104.1：T104 目前持有的錯誤項目數（平台 template_nvme_error_log.py：從頭連續、Error Count 非零的 64 位元組項目），讀原始位元組（_AlT104Count）
+{key:'t104.1',tmpl:104,intf:'NVME',delta:1,raw:'t104',row:/./,name:'nvme_error_log_entries_104_1 Delta>0'},
 {key:'t301.7',tmpl:301,intf:'SCSI',delta:1,row:/Total uncorrected errors/i,name:'total_write_uncorrected_errors_301_7 Delta>0'},
 {key:'t302.7',tmpl:302,intf:'SCSI',delta:1,row:/Total uncorrected errors/i,name:'total_read_uncorrected_errors_302_7 Delta>0'},
 {key:'t303.7',tmpl:303,intf:'SCSI',delta:1,row:/Total uncorrected errors/i,name:'total_verify_uncorrected_errors_303_7 Delta>0'},
@@ -1475,40 +1480,17 @@ _AlIntf=()=>{let m=(SAll||'').split('h\n')[0].match(/^Interface:\s*(.*)$/im);ret
 _AlHas=t=>{if(!ArIx)return false;for(let i=0;i<ArIx.length;i+=2)if(ArIx[i]===t)return true;return false}
 _AlIdx=t=>{if(!ArIx)return -1;for(let i=0;i<ArIx.length;i+=2)if(ArIx[i]===t)return i/2;return -1}
 
-// 在目前渲染的表上評估一條規則。回傳 {hit, value, ref} 或 null（列不存在）。
-_AlEval=r=>{
-let R=_SrchFindRow(r.row)
-if(!R)return null
-let val=_SrchRowVal(R,'')
-if(r.op==='in'){
-let txt=R.cells.join(' ')
-let hit=r.vals.some(v=>txt.indexOf(v)>=0)
-return {hit,value:R.cells.slice(1).join(' ').slice(0,60)}
-}
-if(r.op==='bit'){
-let raw=R.cells.find(t=>/^[0-9A-Fa-f]{2,}$/.test(t))||''
-let n=parseInt(raw,16)
-return {hit:isFinite(n)&&((n>>r.bit)&1)===1,value:raw}
-}
-if(val==null)return null
-if(r.ref){
-let Rr=_SrchFindRow(r.ref)
-if(!Rr)return null
-let rv=_SrchRowVal(Rr,'')
-if(rv==null)return null
-return {hit:_SrchCmp(val,r.op,rv),value:val,ref:rv}
-}
-return {hit:_SrchCmp(val,r.op,String(r.val)),value:val}}
 // _SrchFindRow 接受字串；讓它也吃正則
 _SrchFindRowRx=rx=>{
 for(let tr of Q('#rTab tr')){
 let cl=tr.cells
 if(!cl||cl.length<2||tr.querySelector('th'))continue
 let cells=Array.from(cl).map(x=>x.textContent.trim())
-if(!cells.some(t=>rx.test(t)))continue
+let mi=cells.findIndex(t=>rx.test(t))
+if(mi<0)continue
 let isRaw=t=>/^[0-9A-Fa-f]{16}$/.test(String(t).trim())&&parseInt(String(t).trim().slice(0,2),16)>=0x80
 let ord=cells.map((t,k)=>{if(!isRaw(t))return t;let nxt=cells[k+1];return (nxt!=null&&_SrchNum(nxt)!=null)?nxt:t})
-return {cells,ord,tr}
+return {cells,ord,tr,mi}
 }
 return null}
 
@@ -1707,7 +1689,15 @@ let wrapNew=cur.filter(e=>ts(e)<0x1000&&prev.indexOf(e)<0)
 return cur.filter(e=>(ts(e)>prevMax||(prevMax>=0xF000&&wrapNew.indexOf(e)>=0))&&st(e)>=3&&st(e)<=8)}
 _AlSt=e=>Number(e.split(':')[1])
 
-// 清單類與 GList 規則（只在比較模式）。File 1 = 之前、File 2 = 現在。
+// T3／T12／T11 的裝置錯誤計數（平台 template_sata_extended_error_log.py 偏移 500、
+// template_sata_summary_comprehensive_error_log.py 偏移 452，都是 u16 LE）
+_AlT3ErrCount=()=>{let t=ArIx[Tx*2],off=t===3?500:452,lim=_AlRecEnd();if(F+off+2>lim)return null;return (A[F+off]*1)|((A[F+off+1]*1)<<8)}
+// 兩個檔案各自依平台優先序 T3 > T12 > T11 取第一個有的
+_AlDevErrCount=probe=>{for(const t of [3,12,11]){let v=probe(t,_AlT3ErrCount);if(v!=null)return {t,v}}return null}
+// T104 目前持有的錯誤項目數：64 位元組一筆、最多 256 筆，Error Count（前 8 位元組）非零才算，遇到零就停
+_AlT104Count=()=>{let lim=_AlRecEnd(),n=0;if(F+64>lim)return null;for(let i=0;i<256;i++){let s=F+i*64;if(s+64>lim)break;let nz=false;for(let k=0;k<8;k++)if(A[s+k]*1){nz=true;break}if(!nz)break;n++}return n}
+
+// 清單類、GList 與原始位元組 Delta 規則（只在比較模式）。File 1 = 之前、File 2 = 現在。
 _AlListAlerts=()=>{
 let out=[]
 if(!A2||!ArIx2)return out
@@ -1727,12 +1717,22 @@ let n=hits.length,what=r.kind==='set'?'new background-scan result entr'+(n===1?'
 out.push({key:r.key,tmpl:r.tmpl,name:r.name,value:n,ref:null,desc:n+' '+what+' since File 1: '+hits.slice(0,4).join(', ')+(n>4?', …':'')})
 })
 AlertRules.forEach(r=>{
-if(!r.glist)return
+if(!r.glist&&!r.raw)return
 if(r.intf&&r.intf!==intf)return
+let c1=null,c2=null,tmpl=r.tmpl,what=''
+if(r.glist){
 if(!_AlHas(r.tmpl))return
-let c1=_AlProbeF1(r.tmpl,_AlGlistCount),c2=_AlProbeF2(r.tmpl,_AlGlistCount)
+c1=_AlProbeF1(r.tmpl,_AlGlistCount);c2=_AlProbeF2(r.tmpl,_AlGlistCount);what='GList declared defects'
+}else if(r.raw==='t3'){
+let p1=_AlDevErrCount(_AlProbeF1),p2=_AlDevErrCount(_AlProbeF2)
+if(!p1||!p2)return
+c1=p1.v;c2=p2.v;tmpl=p1.t;what='Device error count (T'+p1.t+')'
+}else if(r.raw==='t104'){
+if(!_AlHas(r.tmpl))return
+c1=_AlProbeF1(r.tmpl,_AlT104Count);c2=_AlProbeF2(r.tmpl,_AlT104Count);what='Error log entries held'
+}
 if(c1==null||c2==null)return
-if(c2-c1>0)out.push({key:r.key,tmpl:r.tmpl,name:r.name,value:c2,ref:c1,desc:'GList declared defects +'+(c2-c1)+' ('+c1+' → '+c2+')'})
+if(c2-c1>0)out.push({key:r.key,tmpl:tmpl,name:r.name,value:c2,ref:c1,desc:what+' +'+(c2-c1)+' ('+c1+' → '+c2+')'})
 })
 return out}
 
@@ -1794,7 +1794,7 @@ list=list.concat(_AlSmart())
 // Delta：比較模式下 File 1 是之前、File 2 是現在
 if(A2&&ArIx2){
 let byT2={}
-AlertRules.forEach(r=>{if(!r.delta||r.glist)return;if(r.intf&&r.intf!==intf)return;if(!_AlHas(r.tmpl))return;(byT2[r.tmpl]=byT2[r.tmpl]||[]).push(r)})
+AlertRules.forEach(r=>{if(!r.delta||r.glist||r.raw)return;if(r.intf&&r.intf!==intf)return;if(!_AlHas(r.tmpl))return;(byT2[r.tmpl]=byT2[r.tmpl]||[]).push(r)})
 for(let t of Object.keys(byT2)){
 Tx=_AlIdx(Number(t));DpFl();if(A2)CmpRenderTable()
 byT2[t].forEach(r=>{
@@ -1822,9 +1822,16 @@ return list}
 _AlEvalRow=(r,R)=>{
 let val=_SrchRowVal(R,'')
 if(r.op==='in'){let txt=R.cells.join(' '),v=r.vals.find(v=>txt.indexOf(v)>=0);return {hit:v!=null,value:v!=null?((r.codes&&r.codes[v]!=null)?r.codes[v]+' ('+v+')':v):R.cells.slice(1).join(' ').slice(0,60)}}
-if(r.op==='bit'){let raw=R.cells.find(t=>/^[0-9A-Fa-f]{2,}$/.test(t))||'';let n=parseInt(raw,16);return {hit:isFinite(n)&&((n>>r.bit)&1)===1,value:raw}}
+if(r.op==='bit'){
+// 標籤之後、跳過索引格的第一個十六進位格（T103 的 Critical Warning 顯示成「00 (no warnings…)」，
+// 以前只認整格純十六進位，抓到的是索引 0000，位元永遠是 0）
+let raw='';for(let k=(R.mi!=null?R.mi+1:0);k<R.cells.length;k++){if(_SrchIsIdx(R.cells[k]))continue;let m=R.cells[k].match(/^([0-9A-Fa-f]{2,})/);if(m){raw=m[1];break}}
+let n=parseInt(raw,16);return {hit:isFinite(n)&&((n>>r.bit)&1)===1,value:raw}}
 if(val==null)return null
-if(r.ref){let Rr=_SrchFindRowRx(r.ref);if(!Rr)return null;let rv=_SrchRowVal(Rr,'');if(rv==null)return null;return {hit:_SrchCmp(val,r.op,rv),value:val,ref:rv}}
+if(r.ref){let Rr=_SrchFindRowRx(r.ref);if(!Rr)return null;let rv=_SrchRowVal(Rr,'');if(rv==null)return null
+// 參考值要落在規則給的窗內才算數（V3.05 的溫度額定值閘門）；窗外視為沒有參考值
+let rn=_SrchNum(rv);if((r.refMin!=null&&(rn==null||rn<r.refMin))||(r.refMax!=null&&(rn==null||rn>r.refMax)))return null
+return {hit:_SrchCmp(val,r.op,rv),value:val,ref:rv}}
 return {hit:_SrchCmp(val,r.op,String(r.val)),value:val}}
 
 // 目前顯示的 template 上，把觸發告警的列標起來。只評估這個 template 的規則，
@@ -1850,7 +1857,7 @@ if(ev&&ev.hit)R.tr.classList.add('alertHit')})}
 DpAlerts=()=>{
 BuildTitle()
 W(G('tmpl'),'Alerts');W(G('tmplName'),'Alerts')
-W(G('err'),"<div style='font-size:11px;color:#777;background:#fafafa;border:1px solid #e0e0e0;border-radius:3px;padding:3px 8px;margin-bottom:2px'>Threshold alert rules from the DA Analytics Platform rulebook (128 alert kinds, platform V3.03; rule keys and alert names are the platform's rule_key / threshold_alert_name). Value / T16 / SMART N&le;T are judged on this capture. Delta, SMART raw Delta, self-test (T15 / T105 / T309), background-scan result (T311) and GList (T332) rules need a previous capture and are evaluated only in Compare mode (File 1 = previous, File 2 = current). The platform's monotonicity gate needs the drive's whole capture history and is not applied here. Double-click a row to open its template.</div>")
+W(G('err'),"<div style='font-size:11px;color:#777;background:#fafafa;border:1px solid #e0e0e0;border-radius:3px;padding:3px 8px;margin-bottom:2px'>Threshold alert rules from the DA Analytics Platform rulebook (128 alert kinds, platform V3.05; rule keys and alert names are the platform's rule_key / threshold_alert_name). Value / T16 / SMART N&le;T are judged on this capture. Delta, SMART raw Delta, self-test (T15 / T105 / T309), background-scan result (T311) and GList (T332) rules need a previous capture and are evaluated only in Compare mode (File 1 = previous, File 2 = current). The platform's monotonicity gate needs the drive's whole capture history and is not applied here. Double-click a row to open its template.</div>")
 Fx=0;F=0;T=0;ArRange=[];Gp=0
 SetTH(1,0,0)
 Q('#lTab td.adr').forEach(e=>W(e,''))
@@ -4284,27 +4291,35 @@ if(!cl||cl.length<2)continue
 if(tr.querySelector('th'))continue
 let cells=Array.from(cl).map(x=>x.textContent.trim())
 // 列標籤不一定在第一欄：SMART 屬性表把名稱放在最後的 Description。
-if(!cells.some(t=>t.toLowerCase().includes(want)))continue
+let mi=cells.findIndex(t=>t.toLowerCase().includes(want))
+if(mi<0)continue
 let isRaw=t=>/^[0-9A-Fa-f]{16}$/.test(String(t).trim())&&parseInt(String(t).trim().slice(0,2),16)>=0x80
 let ord=cells.map((t,k)=>{
 if(!isRaw(t))return t
 let nxt=cells[k+1]
 return (nxt!=null&&_SrchNum(nxt)!=null)?nxt:t})
-return {cells,ord}
+return {cells,ord,mi}
 }
 return null}
 
-// 取出一列裡可用來比較的數值文字。指定欄位就用那一欄，否則取第一個
-// 「不是索引偏移量、且解得出數字」的格子。
+// 取出一列裡可用來比較的數值文字。指定欄位就用那一欄，否則取符合標籤的那一格
+// 「之後」第一個「不是索引偏移量、且解得出數字」的格子。
+// 以前從第 0 格開始找：T8 的標籤「Current Temperature=>T2.194 231」被解成 2.194、
+// T306 的第 0 格是 Item 編號，取到的是 1，兩條溫度告警因此從未真正比對過。
+// 標籤之後沒有數字（T2 的標籤在最後一欄）才退回整列掃描，維持原本的行為。
 _SrchRowVal=(R,col)=>{
 if(!R)return null
 if(col!==''&&col!=null&&isFinite(Number(col))){
 let v=R.ord[Number(col)]
 return v==null?null:v
 }
-for(let k=0;k<R.ord.length;k++){
+let from=(R.mi!=null&&R.mi>=0)?R.mi+1:0
+for(let pass=0;pass<2;pass++){
+for(let k=(pass?0:from);k<R.ord.length;k++){
 if(_SrchIsIdx(R.cells[k]))continue
 if(_SrchNum(R.ord[k])!=null)return R.ord[k]
+}
+if(!from)break
 }
 return null}
 
