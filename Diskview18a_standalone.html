@@ -144,7 +144,7 @@ body.guideOpen #guideDoc{overflow:visible;padding:0}
   <span style='display:flex;align-items:center;gap:8px'>
   <span id='scanElapsed' title='Time elapsed since the current scan started (resets on each Scan click)' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
   <span id='lifetimeStats' title='How many times a template has been displayed while stepping/playing through results, across all Scan clicks this session' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
-  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260906f</span>
+  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260907a</span>
   </span>
 </div>
 <input id='local'type='file'style='display:none'onchange='OpFl()'>
@@ -1360,9 +1360,13 @@ let arS2=SAll2.split("h\n")
 A2=(arS2.length==2&&_LastDataStart>=0)?_LastRawBytes.subarray(_LastDataStart):[]
 let ix=arS2[0].indexOf("Size:"),ix1=arS2[0].indexOf("\n",ix)
 From2=arS2[0].substr(ix+6,ix1-ix-6)-0
-ArIx2=Array()
+ArIx2=Array();ArOff2=Array()
 let s=arS2[0].toLowerCase()
 while(s.indexOf("length:",ix)>0){
+// File 2 也照 File 1 的方式讀目錄裡宣告的絕對起點（V2.27）；以前 File 2 沒有自己的偏移表，
+// 借 File 2 渲染時用的是 File 1 的，兩個檔案的記錄配置不同就會讀錯位置。
+let bix=s.lastIndexOf("byte index:",s.indexOf("length:",ix))
+let boff=(bix>=0)?(s.substr(bix+11,s.indexOf("\n",bix)-bix-11)-0):NaN
 ix=s.indexOf("length:",ix)
 ix1=s.indexOf("\n",ix)
 let len=s.substr(ix+8,ix1-ix-8)-0
@@ -1371,6 +1375,7 @@ if(ix<0)break  // malformed/truncated header — stop rather than loop forever
 ix1=s.indexOf("\n",ix)
 ArIx2.push(s.substr(ix+10,ix1-ix-10)-0)
 ArIx2.push(len)
+ArOff2.push(isFinite(boff)?boff:-1)
 }
 Hdr2=arS2[0]
 BuildCmpSummary()
@@ -1384,7 +1389,7 @@ else if(Tx*2>=ArIx2.length){}
 else CmpRenderTable()}
 
 ClearCmp=()=>{
-A2=null;ArIx2=null;SAll2=null;CurFile2=null;Hdr2=null
+A2=null;ArIx2=null;ArOff2=null;SAll2=null;CurFile2=null;Hdr2=null
 W(G('cmpSummary'),'')
 G('local2').value=''
 if(G('cmpBtn'))W(G('cmpBtn'),'Compare')
@@ -1423,6 +1428,14 @@ return
 G('local2').click()
 }
 
+// Extracts the drive's actual Model number/Product field from its own
+// Identify/Controller-Info template (T1 SATA, T101 NVMe, T334 SCSI SATA)
+// instead of the capture header's Model Number field, which is the
+// host/NAS system that ran the capture, not the drive being analyzed.
+// Reuses the existing, already-validated render pipeline (the same
+// save/swap/render/extract/restore pattern CmpRenderTable already uses to
+// borrow File 2's render) rather than re-implementing the byte-level
+// decode for three different interface types.
 GetDriveModel=(localA,localArIx,localFrom)=>{
 if(!localArIx||!localArIx.length)return null
 let candidates=[[1,'Model number'],[101,'Model number'],[334,'Product']]
@@ -1776,55 +1789,88 @@ HdrView=false
 AlertView=false
 AlertFrom=-1   // 從告警頁跳去某個 template 時記住，讓「返回」有地方回
 
-// ── 告警規則（來自平台端 docs/threshold_alert_rules.md，121 條 Alert=Y）───
-// 這裡只放「單一擷取檔就能判定」的規則：Value、T16、SMART N<=T，共 99 條。
-// Delta 與 Self-test 類要有前一筆擷取才能算，只在比較模式下評估（見 Delta 段）。
+// ── 告警規則（來自平台端 docs/threshold_alert_rules.md，128 種告警，平台 V3.03）──
+// key 與 name 與平台端 threshold_alerts 表的 rule_key / threshold_alert_name 完全一致，
+// 兩邊對照時可以直接拿名稱互查（例如 `smart_5_2_5 N<=T (pre-fail)`）。
+// 單一擷取檔就能判定的：Value、T16、SMART N<=T。
+// 要有前一筆擷取才能算的：Delta、SMART raw Delta、Self-test、Background scan、
+// GList，只在比較模式下評估（File 1 = 之前、File 2 = 現在）。
+// 平台的單調性閘門（某顆硬碟的累計計數器曾經下降過，就不再對它發 Delta 告警）
+// 需要整段擷取歷史，兩個檔案看不出來，這裡不套用。
 // 每條規則以 template 編號＋列標籤正則定位，直接讀渲染後的表，與搜尋共用
 // 同一套取值邏輯（旗標遮罩、解讀值優先、負值正確）。
 AlertRules=[
 // Value
-{key:'t202.1',tmpl:202,intf:'',row:/Drive Not Ready/i,op:'gt',val:0,name:'drive_not_ready_failure'},
-{key:'t202.2',tmpl:202,intf:'',row:/Write Operation Failure/i,op:'gt',val:0,name:'drive_write_operation_failure'},
-{key:'t202.3',tmpl:202,intf:'',row:/Read Operation Failure/i,op:'gt',val:0,name:'drive_read_operation_failure'},
-{key:'t202.4',tmpl:202,intf:'',row:/Identify Failure/i,op:'gt',val:0,name:'identify_failure'},
-{key:'t10.1',tmpl:10,intf:'SATA',row:/Percentage Used/i,op:'gt',val:99,name:'percentage_used'},
-{key:'t310.1',tmpl:310,intf:'SCSI',row:/Percentage Used/i,op:'gt',val:99,name:'percentage_used'},
-{key:'t103.5',tmpl:103,intf:'NVME',row:/^Percentage Used/i,op:'gt',val:99,name:'percentage_used'},
-{key:'t103.3',tmpl:103,intf:'NVME',row:/^Available Spare\s*\(%\)/i,op:'lt',ref:/Available Spare Threshold/i,name:'available_spare < threshold'},
-{key:'t306.1',tmpl:306,intf:'SCSI',row:/^Current temperature/i,op:'gt',ref:/Reference temperature.*max/i,name:'current_temperature_c > spec_max'},
-{key:'t203.4',tmpl:203,intf:'',row:/RAID Status/i,op:'in',vals:['Degraded','Read Only'],name:'raid_status'},
+{key:'t202.1',tmpl:202,intf:'',row:/Drive Not Ready/i,op:'gt',val:0,name:'drive_not_ready_failure_202_1 Value'},
+{key:'t202.2',tmpl:202,intf:'',row:/Write Operation Failure/i,op:'gt',val:0,name:'drive_write_operation_failure_202_2 Value'},
+{key:'t202.3',tmpl:202,intf:'',row:/Read Operation Failure/i,op:'gt',val:0,name:'drive_read_operation_failure_202_3 Value'},
+{key:'t202.4',tmpl:202,intf:'',row:/Identify Failure/i,op:'gt',val:0,name:'identify_failure_202_4 Value'},
+{key:'t10.1',tmpl:10,intf:'SATA',row:/Percentage Used/i,op:'gt',val:99,name:'percentage_used_10_1 Value'},
+{key:'t310.1',tmpl:310,intf:'SCSI',row:/Percentage Used/i,op:'gt',val:99,name:'percentage_used_endurance_indicator_310_1 Value'},
+{key:'t103.5',tmpl:103,intf:'NVME',row:/^Percentage Used/i,op:'gt',val:99,name:'percentage_used_103_5 Value'},
+{key:'t103.3',tmpl:103,intf:'NVME',row:/^Available Spare\s*\(%\)/i,op:'lt',ref:/Available Spare Threshold/i,name:'available_spare_103_3 Value'},
+{key:'t306.1',tmpl:306,intf:'SCSI',row:/^Current temperature/i,op:'gt',ref:/Reference temperature.*max/i,name:'temperature_306_1 Value'},
+// 平台 V2.98：SATA 溫度改成 T8 目前溫度對額定最高工作溫度（與 SCSI 的 t306.1 同一個測試），
+// 取代原本的 SMART 190／194 N<=T。
+{key:'t8.1',tmpl:8,intf:'SATA',row:/^Current Temperature/i,op:'gt',ref:/^Specified Maximum Operating Temperature/i,name:'temperature_8_1 Value'},
+// alert_value 帶原始碼：2 = Degraded、3 = Read Only（Read Only 陣列已拒絕寫入，比 Degraded 更急）
+{key:'t203.4',tmpl:203,intf:'',row:/RAID Status/i,op:'in',vals:['Degraded','Read Only'],codes:{'Degraded':2,'Read Only':3},name:'raid_status_203_4 Value'},
 // T103 Critical Warning 位元（byte 0 of SMART/Health）
-{key:'t103.1.1',tmpl:103,intf:'NVME',row:/^Critical Warning$/i,op:'bit',bit:0,name:'cw_spare_below_threshold'},
-{key:'t103.1.2',tmpl:103,intf:'NVME',row:/^Critical Warning$/i,op:'bit',bit:1,name:'cw_temperature_out_of_range'},
-{key:'t103.1.3',tmpl:103,intf:'NVME',row:/^Critical Warning$/i,op:'bit',bit:2,name:'cw_reliability_degraded'},
-{key:'t103.1.4',tmpl:103,intf:'NVME',row:/^Critical Warning$/i,op:'bit',bit:3,name:'cw_read_only_mode'},
-{key:'t103.1.5',tmpl:103,intf:'NVME',row:/^Critical Warning$/i,op:'bit',bit:4,name:'cw_volatile_backup_failed'},
-{key:'t103.1.6',tmpl:103,intf:'NVME',row:/^Critical Warning$/i,op:'bit',bit:5,name:'cw_persistent_memory_unreliable'},
-// T16 SATA interface statistics（attr N > 0）
-{key:'t16.1',tmpl:16,intf:'SATA',row:/Interface CRC Error/i,op:'gt',val:0,name:'interface_crc_error_count'},
-{key:'t16.2',tmpl:16,intf:'SATA',row:/Uncorrectable Error/i,op:'gt',val:0,name:'uncorrectable_error_count'},
-{key:'t16.3',tmpl:16,intf:'SATA',row:/ID Not Found/i,op:'gt',val:0,name:'id_not_found_count'},
-{key:'t16.5',tmpl:16,intf:'SATA',row:/Address Mark Not Found/i,op:'gt',val:0,name:'address_mark_not_found'},
-{key:'t16.7',tmpl:16,intf:'SATA',row:/^CRC Error Count/i,op:'gt',val:0,name:'crc_error_count'},
+{key:'t103.1.1',tmpl:103,intf:'NVME',row:/^Critical Warning$/i,op:'bit',bit:0,name:'critical_warning_spare_capacity_below_threshold_103_5_1_0 Value'},
+{key:'t103.1.2',tmpl:103,intf:'NVME',row:/^Critical Warning$/i,op:'bit',bit:1,name:'critical_warning_temperature_above_or_below_threshold_103_5_1_1 Value'},
+{key:'t103.1.3',tmpl:103,intf:'NVME',row:/^Critical Warning$/i,op:'bit',bit:2,name:'critical_warning_reliability_degraded_103_5_1_2 Value'},
+{key:'t103.1.4',tmpl:103,intf:'NVME',row:/^Critical Warning$/i,op:'bit',bit:3,name:'critical_warning_read_only_mode_103_5_1_3 Value'},
+{key:'t103.1.5',tmpl:103,intf:'NVME',row:/^Critical Warning$/i,op:'bit',bit:4,name:'critical_warning_volatile_memory_backup_device_failed_103_5_1_4 Value'},
+// 平台端的名稱就是這個拼法（peristent），照抄才對得起來
+{key:'t103.1.6',tmpl:103,intf:'NVME',row:/^Critical Warning$/i,op:'bit',bit:5,name:'critical_peristent_memory_read_only_or_unreliable_103 Value'},
+// T16 SATA interface statistics（attr N > 0，看當天的計數，不比差值）
+{key:'t16.1',tmpl:16,intf:'SATA',row:/Interface CRC Error/i,op:'gt',val:0,name:'interface_crc_error_count_16_1 Value>0'},
+{key:'t16.2',tmpl:16,intf:'SATA',row:/Uncorrectable Error/i,op:'gt',val:0,name:'uncorrectable_error_count_16_2 Value>0'},
+{key:'t16.3',tmpl:16,intf:'SATA',row:/ID Not Found/i,op:'gt',val:0,name:'id_not_found_count_16_3 Value>0'},
+{key:'t16.5',tmpl:16,intf:'SATA',row:/Address Mark Not Found/i,op:'gt',val:0,name:'address_mark_not_found_16_5 Value>0'},
+{key:'t16.7',tmpl:16,intf:'SATA',row:/^CRC Error Count/i,op:'gt',val:0,name:'crc_error_count_16_7 Value>0'},
 // Delta（只在比較模式；File 1 視為「之前」、File 2 視為「現在」）
-{key:'t3.1',tmpl:3,intf:'SATA',delta:1,row:/^Error Count|Device Error Count/i,name:'device_error_count'},
-{key:'t7.1',tmpl:7,intf:'SATA',delta:1,row:/Reported Uncorrectable/i,name:'uncorrectable_errors'},
-{key:'t7.2',tmpl:7,intf:'SATA',delta:1,row:/Resets Between Command/i,name:'command_resets'},
-{key:'t7.3',tmpl:7,intf:'SATA',delta:1,row:/Physical Element Status Changed/i,name:'physical_element_status_changed'},
-{key:'t9.3',tmpl:9,intf:'SATA',delta:1,row:/Interface CRC/i,name:'sata_crc_errors'},
-{key:'t5.1',tmpl:5,intf:'SATA',delta:1,row:/Free-?Fall Events/i,name:'free_fall_events'},
-{key:'t6.4',tmpl:6,intf:'SATA',delta:1,row:/Reallocated Logical Sectors/i,name:'reallocated_logical_sectors'},
-{key:'t6.6',tmpl:6,intf:'SATA',delta:1,row:/Mechanical Start Failures/i,name:'mechanical_start_failures'},
-{key:'t6.7',tmpl:6,intf:'SATA',delta:1,row:/Reallocation Candidate/i,name:'reallocation_candidate_logical_sectors'},
-{key:'t103.14',tmpl:103,intf:'NVME',delta:1,row:/Media and Data Integrity Errors/i,name:'media_errors'},
-{key:'t103.16',tmpl:103,intf:'NVME',delta:1,row:/Warning Composite Temperature Time/i,name:'warning_composite_temp_time'},
-{key:'t103.17',tmpl:103,intf:'NVME',delta:1,row:/Critical Composite Temperature Time/i,name:'critical_composite_temp_time'},
-{key:'t104.1',tmpl:104,intf:'NVME',delta:1,row:/Error Log Entries|Number of Error Information Log Entries/i,name:'nvme_error_log_entry_count'},
-{key:'t301.7',tmpl:301,intf:'SCSI',delta:1,row:/Total uncorrected errors/i,name:'uncorrectable_errors'},
-{key:'t302.7',tmpl:302,intf:'SCSI',delta:1,row:/Total uncorrected errors/i,name:'read_error_count'},
-{key:'t303.7',tmpl:303,intf:'SCSI',delta:1,row:/Total uncorrected errors/i,name:'verify_uncorrected_errors'},
-{key:'t311.3',tmpl:311,intf:'SCSI',delta:1,row:/Background Scans Performed/i,name:'background_scans_performed'},
+// Device Statistics 的項目要 Supported＋Valid 旗標都設才算數（V2.43），
+// 否則畫面顯示 (not supported)／(not valid)，取不到數字，自然不會發告警。
+{key:'t3.1',tmpl:3,intf:'SATA',delta:1,row:/^Error Count|Device Error Count/i,name:'device_error_count_3_1 Delta>0'},
+{key:'t7.1',tmpl:7,intf:'SATA',delta:1,row:/Reported Uncorrectable/i,name:'number_of_reported_uncorrectable_errors_7_1 Delta>0'},
+{key:'t7.2',tmpl:7,intf:'SATA',delta:1,row:/Resets Between Command/i,name:'number_of_resets_between_command_acceptance_and_command_completion_7_2 Delta>0'},
+{key:'t7.3',tmpl:7,intf:'SATA',delta:1,row:/Physical Element Status Changed/i,name:'physical_element_status_changed_7_3 Delta>0'},
+{key:'t9.3',tmpl:9,intf:'SATA',delta:1,row:/Interface CRC/i,name:'interface_crc_errors_9_3 Delta>0'},
+{key:'t5.1',tmpl:5,intf:'SATA',delta:1,row:/Free-?Fall Events/i,name:'number_of_free_fall_events_detected_5_1 Delta>0'},
+{key:'t6.4',tmpl:6,intf:'SATA',delta:1,row:/Reallocated Logical Sectors/i,name:'reallocated_logical_sectors_6_4 Delta>0'},
+{key:'t6.6',tmpl:6,intf:'SATA',delta:1,row:/Mechanical Start Failures/i,name:'number_of_mechanical_failures_6_6 Delta>0'},
+{key:'t6.7',tmpl:6,intf:'SATA',delta:1,row:/Reallocation Candidate/i,name:'number_of_reallocation_candidate_logical_sectors_6_7 Delta>0'},
+{key:'t103.14',tmpl:103,intf:'NVME',delta:1,row:/Media and Data Integrity Errors/i,name:'media_and_data_integrity_errors_103_14 Delta>0'},
+{key:'t103.16',tmpl:103,intf:'NVME',delta:1,row:/Warning Composite Temperature Time/i,name:'warning_composite_temperature_time_103_16 Delta>0'},
+{key:'t103.17',tmpl:103,intf:'NVME',delta:1,row:/Critical Composite Temperature Time/i,name:'critical_composite_temperature_time_103_17 Delta>0'},
+{key:'t104.1',tmpl:104,intf:'NVME',delta:1,row:/Error Log Entries|Number of Error Information Log Entries/i,name:'nvme_error_log_entries_104_1 Delta>0'},
+{key:'t301.7',tmpl:301,intf:'SCSI',delta:1,row:/Total uncorrected errors/i,name:'total_write_uncorrected_errors_301_7 Delta>0'},
+{key:'t302.7',tmpl:302,intf:'SCSI',delta:1,row:/Total uncorrected errors/i,name:'total_read_uncorrected_errors_302_7 Delta>0'},
+{key:'t303.7',tmpl:303,intf:'SCSI',delta:1,row:/Total uncorrected errors/i,name:'total_verify_uncorrected_errors_303_7 Delta>0'},
+// t311.3（背景掃描「執行次數」）已在平台 V3.00 退役：健康碟每次例行掃描都會加一。
+// 取而代之的是 t311.6：背景掃描「結果清單」多出來的項目（見 AlertListRules）。
+// t332.4.b：GList 宣告的缺陷筆數（READ DEFECT DATA 標頭的 list length ÷ 每筆長度），
+// 不是畫面上抓到的列數——擷取檔常被截斷，列數會少於宣告值。走 _AlGlistCount。
+{key:'t332.4.b',tmpl:332,intf:'SCSI',delta:1,glist:1,row:/./,name:'number_of_growing_defects_byte_based_332_4 Delta>0'},
 ]
+// 比較模式下要「對齊清單」而不是比一個數字的規則。自我測試記錄是循環／推入式的
+// FIFO，只比筆數會漏掉「舊的被擠出去、新的失敗補進來」這種筆數不變的情況。
+AlertListRules=[
+// T15：時間戳（16 位元通電小時）大於前一筆最大值的才是新項目，0xFFFF 回繞另計；狀態 3h..8h 是失敗
+{key:'t15.3',tmpl:15,intf:'SATA',kind:'t15',name:'ext_self_test_errors_since_prev_15_3 Count>0'},
+// T105／T309：最新在前的推入式 FIFO，找最小的位移 k 使目前清單去掉前 k 筆等於前一筆清單的開頭；
+// 那 k 筆是新的，其中狀態落在失敗範圍（NVMe 5..7、SCSI 3..7）的才算
+{key:'t105.3',tmpl:105,intf:'NVME',kind:'fifo',lo:5,hi:7,name:'self_test_errors_since_prev_105_3 Count>0'},
+{key:'t309.1',tmpl:309,intf:'SCSI',kind:'fifo',lo:3,hi:7,name:'self_test_errors_since_prev_309_1 Count>0'},
+// T311：結果清單（參數 0001h..0800h，每筆 pom:sensekey:asc:ascq:lba）的集合差；空清單是合法基準，沒有 T311 頁不是
+{key:'t311.6',tmpl:311,intf:'SCSI',kind:'set',name:'background_scan_new_results_311_6 Count>0'},
+]
+// SMART N<=T 只看規則表列出的屬性（平台 SMART_NLET_IDS）。1、190、194 在 V2.98 退役：
+// 1 的對數正規化在永遠不會壞的碟上也常低於門檻；190／194 是溫度，改由 t8.1 負責。
+AlSmartIds=[2,3,4,5,6,7,8,9,10,11,12,13,22,170,171,172,173,174,175,176,177,178,179,180,181,182,183,184,185,186,187,188,189,191,192,193,195,196,197,198,199,200,201,202,203,204,205,206,207,208,209,210,211,212,220,221,222,223,224,225,226,227,228,230,231,232,233,240,241,242,246,247,248,250,254]
+// SMART raw Delta>0（平台 SMART_RAW_DELTA_IDS）：這幾個屬性的原始值比前一筆增加就告警
+AlSmartRawIds=[5,10,11,183,184,187,188,197,198,199]
 
 // 檔案介面（大小寫正規化，平台端存 NVME）
 _AlIntf=()=>{let m=(SAll||'').split('h\n')[0].match(/^Interface:\s*(.*)$/im);return String((m||['',''])[1]).trim().toUpperCase()}
@@ -1892,31 +1938,204 @@ return thr}
 // 依欄名找欄位索引：T2 加了 Threshold 欄後索引會位移，不能寫死。
 _ColIdx=name=>{let h=Q('#rTab tr')[0];if(!h)return -1;return Array.from(h.querySelectorAll('th')).findIndex(x=>x.textContent.trim()===name)}
 
-// SMART N<=T：T2 的 Current 對 T13 的 Threshold（threshold>0 且 current<=threshold）
+// ── 讀取用的探針：把某個 template 渲染出來，在渲染狀態下跑 fn（可讀 A／F 原始位元組，
+// 也可讀 #rTab），回傳 fn 的結果。F1 讀 File 1；F2 仿 CmpRenderTable 的切換方式借 File 2
+// 的資料渲染，跑完把全域放回 File 1。呼叫端（ComputeAlerts）最後會把畫面整個放回原狀。
+_AlProbeF1=(t,fn)=>{let ti=_AlIdx(t);if(ti<0)return null;try{Tx=ti;DpFl();return fn()}catch(e){return null}}
+_AlProbeF2=(t,fn)=>{
+if(!A2||!ArIx2)return null
+let fi2=ArIx2.findIndex((v,i)=>i%2===0&&v===t);if(fi2<0)return null
+let saveA=A,saveArIx=ArIx,saveFrom=From,saveT=T,saveM=M,saveGp=Gp,saveF=F,saveTx=Tx
+let out=null
+try{A=A2;ArIx=ArIx2;From=From2;Tx=fi2/2;DpFl();out=fn()}catch(e){out=null}
+A=saveA;ArIx=saveArIx;From=saveFrom;T=saveT;M=saveM;Gp=saveGp;F=saveF;Tx=saveTx
+return out}
+// 目前渲染中的記錄的位元組上限（不越過記錄長度，也不越過檔尾）
+_AlRecEnd=()=>Math.min(A.length,F+(ArIx[Tx*2+1]||0))
+
+// T2 原始屬性表（平台 template_sata_smart.py 同一套讀法）：30 格 × 12 位元組，從 offset 2 起，
+// ID 0 是空格。任一格的旗標高位元組非零 → 整塊 T2 視為損壞（平台 V2.97：0.17% 的擷取檔是
+// 「ID 139／244／96、flags 0x1496」這種垃圾塊），不餵任何 SMART 規則。
+_AlT2Read=()=>{
+let out={corrupt:false,attrs:{}},lim=_AlRecEnd()
+for(let i=0;i<30;i++){
+let o=F+2+i*12
+if(o+12>lim)break
+let id=A[o]*1
+if(!id)continue
+let flags=(A[o+1]*1)|((A[o+2]*1)<<8),cur=A[o+3]*1,raw=0
+for(let k=5;k>=0;k--)raw=raw*256+(A[o+5+k]*1)
+if(flags>255)out.corrupt=true
+out.attrs[id]={flags,cur,raw}
+}
+return out}
+// 單一屬性的有效性閘門（平台 V2.97）：旗標 <= 0xFF，正規化值在 1..253（ATA：0、254、255 不是值）
+_AlT2Ok=a=>a&&a.flags<=255&&a.cur>=1&&a.cur<=253
+
+// SMART N<=T：T2 的 Current 對 T13 的 Threshold，兩者都要在 1..253（門檻 0 = 廠商沒設門檻）。
+// 名稱帶碟自己的旗標 bit 0：(pre-fail) 或 (advisory)。
 _AlSmart=()=>{
 let out=[]
-let i2=_AlIdx(2)
-if(i2<0||_AlIdx(13)<0)return out
+if(_AlIdx(2)<0||_AlIdx(13)<0)return out
 let thr=_T13Thr()
 let saveTx=Tx,saveHdr=HdrView,saveAl=AlertView
-try{
 HdrView=false;AlertView=false
-Tx=i2;DpFl()
-let iId=_ColIdx('ID'),iFl=_ColIdx('Flags (hex)'),iCur=_ColIdx('Current'),iDesc=_ColIdx('Description')
-for(let tr of Q('#rTab tr')){
-let c=tr.cells;if(!c||c.length<5||tr.querySelector('th'))continue
-let id=parseInt(c[iId].textContent.trim(),10)
-let cur=parseInt(String(c[iCur].textContent).trim(),10)
-let flags=parseInt(String(c[iFl].textContent).trim(),16)
-if(!isFinite(id)||!isFinite(cur)||thr[id]==null||thr[id]<=0)continue
-if(cur<=thr[id]){
-let pre=(flags&1)?'pre-fail':'advisory'
-out.push({key:'t2.'+id,tmpl:2,name:'smart_'+id+' N<=T ('+pre+')',value:cur,ref:thr[id],
-desc:(iDesc>=0&&c[iDesc]?c[iDesc].textContent.trim():'')+' — normalized '+cur+' <= threshold '+thr[id]})
-}
-}
-}catch(e){}
+let t2=_AlProbeF1(2,_AlT2Read)
 Tx=saveTx;HdrView=saveHdr;AlertView=saveAl
+if(!t2||t2.corrupt)return out
+Object.keys(t2.attrs).map(Number).sort((a,b)=>a-b).forEach(id=>{
+if(AlSmartIds.indexOf(id)<0)return
+let a=t2.attrs[id],t=thr[id]
+if(!_AlT2Ok(a)||t==null||t<1||t>253)return
+if(a.cur<=t){
+let pre=(a.flags&1)?'pre-fail':'advisory'
+out.push({key:'t2.'+id,tmpl:2,name:'smart_'+id+'_2_'+id+' N<=T ('+pre+')',value:a.cur,ref:t,
+desc:'SMART '+id+(Dic[id]?' '+Dic[id]:'')+' — normalized '+a.cur+' <= threshold '+t})
+}})
+return out}
+
+// SMART raw Delta>0（比較模式）：兩份 T2 都要通過同一套有效性閘門，損壞的塊既不告警
+// 也不當基準。原始值 48 位元，double 放得下。
+_AlSmartDelta=()=>{
+let out=[]
+if(!A2||!ArIx2||_AlIdx(2)<0)return out
+let prev=_AlProbeF1(2,_AlT2Read),cur=_AlProbeF2(2,_AlT2Read)
+if(!prev||!cur||prev.corrupt||cur.corrupt)return out
+AlSmartRawIds.forEach(id=>{
+let a=cur.attrs[id],b=prev.attrs[id]
+if(!_AlT2Ok(a)||!_AlT2Ok(b))return
+if(a.raw-b.raw>0)out.push({key:'t2.'+id,tmpl:2,name:'smart_'+id+'_raw_2_'+id+' Delta>0',value:a.raw,ref:b.raw,
+desc:'SMART '+id+(Dic[id]?' '+Dic[id]:'')+' raw +'+(a.raw-b.raw)+' ('+b.raw+' → '+a.raw+')'})
+})
+return out}
+
+// ── 清單類規則的讀取器。都直接讀原始位元組，與平台端的 parser 逐位元組對齊，
+// 回傳的每筆字串格式也與平台存進 drive_captures 的一樣（兩邊算出來的清單可直接比對）。
+// SCSI log page 參數走訪（平台 scsi_log_page_utils.iter_log_page_parameters）：
+// 4 位元組頁標頭（bytes 2-3 = 長度 BE），每個參數 2 位元組參數碼 + 1 控制 + 1 長度。
+_AlLogParams=()=>{
+let out=[],lim=_AlRecEnd()
+if(F+4>lim)return out
+let plen=(A[F+2]*1)*256+(A[F+3]*1),c=F+4,end=Math.min(F+4+plen,lim)
+while(c+4<=end){
+let code=(A[c]*1)*256+(A[c+1]*1),len=A[c+3]*1,v=c+4
+if(v+len>lim)break
+let val=[];for(let k=0;k<len;k++)val.push(A[v+k]*1)
+out.push([code,val]);c=v+len}
+return out}
+_AlHex2=b=>('0'+b.toString(16)).slice(-2)
+// T309（平台 template_scsi_self_test_results.py）：參數 0001h..0014h，每筆 "poh:result"，
+// result = 第 0 位元組的低 nibble，poh = bytes 2-3 BE；全零的參數是沒用到的槽，不是「通過」。
+// 依參數碼遞增 = 最新在前。回傳 null 表示這頁一個參數都沒有。
+_AlT309Entries=()=>{
+let rows=[],any=false
+_AlLogParams().forEach(([code,v])=>{
+if(code<1||code>0x14||v.length<1)return
+any=true
+if(!v.some(b=>b))return
+rows.push([code,(v.length>=4?v[2]*256+v[3]:0)+':'+(v[0]&15)])})
+if(!any)return null
+rows.sort((a,b)=>a[0]-b[0])
+return rows.map(r=>r[1])}
+// T311（平台 template_scsi_background_scan.py V3.03）：參數 0001h..0800h 是掃描結果，
+// 每筆 "pom:sensekey:asc:ascq:lba"（bytes 0-3 累計通電分鐘 BE、byte 4 低 nibble sense key、
+// byte 5 ASC、byte 6 ASCQ、bytes 12-19 LBA BE）。回傳 null 表示沒有 T311 頁（不能當基準）；
+// 空陣列是合法的空清單。
+_AlT311Entries=()=>{
+let out=[],any=false
+_AlLogParams().forEach(([code,v])=>{
+if(v.length>=4)any=true
+if(code<1||code>0x800)return
+let pom=((v[0]*16777216)+(v[1]*65536)+(v[2]*256)+v[3])
+if(v.length>=20){let lba=0n;for(let k=12;k<20;k++)lba=lba*256n+BigInt(v[k]);out.push(pom+':'+(v[4]&15)+':'+_AlHex2(v[5])+':'+_AlHex2(v[6])+':'+lba)}
+else if(v.length>=7)out.push(pom+':'+(v[4]&15)+':'+_AlHex2(v[5])+':'+_AlHex2(v[6])+':-')})
+return any?out:null}
+// T15（平台 template_sata_ext_self_test_log.py）：4 位元組標頭後每筆 26 位元組、最多 19 筆，
+// 用過的槽從頭連續排，遇到全零就停。每筆 "ts:status"：ts = bytes 2-3 LE 的通電小時，
+// status = byte 1 的高 nibble。回傳 null 表示記錄短到連一筆都放不下。
+_AlT15Entries=()=>{
+let out=[],lim=Math.min(_AlRecEnd(),F+512)
+if(F+4+26>lim)return null
+for(let i=0;i<19;i++){
+let s=F+4+i*26,e=s+26
+if(e>lim)break
+let nz=false;for(let k=s;k<e;k++)if(A[k]*1){nz=true;break}
+if(!nz)break
+out.push(((A[s+2]*1)|((A[s+3]*1)<<8))+':'+((A[s+1]*1)>>4))}
+return out}
+// T105（平台 template_nvme_self_test_log.py）：4 位元組標頭後每筆 28 位元組、20 格，最新在前。
+// 狀態 Fh 是沒用到的格（有些控制器會交錯出現，不能提早停），全零的格是填充不是通過。
+// 每筆 "poh:status"，poh = bytes 4-11 LE（u64，用 BigInt 免得掉精度）。
+_AlT105Entries=()=>{
+let out=[],lim=_AlRecEnd(),any=false
+if(F+4+28>lim)return null
+for(let i=0;i<20;i++){
+let s=F+4+i*28;if(s+28>lim)break
+any=true
+let st=(A[s]*1)&15
+if(st===15)continue
+let nz=false;for(let k=s;k<s+28;k++)if(A[k]*1){nz=true;break}
+if(!nz)continue
+let poh=0n;for(let k=11;k>=4;k--)poh=poh*256n+BigInt(A[s+k]*1)
+out.push(poh+':'+st)}
+return any?out:null}
+// T332 GList 宣告筆數（平台 template_scsi_defect_data._read_defect_count）：READ DEFECT DATA (12)
+// 標頭 byte 0 與 bytes 2-3 是保留位（必須為 0，否則這不是缺陷資料回應，回 null），
+// byte 1 低 3 位是格式（短區塊格式 4 位元組一筆，其餘 8），bytes 4-7 是清單長度 BE。
+_AlGlistCount=()=>{
+let lim=_AlRecEnd()
+if(F+8>lim)return null
+if(A[F]*1!==0||A[F+2]*1!==0||A[F+3]*1!==0)return null
+let per=({0:4,3:8,4:8,5:8})[(A[F+1]*1)&7]||8
+let len=(A[F+4]*1)*16777216+(A[F+5]*1)*65536+(A[F+6]*1)*256+(A[F+7]*1)
+return Math.floor(len/per)}
+
+// 推入式 FIFO 對齊（平台 selftest_new_entries）：最小的 k 使 cur 去掉前 k 筆等於 prev 的開頭；
+// 前 k 筆就是這段期間新做的測試。prev 完全找不到 → 整份 cur 都是新的。任一邊為空 → 沒有新項目
+// （空記錄不當基準也不當結果：T15 的實測是同一顆碟一天內在 19 筆與 0 筆之間跳動）。
+_AlFifoNew=(cur,prev)=>{
+if(!cur.length||!prev.length)return []
+for(let k=0;k<=cur.length;k++){
+let tail=cur.slice(k),head=prev.slice(0,cur.length-k)
+if(tail.length===head.length&&tail.every((e,i)=>e===head[i]))return cur.slice(0,k)}
+return cur}
+// T15 的新失敗筆數（平台 V1.98／V2.74）：時間戳大於前一筆的最大值才是新項目；前一筆最大值
+// 已在 0xF000 以上而這筆時間戳小於 0x1000 且前一筆清單沒有它，視為 16 位元回繞後的新項目。
+_AlT15New=(cur,prev)=>{
+if(!cur.length||!prev.length)return []
+let ts=e=>Number(e.split(':')[0]),st=e=>Number(e.split(':')[1])
+let prevMax=Math.max.apply(null,prev.map(ts))
+let wrapNew=cur.filter(e=>ts(e)<0x1000&&prev.indexOf(e)<0)
+return cur.filter(e=>(ts(e)>prevMax||(prevMax>=0xF000&&wrapNew.indexOf(e)>=0))&&st(e)>=3&&st(e)<=8)}
+_AlSt=e=>Number(e.split(':')[1])
+
+// 清單類與 GList 規則（只在比較模式）。File 1 = 之前、File 2 = 現在。
+_AlListAlerts=()=>{
+let out=[]
+if(!A2||!ArIx2)return out
+let intf=_AlIntf()
+let rd={15:_AlT15Entries,105:_AlT105Entries,309:_AlT309Entries,311:_AlT311Entries}
+AlertListRules.forEach(r=>{
+if(r.intf&&r.intf!==intf)return
+if(!_AlHas(r.tmpl))return
+let prev=_AlProbeF1(r.tmpl,rd[r.tmpl]),cur=_AlProbeF2(r.tmpl,rd[r.tmpl])
+if(prev==null||cur==null)return
+let hits=[]
+if(r.kind==='t15')hits=_AlT15New(cur,prev)
+else if(r.kind==='fifo')hits=_AlFifoNew(cur,prev).filter(e=>{let s=_AlSt(e);return s>=r.lo&&s<=r.hi})
+else if(r.kind==='set')hits=cur.filter(e=>prev.indexOf(e)<0)
+if(!hits.length)return
+let n=hits.length,what=r.kind==='set'?'new background-scan result entr'+(n===1?'y':'ies'):'new failed self-test entr'+(n===1?'y':'ies')
+out.push({key:r.key,tmpl:r.tmpl,name:r.name,value:n,ref:null,desc:n+' '+what+' since File 1: '+hits.slice(0,4).join(', ')+(n>4?', …':'')})
+})
+AlertRules.forEach(r=>{
+if(!r.glist)return
+if(r.intf&&r.intf!==intf)return
+if(!_AlHas(r.tmpl))return
+let c1=_AlProbeF1(r.tmpl,_AlGlistCount),c2=_AlProbeF2(r.tmpl,_AlGlistCount)
+if(c1==null||c2==null)return
+if(c2-c1>0)out.push({key:r.key,tmpl:r.tmpl,name:r.name,value:c2,ref:c1,desc:'GList declared defects +'+(c2-c1)+' ('+c1+' → '+c2+')'})
+})
 return out}
 
 // ── T2：在 Worst 旁插入 T13 的門檻 ───────────────────────────────────────
@@ -1977,7 +2196,7 @@ list=list.concat(_AlSmart())
 // Delta：比較模式下 File 1 是之前、File 2 是現在
 if(A2&&ArIx2){
 let byT2={}
-AlertRules.forEach(r=>{if(!r.delta)return;if(r.intf&&r.intf!==intf)return;if(!_AlHas(r.tmpl))return;(byT2[r.tmpl]=byT2[r.tmpl]||[]).push(r)})
+AlertRules.forEach(r=>{if(!r.delta||r.glist)return;if(r.intf&&r.intf!==intf)return;if(!_AlHas(r.tmpl))return;(byT2[r.tmpl]=byT2[r.tmpl]||[]).push(r)})
 for(let t of Object.keys(byT2)){
 Tx=_AlIdx(Number(t));DpFl();if(A2)CmpRenderTable()
 byT2[t].forEach(r=>{
@@ -1989,9 +2208,11 @@ let v1=null,v2=null
 for(let k=1;k<c1.length;k++){if(_SrchIsIdx(c1[k]))continue;let n=_SrchNum(c1[k]);if(n!=null){v1=n;break}}
 for(let k=0;k<c2.length;k++){if(_SrchIsIdx(c2[k]))continue;let n=_SrchNum(c2[k]);if(n!=null){v2=n;break}}
 if(v1==null||v2==null)return
-if(v2-v1>0)list.push({key:r.key,tmpl:r.tmpl,name:r.name+' Delta>0',value:v2,ref:v1,desc:R.cells[0]+' +'+(v2-v1)+' ('+v1+' → '+v2+')'})
+if(v2-v1>0)list.push({key:r.key,tmpl:r.tmpl,name:r.name,value:v2,ref:v1,desc:R.cells[0]+' +'+(v2-v1)+' ('+v1+' → '+v2+')'})
 })
 }
+// SMART raw Delta、自我測試／背景掃描清單對齊、GList 宣告筆數：都要借 File 2 渲染，走探針
+list=list.concat(_AlSmartDelta(),_AlListAlerts())
 }
 }catch(e){}
 // 快取必須在放回畫面之前寫入：放回畫面會觸發 DpAlerts，它得拿到快取而不是再算一次。
@@ -2002,7 +2223,7 @@ try{DpFl();if(A2&&!HdrView&&!AlertView)CmpRenderTable();_PostSelfTest();_PostSma
 return list}
 _AlEvalRow=(r,R)=>{
 let val=_SrchRowVal(R,'')
-if(r.op==='in'){let txt=R.cells.join(' ');return {hit:r.vals.some(v=>txt.indexOf(v)>=0),value:R.cells.slice(1).join(' ').slice(0,60)}}
+if(r.op==='in'){let txt=R.cells.join(' '),v=r.vals.find(v=>txt.indexOf(v)>=0);return {hit:v!=null,value:v!=null?((r.codes&&r.codes[v]!=null)?r.codes[v]+' ('+v+')':v):R.cells.slice(1).join(' ').slice(0,60)}}
 if(r.op==='bit'){let raw=R.cells.find(t=>/^[0-9A-Fa-f]{2,}$/.test(t))||'';let n=parseInt(raw,16);return {hit:isFinite(n)&&((n>>r.bit)&1)===1,value:raw}}
 if(val==null)return null
 if(r.ref){let Rr=_SrchFindRowRx(r.ref);if(!Rr)return null;let rv=_SrchRowVal(Rr,'');if(rv==null)return null;return {hit:_SrchCmp(val,r.op,rv),value:val,ref:rv}}
@@ -2031,7 +2252,7 @@ if(ev&&ev.hit)R.tr.classList.add('alertHit')})}
 DpAlerts=()=>{
 BuildTitle()
 W(G('tmpl'),'Alerts');W(G('tmplName'),'Alerts')
-W(G('err'),"<div style='font-size:11px;color:#777;background:#fafafa;border:1px solid #e0e0e0;border-radius:3px;padding:3px 8px;margin-bottom:2px'>Threshold alert rules from the DA Analytics Platform rulebook (121 Alert=Y). Value / T16 / SMART N&le;T are judged on this capture; Delta rules need a previous capture and are evaluated only in Compare mode (File 1 = previous, File 2 = current). Double-click a row to open its template.</div>")
+W(G('err'),"<div style='font-size:11px;color:#777;background:#fafafa;border:1px solid #e0e0e0;border-radius:3px;padding:3px 8px;margin-bottom:2px'>Threshold alert rules from the DA Analytics Platform rulebook (128 alert kinds, platform V3.03; rule keys and alert names are the platform's rule_key / threshold_alert_name). Value / T16 / SMART N&le;T are judged on this capture. Delta, SMART raw Delta, self-test (T15 / T105 / T309), background-scan result (T311) and GList (T332) rules need a previous capture and are evaluated only in Compare mode (File 1 = previous, File 2 = current). The platform's monotonicity gate needs the drive's whole capture history and is not applied here. Double-click a row to open its template.</div>")
 Fx=0;F=0;T=0;ArRange=[];Gp=0
 SetTH(1,0,0)
 Q('#lTab td.adr').forEach(e=>W(e,''))
@@ -2272,7 +2493,9 @@ len=ArIx[ii*2+1]
 Fx+=len
 }
 // 優先用檔頭宣告的絕對偏移（V2.27）；宣告缺失或不合理才沿用累加結果。
-if(typeof ArOff!=='undefined'&&ArOff[Tx]>=From&&ArOff[Tx]<(_LastRawBytes?_LastRawBytes.length:Infinity))Fx=ArOff[Tx]
+// 借 File 2 渲染（ArIx 指向 ArIx2）時用 File 2 自己的偏移表
+let _off=(typeof ArIx2!=='undefined'&&ArIx2&&ArIx===ArIx2&&typeof ArOff2!=='undefined'&&ArOff2)?ArOff2:(typeof ArOff!=='undefined'?ArOff:null)
+if(_off&&_off[Tx]>=From&&_off[Tx]<(_LastRawBytes?_LastRawBytes.length:Infinity))Fx=_off[Tx]
 SetTH(1,Fx%16,ArIx[Tx*2+1])
 W(G('offset'),U(Fx,2))
 F=Fx-From
@@ -4011,7 +4234,7 @@ let ScanEntries=[],ScanIdx=0,ScanTimer=null,ScanTimerRAF=false,ScanActive=false,
     // a session always asks, and later Scan clicks reuse the answer.
     _ScanFolderConfirmed=false,
     _ScanLoading=false,ScanOrigBuf=null,ScanOrigName='',ScanLastBuf=null,ScanLastName='',ScanDirection=1,ScanCollectAbort=false,ScanMatchedCount=0,ScanExaminedCount=0,_ScanDirsVisited=0,_ScanFilesSeen=0,_ScanWalkErrors=[],_ScanExtCounts={},_ScanSampleNames=[],
-        _ScanLifetimeDisplayed=0,_ScanLifetimeRuns=0,
+    _ScanLifetimeDisplayed=0,_ScanLifetimeRuns=0,
     _ScanStartTime=0,_ScanElapsedTimer=null,_ScanWalkLastYield=0,_ScanLastStepTime=0,TrueFileSize=0,_lastStatusUpdate=0,
     _ZipCacheHandle=null,_ZipCacheFile=null,_ZipCacheDir=null
 _ScanClearTimer=()=>{if(ScanTimer!==null){if(ScanTimerRAF)cancelAnimationFrame(ScanTimer);else clearTimeout(ScanTimer);ScanTimer=null;ScanTimerRAF=false}}
@@ -4642,7 +4865,8 @@ let _SrchOps=[['','(any)'],['contains','contains'],['eq','equals'],['ne','does n
 _SrchFieldCache={}
 // 告警規則代碼是 t<template>.<子代碼>（有些再多一層，如 t103.1.1），依數字
 // 由小到大比較，而不是逐字元比較字串（字串排序會讓 t10 排在 t2 前面）。
-_AlKeyParts=k=>String(k).replace(/^t/,'').split('.').filter(s=>s!=='').map(Number)
+// 't332.4.b' 這種帶字母的子代碼：字母排在同層數字之後，別讓 NaN 進比較器
+_AlKeyParts=k=>String(k).replace(/^t/,'').split('.').filter(s=>s!=='').map(x=>{let n=Number(x);return isFinite(n)?n:1000+x.charCodeAt(0)})
 _AlKeyCmp=(a,b)=>{
 let pa=_AlKeyParts(a),pb=_AlKeyParts(b),n=Math.max(pa.length,pb.length)
 for(let i=0;i<n;i++){
@@ -4758,8 +4982,8 @@ if(c.src==='A'){
 // 依 template 編號／子代碼由小到大排序（t1、t2…t9、t10…），方便照數字找，
 // 而不是照規則表裡湊巧的寫入順序。
 let keys=[]
-AlertRules.forEach(r=>{if(keys.indexOf(r.key)<0)keys.push(r.key)})
-;[5,10,187,188,196,197,198,199].forEach(id=>{let k='t2.'+id;if(keys.indexOf(k)<0)keys.push(k)})
+AlertRules.concat(AlertListRules).forEach(r=>{if(keys.indexOf(r.key)<0)keys.push(r.key)})
+;[5,10,11,183,184,187,188,196,197,198,199].forEach(id=>{let k='t2.'+id;if(keys.indexOf(k)<0)keys.push(k)})
 keys.sort(_AlKeyCmp)
 names.push('t2.')
 names=names.concat(keys)
