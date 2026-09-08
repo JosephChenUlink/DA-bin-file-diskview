@@ -149,7 +149,7 @@ body.guideOpen #guideDoc{overflow:visible;padding:0}
   <span style='display:flex;align-items:center;gap:8px'>
   <span id='scanElapsed' title='Time elapsed since the current scan started (resets on each Scan click)' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
   <span id='lifetimeStats' title='How many times a template has been displayed while stepping/playing through results, across all Scan clicks this session' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
-  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260907f</span>
+  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260907g</span>
   </span>
 </div>
 <input id='local'type='file'style='display:none'onchange='OpFl()'>
@@ -254,7 +254,7 @@ body.guideOpen #guideDoc{overflow:visible;padding:0}
 <tr><th>&#9209;</th><td>Stop and return to normal browsing</td></tr>
 </table>
 <p>Two counters sit near the version badge: <b>elapsed time</b> since you clicked Scan, and <b>Displayed</b>, how many templates you have viewed since that click.</p>
-<p>In <b>Chrome</b> and <b>Edge</b> the folder is remembered, so the next Scan starts where you left off. In other browsers Scan works exactly the same way, but asks you to choose the folder each time.</p>
+<p>The interface you chose is remembered for the next Scan. In <b>Chrome</b> and <b>Edge</b> the folder is remembered too, across sessions: the interface prompt shows the last folder and reuses it unless you tick <i>Choose a different folder</i> (the browser may ask once per session to confirm access). In other browsers Scan works exactly the same way, but asks you to choose the folder each time.</p>
 <p><b>Scan with Compare</b> is a useful pairing: turn on Compare during a scan and each new capture is measured against the one you started from.</p>
 <p class='note'>Scan reads the folder directly from your computer. As with everything else here, no file is uploaded.</p>
 
@@ -4478,6 +4478,7 @@ _ScanWalkErrors.push((prefix||'(root)')+' — iteration error: '+e.message)
 // re-prompts.
 ScanChangeFolder=async(e)=>{
 if(e){e.preventDefault();e.stopPropagation()}
+_ScanWantNewFolder=true
 ScanStop&&ScanStop()
 ScanDirHandle=null;ScanBinList=[];ScanEntries=[];ScanTotal=0;ScanIdx=0
 _ScanFolderConfirmed=false
@@ -5131,31 +5132,41 @@ _IntfLabel={SATA:'SATA',NVME:'NVMe',SCSI:'SCSI / SAS','':'any interface'}
 // 現在按 Scan 後、選資料夾前先問一次：預設帶入目前檔案的介面，也可以選「任一介面」。
 // 回傳 'SATA'／'NVME'／'SCSI'、''（任一）或 null（取消）。
 _ScanIntfPick=null
-_ScanAskIntf=()=>new Promise(res=>{
+_ScanWantNewFolder=false   // 「change」連結按下後設為 true：對話框預先勾選重選資料夾
+// 介面選擇存在 localStorage（dv_scanIntf），下次預設就是上次選的；沒存過才用目前檔案的介面。
+// 資料夾：上次用過的資料夾 handle 存在 IndexedDB（dirHint），對話框顯示它的名稱、預設沿用；
+// 勾「Choose a different folder」才重開資料夾選擇器。沒有 File System Access API 的瀏覽器
+// 記不住 handle，每次都得重選。回傳 {intf, newFolder, stored}，取消則回 null。
+_ScanAskIntf=async()=>{
 let old=G('scanIfOv');if(old)old.remove()
 let im=(SAll||'').match(/Interface:\s*([^\n]+)/),cur=im?_IntfKey(im[1]):''
-let def=(cur==='SATA'||cur==='NVME'||cur==='SCSI')?cur:''
+let saved=null;try{saved=localStorage.getItem('dv_scanIntf')}catch(e){}
+let def=(saved==='SATA'||saved==='NVME'||saved==='SCSI'||saved==='')?saved:((cur==='SATA'||cur==='NVME'||cur==='SCSI')?cur:'')
+let stored=null
+if(window.showDirectoryPicker){try{stored=ScanDirHandle||await _ScanDB.load()||await _ScanDB.loadDirHint()}catch(e){stored=null}}
+let wantNew=_ScanWantNewFolder;_ScanWantNewFolder=false
+return new Promise(res=>{
 let ov=document.createElement('div');ov.id='scanIfOv'
 ov.innerHTML="<div id='scanIfBox'><div id='scanIfBar'>Scan which interface?</div><div style='padding:12px 16px'>"
-+['SATA','NVME','SCSI',''].map(k=>"<label><input type='radio' name='scanIf' value='"+k+"'"+(k===def?' checked':'')+"> "+_IntfLabel[k]+(k===def&&cur?" <span style='color:#777'>(the open capture)</span>":'')+"</label>").join('')
-+"<div style='color:#777;font-size:11px;margin-top:8px'>Only captures of this interface are scanned. With a different interface than the open capture, or any interface, each capture opens on its Header page; click the Template button during the scan to pick a template.</div></div>"
-+"<div style='padding:8px 16px 12px;display:flex;gap:8px;justify-content:flex-end'><button id='scanIfCancel'>Cancel</button><button id='scanIfOk' style='background:#1a5fa8;color:#fff;border:1px solid #0d3d6e'>Continue</button></div></div>"
++['SATA','NVME','SCSI',''].map(k=>"<label><input type='radio' name='scanIf' value='"+k+"'"+(k===def?' checked':'')+"> "+_IntfLabel[k]+(k===cur&&cur?" <span style='color:#777'>(the open capture)</span>":'')+"</label>").join('')
++"<div style='color:#777;font-size:11px;margin-top:8px'>Only captures of this interface are scanned. With a different interface than the open capture, or any interface, each capture opens on its Header page; click the Template button during the scan to pick a template.</div>"
++(stored?"<div style='margin-top:10px;padding-top:8px;border-top:1px solid #e0e0e0'>Folder: <b id='scanIfDir'>"+EscH(stored.name||'(last used)')+"</b> <span style='color:#777'>(+ subfolders, remembered)</span><br><label style='margin-top:4px'><input type='checkbox' id='scanIfNew'"+(wantNew?' checked':'')+"> Choose a different folder</label></div>":"")
++"</div><div style='padding:8px 16px 12px;display:flex;gap:8px;justify-content:flex-end'><button id='scanIfCancel'>Cancel</button><button id='scanIfOk' style='background:#1a5fa8;color:#fff;border:1px solid #0d3d6e'>Continue</button></div></div>"
 document.body.appendChild(ov)
 let key=e=>{if(e.key==='Escape'){e.preventDefault();done(null)}else if(e.key==='Enter'){e.preventDefault();ok()}}
 let done=v=>{document.removeEventListener('keydown',key,true);ov.remove();res(v)}
-let ok=()=>{let r=ov.querySelector('input[name=scanIf]:checked');done(r?r.value:'')}
+let ok=()=>{let r=ov.querySelector('input[name=scanIf]:checked'),intf=r?r.value:''
+try{localStorage.setItem('dv_scanIntf',intf)}catch(e){}
+let nf=G('scanIfNew');done({intf,newFolder:!stored||!!(nf&&nf.checked),stored})}
 G('scanIfOk').onclick=ok;G('scanIfCancel').onclick=()=>done(null)
 ov.onclick=e=>{if(e.target===ov)done(null)}
 document.addEventListener('keydown',key,true)
 let chk=ov.querySelector('input[name=scanIf]:checked');if(chk)chk.focus()
-})
+})}
 
 ScanEnsureReady=async(forcePick)=>{
-// forcePick is set only by a fresh Scan click. Stepping, Play and resume all
-// call this too, and must keep using the folder already in hand.
-if(forcePick&&!_ScanFolderConfirmed&&ScanDirHandle){
-ScanDirHandle=null;ScanBinList=[];ScanEntries=[];ScanTotal=0;ScanIdx=0
-}
+// forcePick 只有新按 Scan 時為 true。以前它在新工作階段會把記住的資料夾丟掉、強迫重選；
+// 現在資料夾交給介面對話框：預設沿用上次的，使用者勾選才重選。
 if(window.self!==window.top){
 alert('Scan is not available while the viewer is embedded in a frame.\n\nOpen the page directly in Chrome or Edge.')
 return false
@@ -5164,10 +5175,14 @@ return false
 // Continue 本身是一次點擊，接下來的資料夾選擇器與權限請求仍在使用者手勢之內。
 let pick=await _ScanAskIntf()
 if(pick===null)return false
-_ScanIntfPick=pick
-// Try to restore dir handle from IndexedDB, unless this session has yet to
-// confirm a folder and the caller wants the user asked.
-if(!ScanDirHandle&&!(forcePick&&!_ScanFolderConfirmed))ScanDirHandle=await _ScanDB.load()
+_ScanIntfPick=pick.intf
+if(pick.newFolder){
+// 要換資料夾：丟掉手上的 handle 與已收集的清單，讓下面的選擇器出現
+if(ScanDirHandle||ScanBinList.length){ScanDirHandle=null;ScanBinList=[];ScanEntries=[];ScanTotal=0;ScanIdx=0}
+}else if(!ScanDirHandle&&pick.stored){
+// 沿用記住的資料夾（同一工作階段的 handle、或上一次存進 IndexedDB 的）
+ScanDirHandle=pick.stored;ScanBinList=[];ScanEntries=[];ScanTotal=0;ScanIdx=0
+}
 // Check permission on stored handle (silent if same folder, no dialog)
 if(ScanDirHandle){
 let perm=await ScanDirHandle.queryPermission({mode:'read'}).catch(()=>'prompt')
