@@ -156,7 +156,7 @@ body.guideOpen #guideDoc{overflow:visible;padding:0}
   <span style='display:flex;align-items:center;gap:8px'>
   <span id='scanElapsed' title='Time elapsed since the current scan started (resets on each Scan click)' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
   <span id='lifetimeStats' title='How many times a template has been displayed while stepping/playing through results, across all Scan clicks this session' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
-  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260907r</span>
+  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260907s</span>
   </span>
 </div>
 <input id='local'type='file'style='display:none'onchange='OpFl()'>
@@ -2462,7 +2462,7 @@ G('rTab').style.tableLayout=''
 if(isErr){
 let entSize=64,nEnt=Math.floor(LenT/entSize)
 if(!window._NvmeStatusStr)_NvmeStatusInit()
-,qr="<tr class='c4'><th>Entry</th><th>Offset</th><th>Error Count</th><th>SQ/CID</th><th>Status</th><th>LBA</th><th>NSID</th></tr>"
+,qr="<tr class='c4'><th>Entry</th><th>Offset</th><th>Error Count</th><th>SQ/CID</th><th>Status</th><th>Error Location</th><th>LBA</th><th>NSID</th><th>Cmd Specific Info</th></tr>"
 for(let e=0;e<nEnt;e++){
 let base=e*entSize
 if(NvmeAllZero(base,entSize)){skipped++;continue}
@@ -2470,17 +2470,20 @@ let ec=NvmeLE(base+0,8),ecStr=NvmeHex(base+0,3)+' ('+Cx(ec)+')'
 ,sqCid=NvmeHex(base+8,2)+'/'+NvmeHex(base+10,2)
 ,statusRaw=Number(NvmeLE(base+12,2))
 ,statusStr=_NvmeStatusStr(statusRaw)
+,pel=Number(NvmeLE(base+14,2)),pelStr=_NvmePelStr(pel)
 ,lbaStr=NvmeHex(base+16,8)
 ,nsidStr=NvmeHex(base+24,4)
-qr+="<tr id='r"+rowIdx+"'"+(e==0?" class='c0'":'')+"><td>"+(e+1)+"</td><td>"+Cx(base)+"</td><td>"+ecStr+"</td><td>"+sqCid+"</td><td>"+statusStr+"</td><td>"+lbaStr+"</td><td>"+nsidStr+"</td></tr>"
+,csiStr=NvmeHex(base+32,8)
+qr+="<tr id='r"+rowIdx+"'"+(e==0?" class='c0'":'')+"><td>"+(e+1)+"</td><td>"+Cx(base)+"</td><td>"+ecStr+"</td><td>"+sqCid+"</td><td>"+statusStr+"</td><td>"+pelStr+"</td><td>"+lbaStr+"</td><td>"+nsidStr+"</td><td>"+csiStr+"</td></tr>"
 ArRange.push(base+'-'+entSize)
 rowIdx++
 }
-if(skipped)qr+="<tr><td colspan='7' style='color:#777;font-style:italic'>"+Cx(skipped)+" empty Error Log "+(skipped==1?'entry':'entries')+" (all-zero) not shown</td></tr>"
+if(skipped)qr+="<tr><td colspan='9' style='color:#777;font-style:italic'>"+Cx(skipped)+" empty Error Log "+(skipped==1?'entry':'entries')+" (all-zero) not shown</td></tr>"
 W(G('rTab'),qr)
 W(G('ruSide'),`<b>NVMe Error Information Log</b> (NVMe Base Spec \u00a75.14.1.1) \u2014 `+Cx(nEnt)+` entries allocated, `+Cx(nEnt-skipped)+` populated. Each entry is a 64-byte structure describing one internal controller error; the most recent error is generally entry 1. An all-zero entry is an unused slot.<br>
 <b>Status Field</b> (2 bytes, offset 12) \u2014 shown as <code>hex (SCT=n type, SC=xx name; flags)</code>:<br>
 Bit 0 = Phase Tag (P); Bits 8:1 = Status Code (SC); Bits 11:9 = Status Code Type (SCT: 0=Generic Command Status, 1=Command Specific Status, 2=Media and Data Integrity Errors, 3=Path Related Status, 7=Vendor Specific); Bits 13:12 = Command Retry Delay index (CRD); Bit 14 = More (M: additional info via Get Log Page); Bit 15 = Do Not Retry (DNR).<br>
+<b>Error Location</b> (Parameter Error Location, 2 bytes, offset 14) \u2014 for an Invalid Field error, the byte (bits 7:0) and bit (bits 10:8) of the 64-byte submission queue entry that the controller rejected, FFFF = not reported; the SQE field that byte belongs to is shown after it (byte 0 = the opcode itself, 4\u20137 NSID, 24\u201339 data pointer, 40\u201343 CDW10 \u2014 Log Page Identifier for Get Log Page, CNS for Identify, Feature Identifier for Get/Set Features \u2014 44\u201363 CDW11\u201315). <b>Cmd Specific Info</b> (8 bytes, offset 32) is defined per command. The entry does not record the command opcode; the Command Identifier (CID) can only be matched against the host driver's own records.<br>
 SC names follow the NVMe Base Specification tables for SCT 0\u20133; SCT=1 codes depend on the command that failed (the log does not record the opcode) and SCT=7 is vendor specific. SQ/CID 0000/xxxx means the failed command was on the Admin queue (Identify, Get Log Page, Get Features\u2026), typically issued by the host's driver or a monitoring tool; a repeating Generic / Invalid Field in Command entry there is a host-software compatibility issue, not a media fault.`)
 }else{
 let entSize=28,hdrSize=4,nEnt=Math.floor((LenT-hdrSize)/entSize)
@@ -6133,6 +6136,12 @@ const SC={
 1:{0x00:'Completion Queue Invalid',0x01:'Invalid Queue Identifier',0x02:'Invalid Queue Size',0x03:'Abort Command Limit Exceeded',0x05:'Asynchronous Event Request Limit Exceeded',0x06:'Invalid Firmware Slot',0x07:'Invalid Firmware Image',0x08:'Invalid Interrupt Vector',0x09:'Invalid Log Page',0x0A:'Invalid Format',0x0B:'Firmware Activation Requires Conventional Reset',0x0C:'Invalid Queue Deletion',0x0D:'Feature Identifier Not Saveable',0x0E:'Feature Not Changeable',0x0F:'Feature Not Namespace Specific',0x10:'Firmware Activation Requires NVM Subsystem Reset',0x11:'Firmware Activation Requires Controller Level Reset',0x12:'Firmware Activation Requires Maximum Time Violation',0x13:'Firmware Activation Prohibited',0x14:'Overlapping Range',0x15:'Namespace Insufficient Capacity',0x16:'Namespace Identifier Unavailable',0x18:'Namespace Already Attached',0x19:'Namespace Is Private',0x1A:'Namespace Not Attached',0x1B:'Thin Provisioning Not Supported',0x1C:'Controller List Invalid',0x1D:'Device Self-test In Progress',0x1E:'Boot Partition Write Prohibited',0x1F:'Invalid Controller Identifier',0x20:'Invalid Secondary Controller State',0x21:'Invalid Number of Controller Resources',0x22:'Invalid Resource Identifier',0x23:'Sanitize Prohibited While Persistent Memory Region is Enabled',0x24:'ANA Group Identifier Invalid',0x25:'ANA Attach Failed',0x80:'Conflicting Attributes',0x81:'Invalid Protection Information',0x82:'Attempted Write to Read Only Range'},
 2:{0x80:'Write Fault',0x81:'Unrecovered Read Error',0x82:'End-to-end Guard Check Error',0x83:'End-to-end Application Tag Check Error',0x84:'End-to-end Reference Tag Check Error',0x85:'Compare Failure',0x86:'Access Denied',0x87:'Deallocated or Unwritten Logical Block',0x88:'End-to-End Storage Tag Check Error'},
 3:{0x00:'Internal Path Error',0x01:'Asymmetric Access Persistent Loss',0x02:'Asymmetric Access Inaccessible',0x03:'Asymmetric Access Transition',0x60:'Controller Pathing Error',0x70:'Host Pathing Error',0x71:'Command Aborted By Host'}}
+// Parameter Error Location：byte（bits 7:0）與 bit（bits 10:8），FFFF = 未回報；附上該 byte 落在 SQE 的哪個欄位
+window._NvmePelStr=pel=>{
+if(pel===0xFFFF)return 'FFFF (not reported)'
+let by=pel&0xFF,bi=(pel>>8)&7
+let f=by===0?'CDW0 opcode':by===1?'CDW0 FUSE/PSDT':by<=3?'CDW0 CID':by<=7?'NSID':by<=15?'CDW2\u20133':by<=23?'MPTR':by<=39?'DPTR (PRP/SGL)':by<=43?'CDW10':by<=47?'CDW11':by<=51?'CDW12':by<=55?'CDW13':by<=59?'CDW14':'CDW15'
+return U(pel,2)+' (byte '+by+' bit '+bi+' \u2192 '+f+')'}
 window._NvmeStatusStr=st=>{
 let sc=(st>>1)&0xFF,sct=(st>>9)&7,m=(st>>14)&1,dnr=(st>>15)&1,crd=(st>>12)&3
 let name=(SC[sct]||{})[sc]||(sct===7?'vendor specific':'reserved / unknown')
