@@ -149,7 +149,7 @@ body.guideOpen #guideDoc{overflow:visible;padding:0}
   <span style='display:flex;align-items:center;gap:8px'>
   <span id='scanElapsed' title='Time elapsed since the current scan started (resets on each Scan click)' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
   <span id='lifetimeStats' title='How many times a template has been displayed while stepping/playing through results, across all Scan clicks this session' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
-  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260907e</span>
+  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260908a</span>
   </span>
 </div>
 <input id='local'type='file'style='display:none'onchange='OpFl()'>
@@ -1387,7 +1387,7 @@ HdrView=false
 AlertView=false
 AlertFrom=-1   // 從告警頁跳去某個 template 時記住，讓「返回」有地方回
 
-// ── 告警規則（來自平台端 docs/threshold_alert_rules.md，128 種告警，平台 V3.05）──
+// ── 告警規則（來自平台端 docs/threshold_alert_rules.md，128 種告警，平台 V3.11）──
 // key 與 name 與平台端 threshold_alerts 表的 rule_key / threshold_alert_name 完全一致，
 // 兩邊對照時可以直接拿名稱互查（例如 `smart_5_2_5 N<=T (pre-fail)`）。
 // 單一擷取檔就能判定的：Value、T16、SMART N<=T。
@@ -1423,7 +1423,8 @@ AlertRules=[
 {key:'t103.1.5',tmpl:103,intf:'NVME',row:/^Critical Warning$/i,op:'bit',bit:4,name:'critical_warning_volatile_memory_backup_device_failed_103_5_1_4 Value'},
 // 平台端的名稱就是這個拼法（peristent），照抄才對得起來
 {key:'t103.1.6',tmpl:103,intf:'NVME',row:/^Critical Warning$/i,op:'bit',bit:5,name:'critical_peristent_memory_read_only_or_unreliable_103 Value'},
-// T16 SATA interface statistics（attr N > 0，看當天的計數，不比差值）
+// T16 SATA interface statistics（attr N > 0，看當天的計數，不比差值）。平台 V3.09 實測：DA 工具每次讀取
+// 都會重設這些 Phy Event Counter，所以每筆的值本身就是「自上次回報以來的錯誤數」，取差值反而會少算。
 {key:'t16.1',tmpl:16,intf:'SATA',row:/Interface CRC Error/i,op:'gt',val:0,name:'interface_crc_error_count_16_1 Value>0'},
 {key:'t16.2',tmpl:16,intf:'SATA',row:/Uncorrectable Error/i,op:'gt',val:0,name:'uncorrectable_error_count_16_2 Value>0'},
 {key:'t16.3',tmpl:16,intf:'SATA',row:/ID Not Found/i,op:'gt',val:0,name:'id_not_found_count_16_3 Value>0'},
@@ -1474,6 +1475,10 @@ AlertListRules=[
 AlSmartIds=[2,3,4,5,6,7,8,9,10,11,12,13,22,170,171,172,173,174,175,176,177,178,179,180,181,182,183,184,185,186,187,188,189,191,192,193,195,196,197,198,199,200,201,202,203,204,205,206,207,208,209,210,211,212,220,221,222,223,224,225,226,227,228,230,231,232,233,240,241,242,246,247,248,250,254]
 // SMART raw Delta>0（平台 SMART_RAW_DELTA_IDS）：這幾個屬性的原始值比前一筆增加就告警
 AlSmartRawIds=[5,10,11,183,184,187,188,197,198,199]
+// 平台 V3.10（BeeLink smart_raw_audit）：扇區計數屬性的計數只在 raw 的低 16 位元。Seagate 在上面
+// 打包另一個欄位（attr 197 raw 0x58198 = 33,176 個待處理扇區，正好等於 T6.7；高位字最多到 6，它跳動
+// 不是新扇區）、Toshiba／HGST 把實體扇區數放在邏輯扇區數之上、WD 從不超過 65,535。只比低位字。
+AlSmartRawLow16=[5,197,198]
 
 // 檔案介面（大小寫正規化，平台端存 NVME）
 _AlIntf=()=>{let m=(SAll||'').split('h\n')[0].match(/^Interface:\s*(.*)$/im);return String((m||['',''])[1]).trim().toUpperCase()}
@@ -1584,8 +1589,10 @@ if(!prev||!cur||prev.corrupt||cur.corrupt)return out
 AlSmartRawIds.forEach(id=>{
 let a=cur.attrs[id],b=prev.attrs[id]
 if(!_AlT2Ok(a)||!_AlT2Ok(b))return
-if(a.raw-b.raw>0)out.push({key:'t2.'+id,tmpl:2,name:'smart_'+id+'_raw_2_'+id+' Delta>0',value:a.raw,ref:b.raw,
-desc:'SMART '+id+(Dic[id]?' '+Dic[id]:'')+' raw +'+(a.raw-b.raw)+' ('+b.raw+' → '+a.raw+')'})
+let low=AlSmartRawLow16.indexOf(id)>=0
+let ra=low?(a.raw%65536):a.raw,rb=low?(b.raw%65536):b.raw
+if(ra-rb>0)out.push({key:'t2.'+id,tmpl:2,name:'smart_'+id+'_raw_2_'+id+' Delta>0',value:ra,ref:rb,
+desc:'SMART '+id+(Dic[id]?' '+Dic[id]:'')+(low?' raw low 16 bits +':' raw +')+(ra-rb)+' ('+rb+' → '+ra+')'})
 })
 return out}
 
@@ -1857,7 +1864,7 @@ if(ev&&ev.hit)R.tr.classList.add('alertHit')})}
 DpAlerts=()=>{
 BuildTitle()
 W(G('tmpl'),'Alerts');W(G('tmplName'),'Alerts')
-W(G('err'),"<div style='font-size:11px;color:#777;background:#fafafa;border:1px solid #e0e0e0;border-radius:3px;padding:3px 8px;margin-bottom:2px'>Threshold alert rules from the DA Analytics Platform rulebook (128 alert kinds, platform V3.05; rule keys and alert names are the platform's rule_key / threshold_alert_name). Value / T16 / SMART N&le;T are judged on this capture. Delta, SMART raw Delta, self-test (T15 / T105 / T309), background-scan result (T311) and GList (T332) rules need a previous capture and are evaluated only in Compare mode (File 1 = previous, File 2 = current). The platform's monotonicity gate needs the drive's whole capture history and is not applied here. Double-click a row to open its template.</div>")
+W(G('err'),"<div style='font-size:11px;color:#777;background:#fafafa;border:1px solid #e0e0e0;border-radius:3px;padding:3px 8px;margin-bottom:2px'>Threshold alert rules from the DA Analytics Platform rulebook (128 alert kinds, platform V3.11; rule keys and alert names are the platform's rule_key / threshold_alert_name). Value / T16 / SMART N&le;T are judged on this capture. Delta, SMART raw Delta, self-test (T15 / T105 / T309), background-scan result (T311) and GList (T332) rules need a previous capture and are evaluated only in Compare mode (File 1 = previous, File 2 = current). The platform's monotonicity gate needs the drive's whole capture history and is not applied here. Double-click a row to open its template.</div>")
 Fx=0;F=0;T=0;ArRange=[];Gp=0
 SetTH(1,0,0)
 Q('#lTab td.adr').forEach(e=>W(e,''))
