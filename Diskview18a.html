@@ -156,7 +156,7 @@ body.guideOpen #guideDoc{overflow:visible;padding:0}
   <span style='display:flex;align-items:center;gap:8px'>
   <span id='scanElapsed' title='Time elapsed since the current scan started (resets on each Scan click)' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
   <span id='lifetimeStats' title='How many times a template has been displayed while stepping/playing through results, across all Scan clicks this session' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
-  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260907j</span>
+  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260907k</span>
   </span>
 </div>
 <input id='local'type='file'style='display:none'onchange='OpFl()'>
@@ -901,6 +901,7 @@ let fi=ArIx.findIndex((v,i)=>i%2===0&&v===PrevRawT)
 Tx=fi>=0?fi/2:0
 PrevRawT=-1
 }
+if(_ScanEval)return   // 掃描評估：畫面留給 _doScanStepDir 在條件通過後渲染
 DpFl()
 // The header view builds its own File 2 columns, so CmpRenderTable would be
 // appending a second set on top of them.
@@ -1515,20 +1516,12 @@ _T13Cache={file:null,map:null}
 _T13Thr=()=>{
 if(_T13Cache.file===CurFile&&_T13Cache.map)return _T13Cache.map
 let i13=_AlIdx(13),thr={}
-if(i13<0){_T13Cache={file:CurFile,map:thr};return thr}
-let saveTx=Tx,saveHdr=HdrView,saveAl=AlertView
-try{
-HdrView=false;AlertView=false
-if(Tx!==i13){Tx=i13;DpFl()}
-for(let tr of Q('#rTab tr')){
-let c=tr.cells;if(!c||c.length<2||tr.querySelector('th'))continue
-// T13 的門檻與 T2 的 Current／Worst 都是十進位顯示（見 T13 的 Threshold 欄）。
-let id=parseInt(c[0].textContent.trim(),10),t=parseInt(String(c[1].textContent).trim(),10)
-if(isFinite(id)&&isFinite(t))thr[id]=t
+if(i13>=0){
+// 直接讀原始位元組，不渲染：offset 2 起每 12 位元組一格、30 格，byte 0 = ID、byte 1 = 門檻，ID 0 是空格
+let F13=_AlRecOff(i13),lim=Math.min(A.length,F13+(ArIx[i13*2+1]||0))
+for(let i=0;i<30;i++){let o=F13+2+i*12;if(o+2>lim)break;let id=A[o]*1;if(id)thr[id]=A[o+1]*1}
 }
-}catch(e){}
 _T13Cache={file:CurFile,map:thr}
-if(Tx!==saveTx||HdrView!==saveHdr||AlertView!==saveAl){Tx=saveTx;HdrView=saveHdr;AlertView=saveAl;try{DpFl()}catch(e){}}
 return thr}
 
 // 依欄名找欄位索引：T2 加了 Threshold 欄後索引會位移，不能寫死。
@@ -1537,14 +1530,22 @@ _ColIdx=name=>{let h=Q('#rTab tr')[0];if(!h)return -1;return Array.from(h.queryS
 // ── 讀取用的探針：把某個 template 渲染出來，在渲染狀態下跑 fn（可讀 A／F 原始位元組，
 // 也可讀 #rTab），回傳 fn 的結果。F1 讀 File 1；F2 仿 CmpRenderTable 的切換方式借 File 2
 // 的資料渲染，跑完把全域放回 File 1。呼叫端（ComputeAlerts）最後會把畫面整個放回原狀。
-_AlProbeF1=(t,fn)=>{let ti=_AlIdx(t);if(ti<0)return null;try{Tx=ti;DpFl();return fn()}catch(e){return null}}
-_AlProbeF2=(t,fn)=>{
+// 記錄在 A 裡的起點（與 DpFl 同一套算法：優先用檔頭宣告的絕對偏移，否則累加長度），
+// 讓只讀原始位元組的讀取器不必渲染就拿到 F。
+_AlRecOff=ti=>{
+let Fx=From;for(let ii=0;ii<ti;ii++)Fx+=ArIx[ii*2+1]
+let off=(typeof ArIx2!=='undefined'&&ArIx2&&ArIx===ArIx2&&typeof ArOff2!=='undefined'&&ArOff2)?ArOff2:(typeof ArOff!=='undefined'?ArOff:null)
+if(off&&off[ti]>=From&&off[ti]<(_LastRawBytes?_LastRawBytes.length:Infinity))Fx=off[ti]
+return Fx-From}
+// raw=true：fn 只讀 A／F／ArIx／Tx，不渲染（快 10 倍以上）；否則以探針模式渲染一次讓 fn 讀 #rTab
+_AlProbeF1=(t,fn,raw)=>{let ti=_AlIdx(t);if(ti<0)return null;let saveF=F,saveTx=Tx,saveP=_Probe;try{Tx=ti;if(raw)F=_AlRecOff(ti);else{_Probe=true;DpFl()}return fn()}catch(e){return null}finally{_Probe=saveP;if(raw){F=saveF;Tx=saveTx}}}
+_AlProbeF2=(t,fn,raw)=>{
 if(!A2||!ArIx2)return null
 let fi2=ArIx2.findIndex((v,i)=>i%2===0&&v===t);if(fi2<0)return null
-let saveA=A,saveArIx=ArIx,saveFrom=From,saveT=T,saveM=M,saveGp=Gp,saveF=F,saveTx=Tx
+let saveA=A,saveArIx=ArIx,saveFrom=From,saveT=T,saveM=M,saveGp=Gp,saveF=F,saveTx=Tx,saveP=_Probe
 let out=null
-try{A=A2;ArIx=ArIx2;From=From2;Tx=fi2/2;DpFl();out=fn()}catch(e){out=null}
-A=saveA;ArIx=saveArIx;From=saveFrom;T=saveT;M=saveM;Gp=saveGp;F=saveF;Tx=saveTx
+try{A=A2;ArIx=ArIx2;From=From2;Tx=fi2/2;if(raw)F=_AlRecOff(Tx);else{_Probe=true;DpFl()}out=fn()}catch(e){out=null}
+_Probe=saveP;A=saveA;ArIx=saveArIx;From=saveFrom;T=saveT;M=saveM;Gp=saveGp;F=saveF;Tx=saveTx
 return out}
 // 目前渲染中的記錄的位元組上限（不越過記錄長度，也不越過檔尾）
 _AlRecEnd=()=>Math.min(A.length,F+(ArIx[Tx*2+1]||0))
@@ -1576,7 +1577,7 @@ if(_AlIdx(2)<0||_AlIdx(13)<0)return out
 let thr=_T13Thr()
 let saveTx=Tx,saveHdr=HdrView,saveAl=AlertView
 HdrView=false;AlertView=false
-let t2=_AlProbeF1(2,_AlT2Read)
+let t2=_AlProbeF1(2,_AlT2Read,true)
 Tx=saveTx;HdrView=saveHdr;AlertView=saveAl
 if(!t2||t2.corrupt)return out
 Object.keys(t2.attrs).map(Number).sort((a,b)=>a-b).forEach(id=>{
@@ -1595,7 +1596,7 @@ return out}
 _AlSmartDelta=()=>{
 let out=[]
 if(!A2||!ArIx2||_AlIdx(2)<0)return out
-let prev=_AlProbeF1(2,_AlT2Read),cur=_AlProbeF2(2,_AlT2Read)
+let prev=_AlProbeF1(2,_AlT2Read,true),cur=_AlProbeF2(2,_AlT2Read,true)
 if(!prev||!cur||prev.corrupt||cur.corrupt)return out
 AlSmartRawIds.forEach(id=>{
 let a=cur.attrs[id],b=prev.attrs[id]
@@ -1711,7 +1712,7 @@ _AlSt=e=>Number(e.split(':')[1])
 // template_sata_summary_comprehensive_error_log.py 偏移 452，都是 u16 LE）
 _AlT3ErrCount=()=>{let t=ArIx[Tx*2],off=t===3?500:452,lim=_AlRecEnd();if(F+off+2>lim)return null;return (A[F+off]*1)|((A[F+off+1]*1)<<8)}
 // 兩個檔案各自依平台優先序 T3 > T12 > T11 取第一個有的
-_AlDevErrCount=probe=>{for(const t of [3,12,11]){let v=probe(t,_AlT3ErrCount);if(v!=null)return {t,v}}return null}
+_AlDevErrCount=probe=>{for(const t of [3,12,11]){let v=probe(t,_AlT3ErrCount,true);if(v!=null)return {t,v}}return null}
 // T104 目前持有的錯誤項目數：64 位元組一筆、最多 256 筆，Error Count（前 8 位元組）非零才算，遇到零就停
 _AlT104Count=()=>{let lim=_AlRecEnd(),n=0;if(F+64>lim)return null;for(let i=0;i<256;i++){let s=F+i*64;if(s+64>lim)break;let nz=false;for(let k=0;k<8;k++)if(A[s+k]*1){nz=true;break}if(!nz)break;n++}return n}
 
@@ -1724,7 +1725,7 @@ let rd={15:_AlT15Entries,105:_AlT105Entries,309:_AlT309Entries,311:_AlT311Entrie
 AlertListRules.forEach(r=>{
 if(r.intf&&r.intf!==intf)return
 if(!_AlHas(r.tmpl))return
-let prev=_AlProbeF1(r.tmpl,rd[r.tmpl]),cur=_AlProbeF2(r.tmpl,rd[r.tmpl])
+let prev=_AlProbeF1(r.tmpl,rd[r.tmpl],true),cur=_AlProbeF2(r.tmpl,rd[r.tmpl],true)
 if(prev==null||cur==null)return
 let hits=[]
 if(r.kind==='t15')hits=_AlT15New(cur,prev)
@@ -1740,14 +1741,14 @@ if(r.intf&&r.intf!==intf)return
 let c1=null,c2=null,tmpl=r.tmpl,what=''
 if(r.glist){
 if(!_AlHas(r.tmpl))return
-c1=_AlProbeF1(r.tmpl,_AlGlistCount);c2=_AlProbeF2(r.tmpl,_AlGlistCount);what='GList declared defects'
+c1=_AlProbeF1(r.tmpl,_AlGlistCount,true);c2=_AlProbeF2(r.tmpl,_AlGlistCount,true);what='GList declared defects'
 }else if(r.raw==='t3'){
 let p1=_AlDevErrCount(_AlProbeF1),p2=_AlDevErrCount(_AlProbeF2)
 if(!p1||!p2)return
 c1=p1.v;c2=p2.v;tmpl=p1.t;what='Device error count (T'+p1.t+')'
 }else if(r.raw==='t104'){
 if(!_AlHas(r.tmpl))return
-c1=_AlProbeF1(r.tmpl,_AlT104Count);c2=_AlProbeF2(r.tmpl,_AlT104Count);what='Error log entries held'
+c1=_AlProbeF1(r.tmpl,_AlT104Count,true);c2=_AlProbeF2(r.tmpl,_AlT104Count,true);what='Error log entries held'
 }
 if(c1==null||c2==null)return
 if(c2-c1>0)out.push({key:r.key,tmpl:tmpl,name:r.name,value:c2,ref:c1,desc:what+' +'+(c2-c1)+' ('+c1+' → '+c2+')'})
@@ -1789,9 +1790,9 @@ if(_AlCache.file===CurFile&&_AlCache.list)return _AlCache.list
 if(_AlBusy)return []
 _AlBusy=true
 let intf=_AlIntf(),list=[]
-let saveTx=Tx,saveHdr=HdrView,saveAl=AlertView
+let saveTx=Tx,saveHdr=HdrView,saveAl=AlertView,saveP=_Probe
 try{
-HdrView=false;AlertView=false
+HdrView=false;AlertView=false;_Probe=true
 let byT={}
 AlertRules.forEach(r=>{
 if(r.delta)return
@@ -1831,11 +1832,13 @@ if(v2-v1>0)list.push({key:r.key,tmpl:r.tmpl,name:r.name,value:v2,ref:v1,desc:R.c
 list=list.concat(_AlSmartDelta(),_AlListAlerts())
 }
 }catch(e){}
+_Probe=saveP
 // 快取必須在放回畫面之前寫入：放回畫面會觸發 DpAlerts，它得拿到快取而不是再算一次。
 _AlCache={file:CurFile,list:list}
 _AlBusy=false
 Tx=saveTx;HdrView=saveHdr;AlertView=saveAl
-try{DpFl();if(A2&&!HdrView&&!AlertView)CmpRenderTable();_PostSelfTest();_PostSmart();SrchHighlight();AlertHighlight()}catch(e){}
+// 掃描只在評估條件（_ScanEval）時不放回畫面：不符合的檔案根本不會顯示，符合的由掃描步驟自己渲染
+if(!_ScanEval)try{DpFl();if(A2&&!HdrView&&!AlertView)CmpRenderTable();_PostSelfTest();_PostSmart();SrchHighlight();AlertHighlight()}catch(e){}
 return list}
 _AlEvalRow=(r,R)=>{
 let val=_SrchRowVal(R,'')
@@ -2089,15 +2092,24 @@ qr+="</tr>"
 W(G('rTab'),qr)
 }
 
+// 掃描評估模式（_ScanEval）：掃描步驟先解碼、評估搜尋條件，通過了才渲染畫面。
+// 以前每個檔案都先渲染一次目前頁面（有 Alerts 頁時連告警引擎都跑），再判定要不要留，
+// 不符合的檔案等於白渲染一次還在畫面上閃一下。
+_ScanEval=false
+// 探針模式（_Probe）：告警引擎與搜尋只需要 #rTab 裡的解碼表，標題、十六進位 512 格、
+// 偏移標籤、GDPR 說明都不用；掃描時每個檔案要渲染 8–10 次，這些是最大的浪費。
+_Probe=false
 DpFl=z=>{
 if(AlertView){DpAlerts();return}
 if(HdrView){DpHdr();return}
 if(!ArIx||!ArIx.length){W(G('tmpl'),'(no templates)');W(G('tmplName'),'');W(G('err'),'');W(G('ruSide'),'');W(G('rdSide'),'');return}
-BuildTitle()
+if(!_Probe)BuildTitle()
 let x=ArIx[Tx*2],len,ii=0,i,j,k,kr,qr,qd
 if(x===undefined){W(G('tmpl'),'(invalid)');W(G('tmplName'),'');return}
+if(!_Probe){
 W(G('tmpl'),'Template '+x)
 W(G('tmplName'),'T'+x+' '+(TmplNames[x]||'')+' ('+(ArIx[Tx*2+1]||0).toLocaleString()+' bytes)')
+}
 const gdprNotes={
 1:'&#128274; GDPR: Words 10-19 (Serial Number) cleared; Words 109 bit 0 &amp; Words 110-111 (WWN Unique ID) cleared, IEEE OUI kept.',
 18:'&#128274; GDPR: Bytes 56-71 (World Wide Name) cleared.',
@@ -2109,7 +2121,7 @@ const gdprNotes={
 335:'&#128274; GDPR: Parameter Code 0001h — Bytes 20-35 (Serial Number) cleared; Bytes 36-51 (World Wide Name) cleared.'
 }
 let gdprN=gdprNotes[x]
-W(G('err'),gdprN?`<div style='font-size:11px;color:#777;background:#fafafa;border:1px solid #e0e0e0;border-radius:3px;padding:3px 8px;margin-bottom:2px'>${gdprN}</div>`:'')
+if(!_Probe)W(G('err'),gdprN?`<div style='font-size:11px;color:#777;background:#fafafa;border:1px solid #e0e0e0;border-radius:3px;padding:3px 8px;margin-bottom:2px'>${gdprN}</div>`:'')
 Fx=From
 for(;ii<Tx;ii++){
 len=ArIx[ii*2+1]
@@ -2119,8 +2131,7 @@ Fx+=len
 // 借 File 2 渲染（ArIx 指向 ArIx2）時用 File 2 自己的偏移表
 let _off=(typeof ArIx2!=='undefined'&&ArIx2&&ArIx===ArIx2&&typeof ArOff2!=='undefined'&&ArOff2)?ArOff2:(typeof ArOff!=='undefined'?ArOff:null)
 if(_off&&_off[Tx]>=From&&_off[Tx]<(_LastRawBytes?_LastRawBytes.length:Infinity))Fx=_off[Tx]
-SetTH(1,Fx%16,ArIx[Tx*2+1])
-W(G('offset'),U(Fx,2))
+if(!_Probe){SetTH(1,Fx%16,ArIx[Tx*2+1]);W(G('offset'),U(Fx,2))}
 F=Fx-From
 LenT=T>29?Math.min(ArIx[ii*2+1],H2D(F+3,-1)+4):ArIx[ii*2+1]
 Cpage=Math.ceil(ArIx[ii*2+1]/512)
@@ -2139,11 +2150,13 @@ for(j=0;j<ArT.length;j++){if(ArT[j]==ArIx[ii*2])break}
 T=j+1
 return
 }
+if(!_Probe){
 Q('#lTab td:not(.adr)').forEach((e,i)=>{
 W(e,U(A[F+i]*1,1))
 if(((x==11||x==12)&&(i-i%2)==452||x==3&&(i-i%2)==500||x==101&&i==262))W(e,'<c>'+e.innerHTML+'</c>')
 })
 Q('#lTab td.adr').forEach((e,i)=>W(e,U(i*16,2)))
+}
 ArRange=[]
 for(j=0;j<ArT.length;j++){if(ArT[j]==ArIx[ii*2])break}
 T=j+1
@@ -3860,7 +3873,10 @@ let ScanEntries=[],ScanIdx=0,ScanTimer=null,ScanTimerRAF=false,ScanActive=false,
     _ScanLifetimeDisplayed=0,_ScanLifetimeRuns=0,
     _ScanStartTime=0,_ScanElapsedTimer=null,_ScanWalkLastYield=0,_ScanLastStepTime=0,TrueFileSize=0,_lastStatusUpdate=0,
     _ZipCacheHandle=null,_ZipCacheFile=null,_ZipCacheDir=null
-_ScanClearTimer=()=>{if(ScanTimer!==null){if(ScanTimerRAF)cancelAnimationFrame(ScanTimer);else clearTimeout(ScanTimer);ScanTimer=null;ScanTimerRAF=false}}
+// 全速模式的連續處理：沒有顯示任何東西的步驟（被略過的檔案）不等下一幀，直接以微任務接著跑，
+// 每 40 ms 才讓瀏覽器畫一次；_ScanGen 讓 Stop 能作廢還沒跑的微任務。
+_ScanLastShown=false;_ScanYieldAt=0;_ScanGen=0
+_ScanClearTimer=()=>{_ScanGen++;if(ScanTimer!==null){if(ScanTimerRAF)cancelAnimationFrame(ScanTimer);else clearTimeout(ScanTimer);ScanTimer=null;ScanTimerRAF=false}}
 // Clearly highlights whichever scan-navigation button (s0-s4) is currently the
 // active direction, clearing it from all the others. Pass null/undefined when
 // nothing is actively auto-playing (paused, stopped, or single-stepped).
@@ -4457,11 +4473,11 @@ for(let t of Object.keys(byT)){
 let idx=ArIx.findIndex((v,i)=>i%2===0&&v===Number(t))
 // 要比對某一列的值，檔案就必須真的有這個 template。
 if(idx<0){ok=false;break}
-if(Tx!==idx/2){Tx=idx/2;DpFl()}
+if(Tx!==idx/2){Tx=idx/2;let sp=_Probe;_Probe=true;try{DpFl()}finally{_Probe=sp}}
 if(!byT[t].every(_SrchRowOk)){ok=false;break}
 }
 }catch(e){ok=false}
-if(Tx!==saveTx){Tx=saveTx;try{DpFl()}catch(e){}}
+if(Tx!==saveTx){Tx=saveTx;if(!_ScanEval)try{DpFl()}catch(e){}}
 return ok}
 
 // Marks the rows that satisfied a condition for whatever template is on screen.
@@ -5082,6 +5098,7 @@ _ScanStep(1)
 // ── Unified directional scan step (dir=+1 forward, dir=-1 backward) ─────────
 _doScanStepDir=async(dir=1)=>{
 _ScanLastStepTime=Date.now()
+_ScanLastShown=false
 if(!ScanActive&&!ScanStepMode)return null
 if(!ScanEntries.length)return null
 // ScanEntries is pre-filtered (see the filtering pass in ScanEnsureReady) — every
@@ -5149,10 +5166,17 @@ CurFile2=entry.name;DcFl0_2(buf)
 }else{
 CurFile=entry.name;_SetFileLabel(entry.name)
 if(ScanRawT>=0)PrevRawT=ScanRawT
+// 有要解碼後才能判定的條件（template 數值、Alerts）時，先解碼不顯示；條件通過才渲染畫面。
+let evalOnly=Srch.on&&(_SrchTmplConds().length>0||_SrchAlertConds().length>0)
+_ScanEval=evalOnly
+try{
 try{DcFl0(buf)}catch(e){ok=false}
 // The table now holds this file, so the value condition can be read off it.
 // Failing here costs a decode, which is why the header condition runs first.
+// _ScanEval 要維持到條件評估結束：ComputeAlerts 才不會替一個馬上要被丟掉的檔案把畫面渲染回來。
 if(ok&&!SrchValueOk()){ok=false;entry.srchMatch=false}
+}finally{_ScanEval=false}
+if(ok&&evalOnly){try{DpFl();if(A2&&!HdrView&&!AlertView)CmpRenderTable();_PostSelfTest();_PostSmart();SrchHighlight();AlertHighlight()}catch(e){}}
 // 命中了就把畫面切到條件所在的頁面，讓被標示的那一列直接出現在眼前——
 // 否則掃描會停在使用者開始掃描時看的那個 template，符合的列在別頁。
 if(ok&&Srch.on){
@@ -5197,6 +5221,7 @@ if(!ScanActive||_now-_lastStatusUpdate>=100){
 _lastStatusUpdate=_now
 W(G('nVer'),`▶ [${seqNum.toLocaleString()}/${ScanTotal.toLocaleString()} matches, ${ScanExaminedCount.toLocaleString()} scanned]${' '+(_IntfLabel[ScanIntf]||ScanIntf)}${modeLabel}${speedNote}${srchNote}`)
 }
+_ScanLastShown=true
 if(ScanActive)_ScanScheduleNext()
 return true
 }
@@ -5231,6 +5256,12 @@ _ScanScheduleNext=()=>{
 _ScanClearTimer()
 let delayMs=Number(G('revSpeed').value)*1000
 if(delayMs<=150){
+if(!_ScanLastShown&&performance.now()-_ScanYieldAt<40){
+// 這一步沒碰畫面：同一個時間片內直接接著處理下一個檔案
+let gen=++_ScanGen;ScanTimerRAF=true;ScanTimer=null
+Promise.resolve().then(()=>{if(gen===_ScanGen&&ScanActive)_doScanStepDir(ScanDirection)})
+return
+}
 // Full speed: pace to the browser's paint cycle instead of a fixed timer.
 // This always yields for input/rendering, so it can't freeze the tab, but runs
 // as fast as this machine can decode+render each file — usually well under 0.1s/file.
@@ -5243,9 +5274,9 @@ if(_ScanStepCount%20===0){
 // which looks exactly like a frozen display even though the scan is
 // genuinely still progressing underneath.
 ScanTimerRAF=false
-ScanTimer=setTimeout(()=>_doScanStepDir(ScanDirection),0)
+ScanTimer=setTimeout(()=>{_ScanYieldAt=performance.now();_doScanStepDir(ScanDirection)},0)
 }else{
-ScanTimerRAF=true;ScanTimer=requestAnimationFrame(()=>_doScanStepDir(ScanDirection))
+ScanTimerRAF=true;ScanTimer=requestAnimationFrame(()=>{_ScanYieldAt=performance.now();_doScanStepDir(ScanDirection)})
 }
 }else{
 ScanTimerRAF=false;ScanTimer=setTimeout(()=>_doScanStepDir(ScanDirection),delayMs)
