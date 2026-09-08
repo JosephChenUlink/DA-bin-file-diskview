@@ -156,7 +156,7 @@ body.guideOpen #guideDoc{overflow:visible;padding:0}
   <span style='display:flex;align-items:center;gap:8px'>
   <span id='scanElapsed' title='Time elapsed since the current scan started (resets on each Scan click)' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
   <span id='lifetimeStats' title='How many times a template has been displayed while stepping/playing through results, across all Scan clicks this session' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
-  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260907p</span>
+  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260907q</span>
   </span>
 </div>
 <input id='local'type='file'style='display:none'onchange='OpFl()'>
@@ -268,7 +268,7 @@ body.guideOpen #guideDoc{overflow:visible;padding:0}
 <p>Two counters sit near the version badge: <b>elapsed time</b> since you clicked Scan, and <b>Displayed</b>, how many templates you have viewed since that click.</p>
 <p>The interface you chose is remembered for the next Scan. In <b>Chrome</b> and <b>Edge</b> the folder is remembered too, across sessions: the interface prompt shows the last folder and reuses it unless you tick <i>Choose a different folder</i> (the browser may ask once per session to confirm access). In other browsers Scan works exactly the same way, but asks you to choose the folder each time.</p>
 <p><b>Scan once or loop.</b> The interface prompt also asks whether to scan the folder once or loop; the <b>&#8635; loop</b> button in the scan controls switches it during a scan. When looping is off the scan stops at the end of the folder (or at the start, going backwards) with a summary, and pressing the same direction again starts over.</p>
-<p><b>Which template each file opens on.</b> Without a search, every file opens on the template you are viewing (or the Header / Alerts page if that is what you chose). With a search, the panel's <i>On a match show</i> setting decides whether a matching file jumps to the matching template (an alert's template, the Alerts page, or the Header) or stays on the template you are viewing; non-matching files are never shown while stepping through matches.</p>
+<p><b>Which template each file opens on.</b> Without a search, every file opens on the template you are viewing (or the Header / Alerts page if that is what you chose). With a search, the panel's <i>On a match show</i> setting decides whether a matching file jumps to the matching template (an alert's template, the Alerts page, or the Header) or stays on the template you are viewing. With <b>&#10004; only</b> off, every file is still shown on the template you are viewing and matches are counted and marked; with it on, only matching files are shown.</p>
 <p><b>Matches only.</b> With a search applied, a <b>&#10004; only</b> toggle appears in the scan controls. Switch it on and each step goes straight to the next file that matches the search, skipping the rest; switch it off to step through every file again. Files already judged are remembered, so stepping back and forth is quick.</p>
 <p><b>Scan with Compare</b> is a useful pairing: turn on Compare during a scan and each new capture is measured against the one you started from.</p>
 <p class='note'>Scan reads the folder directly from your computer. As with everything else here, no file is uploaded.</p>
@@ -4250,6 +4250,7 @@ _doScanStepDir(-1)
 ScanStop=()=>{
 ScanCollectAbort=true
 _ScanClearTimer()
+_ScanRestoreShown()
 if(_ScanElapsedTimer){clearInterval(_ScanElapsedTimer);_ScanElapsedTimer=null}
 ScanActive=false;ScanStepMode=false;ScanBinList=[];ScanEntries=[];_PickResumeMode=null
 _SaveLifetimeStats(true)
@@ -4287,6 +4288,13 @@ let ScanEntries=[],ScanIdx=0,ScanTimer=null,ScanTimerRAF=false,ScanActive=false,
 // 全速模式的連續處理：沒有顯示任何東西的步驟（被略過的檔案）不等下一幀，直接以微任務接著跑，
 // 每 40 ms 才讓瀏覽器畫一次；_ScanGen 讓 Stop 能作廢還沒跑的微任務。
 _ScanLastShown=false;_ScanYieldAt=0;_ScanGen=0
+// 只看命中模式下，被略過的檔案已經解碼（檔名、檔頭、記憶體裡都是它）但畫面沒更新。
+// 掃描停下來時把最後顯示過的檔案重新載入，讓畫面與資料一致。
+_ScanDispDirty=false;_ScanShownBuf=null;_ScanShownName=null
+_ScanRestoreShown=()=>{
+if(!_ScanDispDirty||!_ScanShownBuf)return
+_ScanDispDirty=false
+try{_ScanLoading=true;CurFile=_ScanShownName;_SetFileLabel(_ScanShownName);_ScanApplyTargetView();DcFl0(_ScanShownBuf)}catch(e){}finally{_ScanLoading=false}}
 // 掃描的目標檢視：ScanRawT >= 0 是 template 編號（DcFl 用 PrevRawT 在新檔案裡找同一個 template），
 // -1 是 Header 頁，-2 是 Alerts 頁。每一步顯示前都套用一次。
 _ScanApplyTargetView=()=>{
@@ -4314,6 +4322,7 @@ ScanLoopToggle=()=>{ScanLoopSet(!ScanLoop);if(ScanLoop&&_ScanDone){_ScanDone=fal
 _ScanLoopUI=()=>{let b=G('s6');if(!b)return;b.style.background=ScanLoop?'#ffd966':'';b.style.fontWeight=ScanLoop?'bold':'';b.style.borderRadius=ScanLoop?'3px':'';b.title=ScanLoop?'Loop is on: the scan starts over at the end of the folder. Click to scan once and stop at the end.':'Scan once: the scan stops at the end of the folder. Click to loop.'}
 _ScanFinish=dir=>{
 _ScanClearTimer();ScanActive=false;ScanStepMode=true;_SetScanBtn(null);_ScanDone=true
+_ScanRestoreShown()
 let srch=Srch.on?` \u2714 ${SrchHits.toLocaleString()} matched of ${SrchTested.toLocaleString()} tested`:''
 W(G('nVer'),(dir>0?'\u25a0 End of folder':'\u25a0 Start of folder')+` \u2014 ${ScanTotal.toLocaleString()} files, ${ScanMatchedCount.toLocaleString()} shown so far${srch}. Loop is off: press ${dir>0?'\u23ed / \u23e9':'\u23ee / \u23ea'} again to start over, or switch \u21bb loop on.`)}
 ScanOnlyToggle=()=>{ScanOnlyMatches=!ScanOnlyMatches;try{localStorage.setItem('dv_scanOnly',ScanOnlyMatches?'1':'0')}catch(e){}_ScanOnlyUI()}
@@ -4331,6 +4340,7 @@ if(r){shown=true;break}
 tried++
 if(tried%25===0)W(G('nVer'),`\u23ed skipping non-matching files\u2026 ${tried.toLocaleString()} checked`)
 }
+if(!shown)_ScanRestoreShown()
 if(!shown&&ScanEntries.length&&!_ScanDone)W(G('nVer'),`No other file matches the search (${SrchHits.toLocaleString()} found of ${SrchTested.toLocaleString()} tested)`)
 return shown}
 
@@ -5494,7 +5504,7 @@ return true
 ScanClick=async()=>{
 if(ScanActive){
 // Stop auto scan
-ScanActive=false;_ScanClearTimer()
+ScanActive=false;_ScanClearTimer();_ScanRestoreShown()
 G('scanCtrl').style.display='inline-flex';G('scanBtn').style.display='none';_SetScanBtn(null)
 W(G('nVer'),'Scan stopped — use icons to resume')
 ScanStepMode=false;return
@@ -5572,13 +5582,19 @@ if(ScanActive)_ScanScheduleNext()
 return false
 }
 // 「檔案有沒有某個 template」在這裡就能判斷，完全不必讀檔。
+// 搜尋的兩種模式：「✔ only」開著才把不符合的檔案略過不顯示；關著就每個檔案都顯示在
+// 目前的 template 上（檔名、檔頭、表格永遠一致），搜尋只負責計數、標示與停在命中。
+let filt=Srch.on&&ScanOnlyMatches,srchNo=false,hit=false
 if(!A2&&Srch.on&&entry.templates&&!SrchTemplatesOk(entry.templates)){
 entry.srchMatch=false
 SrchTested++
 _SrchTick()
+if(filt){
 ScanIdx=k+1;if(ScanIdx>=ScanTotal)ScanIdx=ScanLoop?0:ScanTotal
 if(ScanActive)_ScanScheduleNext()
 return false
+}
+srchNo=true
 }
 let loadingTextTimer=setTimeout(()=>{
 W(G('nVer'),`⏳ Loading ${seqNum.toLocaleString()}/${ScanTotal.toLocaleString()}…`)
@@ -5600,8 +5616,8 @@ clearTimeout(loadingTextTimer)
 // not) — uses the buffer already read above rather than reading again.
 if(ok&&ScanRawT>=0&&!A2&&!entry.templates&&!_QuickCheckTemplate(buf,ScanRawT))ok=false
 // Header condition, on the bytes already in hand — rejects without decoding.
-if(ok&&!A2&&Srch.on){SrchTested++;_SrchTick()}
-if(ok&&!A2&&!SrchHeaderOk(buf)){ok=false;entry.srchMatch=false}
+if(ok&&!A2&&Srch.on&&!srchNo){SrchTested++;_SrchTick()}
+if(ok&&!A2&&Srch.on&&!srchNo&&!SrchHeaderOk(buf)){entry.srchMatch=false;srchNo=true;if(filt)ok=false}
 if(ok){
 _ScanLoading=true
 try{
@@ -5615,19 +5631,24 @@ if(ScanRawT>=0)PrevRawT=ScanRawT
 // 命中後的切換只影響那一個檔案，不會讓後面的檔案（或關掉搜尋以後）都停在 Alerts 頁。
 _ScanApplyTargetView()
 // 有要解碼後才能判定的條件（template 數值、Alerts）時，先解碼不顯示；條件通過才渲染畫面。
-let evalOnly=Srch.on&&(_SrchTmplConds().length>0||_SrchAlertConds().length>0)
+let needVal=Srch.on&&!srchNo&&(_SrchTmplConds().length>0||_SrchAlertConds().length>0)
+// 只看命中且要解碼後才能判定：先解碼不顯示，通過才渲染；否則直接顯示再判定（只為計數與標示）
+let evalOnly=needVal&&filt
 _ScanEval=evalOnly
 try{
 try{DcFl0(buf)}catch(e){ok=false}
 // The table now holds this file, so the value condition can be read off it.
 // Failing here costs a decode, which is why the header condition runs first.
 // _ScanEval 要維持到條件評估結束：ComputeAlerts 才不會替一個馬上要被丟掉的檔案把畫面渲染回來。
-if(ok&&!SrchValueOk()){ok=false;entry.srchMatch=false}
+if(ok&&needVal&&!SrchValueOk()){entry.srchMatch=false;srchNo=true;if(filt)ok=false}
 }finally{_ScanEval=false}
+if(evalOnly&&!ok)_ScanDispDirty=true   // 解碼了卻沒顯示：畫面還是上一個顯示的檔案，停下時要復原
 if(ok&&evalOnly){try{DpFl();if(A2&&!HdrView&&!AlertView)CmpRenderTable();_PostSelfTest();_PostSmart();SrchHighlight();AlertHighlight()}catch(e){}}
+if(ok){_ScanDispDirty=false;_ScanShownBuf=buf;_ScanShownName=entry.name}
+hit=ok&&Srch.on&&!srchNo
 // 命中了就把畫面切到條件所在的頁面，讓被標示的那一列直接出現在眼前——
 // 否則掃描會停在使用者開始掃描時看的那個 template，符合的列在別頁。
-if(ok&&Srch.on&&Srch.jump!==false){
+if(hit&&Srch.jump!==false){
 let tv=SrchTargetView()
 if(tv!=null){
 let cur=AlertView?-2:(HdrView?-1:Tx)
@@ -5646,12 +5667,12 @@ if(ScanActive)_ScanScheduleNext()
 return false
 }
 ScanMatchedCount++
-if(Srch.on){SrchHits++;if(!A2)entry.srchMatch=true}
+if(hit){SrchHits++;if(!A2)entry.srchMatch=true}
 _lastSrchTick=0
 SrchBadge()
 _ScanLifetimeDisplayed++
 _SaveLifetimeStats()
-if(Srch.on&&Srch.stop&&ScanActive){
+if(hit&&Srch.stop&&ScanActive){
 // Hold on the match so it can be inspected. Stepping and Play still work from
 // here, so the scan can be continued by hand.
 _ScanClearTimer();ScanActive=false;ScanStepMode=true
@@ -5663,7 +5684,7 @@ W(G('lifetimeStats'),`Displayed: ${_ScanLifetimeDisplayed.toLocaleString()} (${_
 ScanIdx=k+1;if(ScanIdx>=ScanTotal)ScanIdx=ScanLoop?0:ScanTotal
 let modeLabel=(ScanStepMode?(dir<0?' ◀ Back':' ▶ Step'):'')
 let speedNote=(ScanActive&&ScanTimerRAF)?' ⚡full speed':''
-let srchNote=Srch.on?` \u2714 ${SrchHits.toLocaleString()} found of ${SrchTested.toLocaleString()} tested`:''
+let srchNote=Srch.on?` \u2714 ${SrchHits.toLocaleString()} found of ${SrchTested.toLocaleString()} tested${ScanOnlyMatches?' (matches only)':''}`:''
 let _now=Date.now()
 if(!ScanActive||_now-_lastStatusUpdate>=100){
 _lastStatusUpdate=_now
