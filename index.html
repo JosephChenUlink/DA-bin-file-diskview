@@ -46,7 +46,7 @@ input,select{font-family:inherit}
 g{background:#90EE90}
 .cyan,#adv button,#host{background:#e3f3fd}
 #rTab tr.latestEntry td{background:#fff3cd}
-#tmpl{display:inline-block;min-width:140px;text-align:center}
+#tmpl{display:inline-block;width:140px;min-width:140px;max-width:140px;text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 #cmpBtn{display:inline-block;min-width:78px;text-align:center}
 #scanWrap{display:inline-flex;align-items:center;min-width:172px}
 #scanBtn{width:172px;text-align:center}
@@ -72,16 +72,16 @@ td button:not(.nbtn),th button{width:20px;height:20px}
 #rTab tr.alertHit>td{background:#fdecec}
 #rTab tr.alertHit>td:first-child{box-shadow:inset 3px 0 0 #c00;padding-left:6px}
 #rTab tr.alRow:hover>td{background:#f2f7fc}
-/* 掃描狀態與資料夾標籤每一步長度都不同。它們以前會把右邊的 Search 按鈕推來推去、
-   長了還會折行把工具列撐高；搜尋面板貼著 Search 按鈕定位，於是整個面板跟著每一步跳動。
-   改成：狀態文字單行、超出就省略號、可縮不可推；Search 靠 margin-left:auto 釘在右緣。 */
-#nVer{flex:1 1 auto;min-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-#fileLabel{flex:0 1 260px!important;min-width:110px}
-#scanFolderLabel{flex:0 1 auto;min-width:0;max-width:26vw;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-#scanFolderChg{flex-shrink:0;white-space:nowrap}
+/* 按鈕列上的每個元件都是固定寬度，掃描時每一步的檔名、template 名稱、狀態長短都不會推動
+   任何按鈕，滑鼠可以停在同一點連按。會變長變短的資訊（掃描狀態、告警數、搜尋命中數、
+   資料夾）全部放到下面獨立的一列 #infoRow，超出就省略號。Search 靠 margin-left:auto 釘在右緣。 */
+#infoRow{display:flex;align-items:center;gap:12px;padding:0 6px 3px;min-height:18px;font-size:12px;white-space:nowrap;overflow:hidden}
+#infoRow #nVer{font-weight:bold;color:#1a5fa8;flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis}
+#infoRow #scanFolderLabel{font-size:11px;color:#555;flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis}
+#infoRow #scanFolderChg{font-size:11px;flex-shrink:0}
 #srchWrap{position:relative;display:inline-block;flex-shrink:0;margin-left:auto}
 #srchBtn{padding:3px 10px;font-size:12px;cursor:pointer}
-#srchOn{font-size:11px;color:#1a5fa8;margin-left:4px;font-weight:bold}
+#srchOn{font-size:11px;color:#1a5fa8;font-weight:bold;flex-shrink:0}
 /* Anchored to the wrapper's right edge, not its left: the Search button sits at
    the far right of the toolbar, so a left-anchored panel ran off the screen and
    clipped the value box, the hint and the mode radios. Opening leftward keeps it
@@ -156,7 +156,7 @@ body.guideOpen #guideDoc{overflow:visible;padding:0}
   <span style='display:flex;align-items:center;gap:8px'>
   <span id='scanElapsed' title='Time elapsed since the current scan started (resets on each Scan click)' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
   <span id='lifetimeStats' title='How many times a template has been displayed while stepping/playing through results, across all Scan clicks this session' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
-  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260907i</span>
+  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260907j</span>
   </span>
 </div>
 <input id='local'type='file'style='display:none'onchange='OpFl()'>
@@ -164,8 +164,8 @@ body.guideOpen #guideDoc{overflow:visible;padding:0}
 <div style='display:flex;align-items:center;gap:4px;padding:3px 6px;flex-wrap:nowrap;min-width:0'>
 <button onclick="OpFlPick()" title="Select File to View" style='flex-shrink:0;background:#1a5fa8;color:#fff;border:1px solid #0d3d6e;padding:3px 10px;font-size:13px;cursor:pointer;border-radius:3px'>File</button><span id='fileLabel' style='flex:0 0 260px;padding:2px 8px;border:1px solid #999;background:#fff;font-size:12px;color:#555;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:middle'>No file chosen</span>&nbsp;<button onclick='ShowGuide()' title='Open the user guide' style='flex-shrink:0;padding:3px 10px;font-size:12px;cursor:pointer'>Guide</button><button id='alBack' onclick='AlertBack()' style='display:none;margin-left:4px;font-size:12px;padding:3px 10px;cursor:pointer;color:#a00' title='Back to the Alerts page'>&#9664; Alerts</button>
 <span id='adv'style='display:none;flex-shrink:0;align-items:center;gap:2px'><button onclick='Adv(-1)' title="Previous Template">-</button><button id='tmpl'onclick='List()'></button><button onclick='Adv(1)' title="Next Template">+</button>&nbsp;<button id='revBtn'onclick='ToggleReview()' title="Play Templates">Play</button><span id='revSpeedWrap'>&nbsp;Speed:&nbsp;<input type='range'id='revSpeed'min='0.05'max='5'step='0.05'value='1'oninput='RevSpeedChange()'style='vertical-align:middle;width:90px'>&nbsp;<span id='revSpeedLbl'style='display:inline-block;width:30px'>1.0s</span></span>&nbsp;<span id='scanWrap'><span id='scanCtrl' style='display:none;gap:1px'><button id='s0'onclick='ScanStepBackClick()' title="Step backward">&#9198;</button><button id='s1'onclick='ScanPlayBack()' title="Play backward">&#9194;</button><button id='s2'onclick='ScanStop()' title="Stop">&#9209;</button><button id='s3'onclick='ScanPlayFwd()' title="Play forward">&#9193;</button><button id='s4'onclick='ScanStepClick()' title="Step forward">&#9197;</button><button id='s5'onclick='ScanOnlyToggle()' title="Matches only: step and play through the files that match the search and skip the rest. Click again to go back to every file." style='display:none;width:auto;padding:0 6px;margin-left:3px'>&#10004; only</button></span><button id='scanBtn'onclick='ScanSetup()' title="Scan all .bin files in the selected folder and its subfolders" style='display:inline'>Scan</button></span>&nbsp;<button id='cmpBtn' onclick='CmpToggle()' title="Compare the Templates">Compare</button>&nbsp;<button onclick='GetPDF()' title="Download PDF File">PDF</button><button onclick='DlBin()' title="Save the .bin file currently shown">Save .bin</button><button onclick='SaveFl()'id='btn8'hidden>&#11015;</button></span>
-<button id='host'hidden></button>&nbsp;<span id='nVer'style='font-size:12px;font-weight:bold;color:#1a5fa8'></span>&nbsp;<span id='scanFolderLabel'style='font-size:11px;color:#555'></span><span id='scanFolderChg' style='display:none;font-size:11px;margin-left:5px' title='Scan a different folder'><a href='#' onclick='ScanChangeFolder(event)'>change</a></span>
-<span id='srchWrap'><button id='srchBtn' onclick='SrchToggle(event)' title='Only show files matching a condition'>Search</button><span id='srchOn' style='display:none'></span>
+<button id='host'hidden></button>
+<span id='srchWrap'><button id='srchBtn' onclick='SrchToggle(event)' title='Only show files matching a condition'>Search</button>
 <div id='srchPanel'>
 <div class='srow'><b>Show only files where</b> <span class='shint'>all conditions hold</span>
 <span style='flex:1'></span><button id='srchX' onclick='SrchClose()' title='Close (Esc)'>&times;</button></div>
@@ -179,6 +179,9 @@ body.guideOpen #guideDoc{overflow:visible;padding:0}
 <button onclick='SrchClear()'>Clear</button> <button onclick='SrchApply()'><b>Apply</b></button></div>
 </div></span>
 </div>
+<!-- Everything whose length changes from step to step lives on its own line, so the
+     button row above never moves: scan status, alert count, search tally, folder. -->
+<div id='infoRow'><span id='nVer'></span><span id='srchOn' style='display:none'></span><span id='scanFolderLabel'></span><span id='scanFolderChg' style='display:none' title='Scan a different folder'><a href='#' onclick='ScanChangeFolder(event)'>change</a></span></div>
 <div id='cmpSummary'style='margin:6px 0'></div>
 <div id='dvTitle2'style='display:none'></div>
 <div id='dvTitle'style='font-weight:bold;font-size:14px;margin:0 0 6px 0'></div>
