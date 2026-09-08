@@ -156,7 +156,7 @@ body.guideOpen #guideDoc{overflow:visible;padding:0}
   <span style='display:flex;align-items:center;gap:8px'>
   <span id='scanElapsed' title='Time elapsed since the current scan started (resets on each Scan click)' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
   <span id='lifetimeStats' title='How many times a template has been displayed while stepping/playing through results, across all Scan clicks this session' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
-  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260907m</span>
+  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260907n</span>
   </span>
 </div>
 <input id='local'type='file'style='display:none'onchange='OpFl()'>
@@ -4631,8 +4631,10 @@ let b=G('srchOn')
 if(!b)return
 if(!Srch.on){b.style.display='none';W(b,'');return}
 b.style.display='inline'
-W(b,SrchTested?('\u2714 '+SrchHits.toLocaleString()+'/'+SrchTested.toLocaleString()):'\u25cf')
-b.title=SrchTested?(SrchHits.toLocaleString()+' of '+SrchTested.toLocaleString()+' files tested matched the conditions'):'Search armed'}
+// 命中統計之後帶上模式：命中時跳到條件所在的頁面，還是停在目前的 template。面板關著也看得到。
+let mode=Srch.jump!==false?'\u2192 matching template':'\u2192 current template'
+W(b,(SrchTested?('\u2714 '+SrchHits.toLocaleString()+'/'+SrchTested.toLocaleString()):'\u25cf')+" <span style='font-weight:normal;color:#555'>"+mode+"</span>")
+b.title=(SrchTested?(SrchHits.toLocaleString()+' of '+SrchTested.toLocaleString()+' files tested matched the conditions'):'Search armed')+'. On a match the scan '+(Srch.jump!==false?'jumps to the matching template (change this in the Search panel)':'stays on the template you are viewing (change this in the Search panel)')}
 
 // Pulls a comparable number out of a displayed cell. The viewer writes decoded
 // values in several shapes, so the order here matters: a thousands-separated
@@ -5173,7 +5175,7 @@ try{SrchHighlight()}catch(e){}}
 
 // 命中時要不要切到條件所在的 template（告警的 template／Alerts 頁／Header）。
 // 關掉就一律停在目前看的 template，只靠列的紅色標示看命中。
-SrchJump=v=>{Srch.jump=!!v;_SrchSave()}
+SrchJump=v=>{Srch.jump=!!v;_SrchSave();SrchBadge()}
 SrchMode=v=>{
 Srch.stop=!!v
 _SrchSave()
