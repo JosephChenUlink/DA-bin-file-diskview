@@ -156,7 +156,7 @@ body.guideOpen #guideDoc{overflow:visible;padding:0}
   <span style='display:flex;align-items:center;gap:8px'>
   <span id='scanElapsed' title='Time elapsed since the current scan started (resets on each Scan click)' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
   <span id='lifetimeStats' title='How many times a template has been displayed while stepping/playing through results, across all Scan clicks this session' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
-  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260907o</span>
+  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260907p</span>
   </span>
 </div>
 <input id='local'type='file'style='display:none'onchange='OpFl()'>
@@ -6148,6 +6148,19 @@ DcFl0(B642Buf(b64))
 if(Tx*2>=ArIx.length){Tx=0;DcFl()}
 W(G('nVer'),'')}
 InitLast()
+// 新版本提示：GitHub Pages 對 HTML 有 10 分鐘快取，重新整理常常拿到舊頁面而不自知。
+// 抓一個帶時間戳、不走快取的 version.txt 與徽章比對，有更新就在右上角提示；按 Reload
+// 會重新驗證主頁面。只在 http(s) 下做，本機開檔不抓。
+try{
+if(/^https?:/.test(location.protocol))fetch('version.txt?t='+Date.now(),{cache:'no-store'}).then(r=>r.ok?r.text():'').then(v=>{
+v=String(v||'').trim();let b=document.querySelector("[title='Build version']"),cur=b?b.textContent.trim():''
+if(!v||!cur||v<=cur)return
+let d=document.createElement('div');d.id='newVer'
+d.style.cssText='position:fixed;top:8px;right:8px;z-index:9998;background:#fff8dc;border:1px solid #d4a017;border-radius:4px;padding:6px 10px;font-size:12px;box-shadow:0 2px 8px rgba(0,0,0,.25)'
+d.innerHTML="A newer build is available: <b>"+v.replace(/[^0-9a-zA-Z.]/g,'')+"</b> (this page is "+cur+"). <button onclick='location.reload()' style='margin-left:6px'>Reload</button> <span style='color:#777'>If the badge does not change, press Ctrl+F5.</span> <a href='#' onclick='this.parentElement.remove();return false' style='margin-left:6px'>&times;</a>"
+document.body.appendChild(d)
+}).catch(()=>{})
+}catch(e){}
 // Restore any saved search. The badge is drawn straight away so a search left
 // armed in an earlier session is visible before the first Scan, rather than
 // silently filtering the sweep.
