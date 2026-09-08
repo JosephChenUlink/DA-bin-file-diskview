@@ -156,7 +156,7 @@ body.guideOpen #guideDoc{overflow:visible;padding:0}
   <span style='display:flex;align-items:center;gap:8px'>
   <span id='scanElapsed' title='Time elapsed since the current scan started (resets on each Scan click)' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
   <span id='lifetimeStats' title='How many times a template has been displayed while stepping/playing through results, across all Scan clicks this session' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
-  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260907n</span>
+  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260907o</span>
   </span>
 </div>
 <input id='local'type='file'style='display:none'onchange='OpFl()'>
@@ -5165,7 +5165,8 @@ try{SrchOpUI(i)}catch(e){}}
 
 SrchClear=()=>{
 _SrchCacheClear()
-Srch={conds:[{src:'H',field:'',op:'',val:'',col:'',rhs:'',rfield:'',rcol:''}],stop:Srch.stop,on:false}
+// Clear 只清條件；掃描模式（stop）與命中顯示模式（jump）是偏好，保留
+Srch={conds:[{src:'H',field:'',op:'',val:'',col:'',rhs:'',rfield:'',rcol:''}],stop:Srch.stop,jump:Srch.jump,on:false}
 SrchRender()
 if(G('srchMsg'))W(G('srchMsg'),'')
 if(G('srchBtn'))W(G('srchBtn'),'Search')
