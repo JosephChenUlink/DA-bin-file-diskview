@@ -156,7 +156,7 @@ body.guideOpen #guideDoc{overflow:visible;padding:0}
   <span style='display:flex;align-items:center;gap:8px'>
   <span id='scanElapsed' title='Time elapsed since the current scan started (resets on each Scan click)' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
   <span id='lifetimeStats' title='How many times a template has been displayed while stepping/playing through results, across all Scan clicks this session' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
-  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260907l</span>
+  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260907m</span>
   </span>
 </div>
 <input id='local'type='file'style='display:none'onchange='OpFl()'>
@@ -173,6 +173,8 @@ body.guideOpen #guideDoc{overflow:visible;padding:0}
 <div class='srow'><button onclick='SrchAdd()'>+ Add condition</button>
 <span class='shint'>Header conditions are checked first, without decoding the file</span></div>
 <div class='srow'><span class='shint'>Leave the field blank (&ldquo;(any alert)&rdquo; for Alerts) with &ldquo;is present&rdquo; / &ldquo;is absent&rdquo; to ask whether the file contains that template at all, or, for Alerts, whether it triggers any alert at all. With a field name, they ask whether that row exists &mdash; useful for header fields and for templates whose rows vary with the data (T2, T104, T332/T333), but not for fixed-layout ones such as T8, which always show every row.</span></div>
+<div class='srow'><span class='shint'>On a match show:</span> <label><input type='radio' name='srchJump' id='srchJump1' checked onchange='SrchJump(1)'> the matching template <span class='shint'>(an alert's template, the Alerts page, or the Header)</span></label>
+<label style='margin-left:12px'><input type='radio' name='srchJump' id='srchJump0' onchange='SrchJump(0)'> the template I am viewing</label></div>
 <div class='srow'><label><input type='radio' name='srchMode' id='srchModeStop' checked onchange='SrchMode(1)'> Stop at the first match</label>
 <label style='margin-left:12px'><input type='radio' name='srchMode' onchange='SrchMode(0)'> Keep scanning, step through matches</label></div>
 <div class='srow' style='text-align:right'><span id='srchMsg' class='shint'></span>
@@ -266,6 +268,7 @@ body.guideOpen #guideDoc{overflow:visible;padding:0}
 <p>Two counters sit near the version badge: <b>elapsed time</b> since you clicked Scan, and <b>Displayed</b>, how many templates you have viewed since that click.</p>
 <p>The interface you chose is remembered for the next Scan. In <b>Chrome</b> and <b>Edge</b> the folder is remembered too, across sessions: the interface prompt shows the last folder and reuses it unless you tick <i>Choose a different folder</i> (the browser may ask once per session to confirm access). In other browsers Scan works exactly the same way, but asks you to choose the folder each time.</p>
 <p><b>Scan once or loop.</b> The interface prompt also asks whether to scan the folder once or loop; the <b>&#8635; loop</b> button in the scan controls switches it during a scan. When looping is off the scan stops at the end of the folder (or at the start, going backwards) with a summary, and pressing the same direction again starts over.</p>
+<p><b>Which template each file opens on.</b> Without a search, every file opens on the template you are viewing (or the Header / Alerts page if that is what you chose). With a search, the panel's <i>On a match show</i> setting decides whether a matching file jumps to the matching template (an alert's template, the Alerts page, or the Header) or stays on the template you are viewing; non-matching files are never shown while stepping through matches.</p>
 <p><b>Matches only.</b> With a search applied, a <b>&#10004; only</b> toggle appears in the scan controls. Switch it on and each step goes straight to the next file that matches the search, skipping the rest; switch it off to step through every file again. Files already judged are remembered, so stepping back and forth is quick.</p>
 <p><b>Scan with Compare</b> is a useful pairing: turn on Compare during a scan and each new capture is measured against the one you started from.</p>
 <p class='note'>Scan reads the folder directly from your computer. As with everything else here, no file is uploaded.</p>
@@ -3772,7 +3775,7 @@ let lmt=ArIx.length/2-1,v=(AlertView?-2:(HdrView?-1:Tx))+x
 if(v>lmt)v=-2
 if(v<-2)v=lmt
 DpT(v)
-if(!HdrView&&(ScanActive||ScanStepMode)&&!_ScanLoading&&!RevTimer)ScanRawT=ArIx[Tx*2]}
+if((ScanActive||ScanStepMode)&&!_ScanLoading&&!RevTimer)ScanRawT=AlertView?-2:(HdrView?-1:ArIx[Tx*2])}
 
 // ── Scan play/stop/direction controls ───────────────────────────────────────
 ScanSetup=async()=>{
@@ -3877,6 +3880,12 @@ let ScanEntries=[],ScanIdx=0,ScanTimer=null,ScanTimerRAF=false,ScanActive=false,
 // 全速模式的連續處理：沒有顯示任何東西的步驟（被略過的檔案）不等下一幀，直接以微任務接著跑，
 // 每 40 ms 才讓瀏覽器畫一次；_ScanGen 讓 Stop 能作廢還沒跑的微任務。
 _ScanLastShown=false;_ScanYieldAt=0;_ScanGen=0
+// 掃描的目標檢視：ScanRawT >= 0 是 template 編號（DcFl 用 PrevRawT 在新檔案裡找同一個 template），
+// -1 是 Header 頁，-2 是 Alerts 頁。每一步顯示前都套用一次。
+_ScanApplyTargetView=()=>{
+if(ScanRawT===-2){AlertView=true;HdrView=false}
+else if(ScanRawT===-1){HdrView=true;AlertView=false}
+else if(ScanRawT>=0){HdrView=false;AlertView=false}}
 _ScanClearTimer=()=>{_ScanGen++;if(ScanTimer!==null){if(ScanTimerRAF)cancelAnimationFrame(ScanTimer);else clearTimeout(ScanTimer);ScanTimer=null;ScanTimerRAF=false}}
 // Clearly highlights whichever scan-navigation button (s0-s4) is currently the
 // active direction, clearing it from all the others. Pass null/undefined when
@@ -4171,7 +4180,7 @@ SrchBadge()}
 // Conditions persist across reloads; the tally does not, since it belongs to a
 // particular sweep.
 _SrchSave=()=>{
-try{localStorage.setItem('dv_search',JSON.stringify({c:Srch.conds,s:Srch.stop,o:Srch.on}))}catch(e){}}
+try{localStorage.setItem('dv_search',JSON.stringify({c:Srch.conds,s:Srch.stop,o:Srch.on,j:Srch.jump!==false}))}catch(e){}}
 // localStorage is editable by hand, so everything read back is re-checked
 // rather than trusted: unknown operators, non-string fields and over-long
 // values are dropped instead of being fed to the matcher.
@@ -4205,6 +4214,7 @@ rcol:rcol})
 if(!out.length)return
 Srch.conds=out
 Srch.stop=(d.s!==false)
+Srch.jump=(d.j!==false)
 Srch.on=!!d.o&&out.some(_SrchLive)
 }
 // Shown next to the Search button so the tally is visible with the panel shut.
@@ -4754,6 +4764,9 @@ SrchResetCount()
 _SrchSave()
 try{SrchHighlight()}catch(e){}}
 
+// 命中時要不要切到條件所在的 template（告警的 template／Alerts 頁／Header）。
+// 關掉就一律停在目前看的 template，只靠列的紅色標示看命中。
+SrchJump=v=>{Srch.jump=!!v;_SrchSave()}
 SrchMode=v=>{
 Srch.stop=!!v
 _SrchSave()
@@ -4923,7 +4936,7 @@ W(G('nVer'),'');if(G('scanFolderLabel'))W(G('scanFolderLabel'),'');if(G('scanFol
 }
 
 // Determine what we're filtering for, from the currently-open file
-ScanRawT=ArIx&&ArIx.length>0?ArIx[Tx*2]:-1
+ScanRawT=AlertView?-2:(HdrView?-1:(ArIx&&ArIx.length>0?ArIx[Tx*2]:-1))
 // 掃描預設只看「含有目前 template」的檔案。但若搜尋條件是要找出「缺少某個
 // template」的檔案，這個前置過濾會在搜尋執行前就把目標全部丟掉，條件永遠不
 // 可能成立。這種情況下改為全部檔案都掃。
@@ -5188,6 +5201,9 @@ CurFile2=entry.name;DcFl0_2(buf)
 }else{
 CurFile=entry.name;_SetFileLabel(entry.name)
 if(ScanRawT>=0)PrevRawT=ScanRawT
+// 每個檔案都從目標檢視開始：沒有搜尋就永遠是你選的 template（或 Header／Alerts 頁）；
+// 命中後的切換只影響那一個檔案，不會讓後面的檔案（或關掉搜尋以後）都停在 Alerts 頁。
+_ScanApplyTargetView()
 // 有要解碼後才能判定的條件（template 數值、Alerts）時，先解碼不顯示；條件通過才渲染畫面。
 let evalOnly=Srch.on&&(_SrchTmplConds().length>0||_SrchAlertConds().length>0)
 _ScanEval=evalOnly
@@ -5201,7 +5217,7 @@ if(ok&&!SrchValueOk()){ok=false;entry.srchMatch=false}
 if(ok&&evalOnly){try{DpFl();if(A2&&!HdrView&&!AlertView)CmpRenderTable();_PostSelfTest();_PostSmart();SrchHighlight();AlertHighlight()}catch(e){}}
 // 命中了就把畫面切到條件所在的頁面，讓被標示的那一列直接出現在眼前——
 // 否則掃描會停在使用者開始掃描時看的那個 template，符合的列在別頁。
-if(ok&&Srch.on){
+if(ok&&Srch.on&&Srch.jump!==false){
 let tv=SrchTargetView()
 if(tv!=null){
 let cur=AlertView?-2:(HdrView?-1:Tx)
@@ -6135,6 +6151,8 @@ InitLast()
 try{
 _SrchLoad()
 if(G('srchModeStop'))G('srchModeStop').checked=Srch.stop
+if(G('srchJump1'))G('srchJump1').checked=(Srch.jump!==false)
+if(G('srchJump0'))G('srchJump0').checked=(Srch.jump===false)
 let other=document.querySelectorAll("input[name='srchMode']")[1]
 if(other)other.checked=!Srch.stop
 let n=Srch.conds.filter(_SrchLive).length
