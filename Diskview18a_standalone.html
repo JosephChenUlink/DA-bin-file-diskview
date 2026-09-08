@@ -72,7 +72,14 @@ td button:not(.nbtn),th button{width:20px;height:20px}
 #rTab tr.alertHit>td{background:#fdecec}
 #rTab tr.alertHit>td:first-child{box-shadow:inset 3px 0 0 #c00;padding-left:6px}
 #rTab tr.alRow:hover>td{background:#f2f7fc}
-#srchWrap{position:relative;display:inline-block;flex-shrink:0;margin-left:4px}
+/* 掃描狀態與資料夾標籤每一步長度都不同。它們以前會把右邊的 Search 按鈕推來推去、
+   長了還會折行把工具列撐高；搜尋面板貼著 Search 按鈕定位，於是整個面板跟著每一步跳動。
+   改成：狀態文字單行、超出就省略號、可縮不可推；Search 靠 margin-left:auto 釘在右緣。 */
+#nVer{flex:1 1 auto;min-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#fileLabel{flex:0 1 260px!important;min-width:110px}
+#scanFolderLabel{flex:0 1 auto;min-width:0;max-width:26vw;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#scanFolderChg{flex-shrink:0;white-space:nowrap}
+#srchWrap{position:relative;display:inline-block;flex-shrink:0;margin-left:auto}
 #srchBtn{padding:3px 10px;font-size:12px;cursor:pointer}
 #srchOn{font-size:11px;color:#1a5fa8;margin-left:4px;font-weight:bold}
 /* Anchored to the wrapper's right edge, not its left: the Search button sits at
@@ -149,7 +156,7 @@ body.guideOpen #guideDoc{overflow:visible;padding:0}
   <span style='display:flex;align-items:center;gap:8px'>
   <span id='scanElapsed' title='Time elapsed since the current scan started (resets on each Scan click)' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
   <span id='lifetimeStats' title='How many times a template has been displayed while stepping/playing through results, across all Scan clicks this session' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
-  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260907h</span>
+  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260907i</span>
   </span>
 </div>
 <input id='local'type='file'style='display:none'onchange='OpFl()'>
