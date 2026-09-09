@@ -156,7 +156,7 @@ body.guideOpen #guideDoc{overflow:visible;padding:0}
   <span style='display:flex;align-items:center;gap:8px'>
   <span id='scanElapsed' title='Time elapsed since the current scan started (resets on each Scan click)' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
   <span id='lifetimeStats' title='How many times a template has been displayed while stepping/playing through results, across all Scan clicks this session' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
-  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260909c</span>
+  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260909d</span>
   </span>
 </div>
 <input id='local'type='file'style='display:none'onchange='OpFl()'>
@@ -4910,7 +4910,8 @@ ScanEntries=[...ScanBinList];ScanTotal=ScanEntries.length;ScanIdx=0
 _ScanFolderConfirmed=true
 let firstRelPath=inp.files[0]?.webkitRelativePath||''
 let folderName=firstRelPath.includes('/')?firstRelPath.split('/')[0]:'(selected folder)'
-if(document.getElementById('scanFolderLabel'))document.getElementById('scanFolderLabel').innerHTML=`📁 ${folderName} (+ subfolders)`
+_ScanRootName=folderName;_lastScanFolder=null
+if(document.getElementById('scanFolderLabel')){let l=document.getElementById('scanFolderLabel');l.innerHTML=`📁 ${EscH(folderName)} (+ subfolders)`;l.title=folderName+' (and its subfolders)'}
 if(document.getElementById('scanFolderChg'))document.getElementById('scanFolderChg').style.display='inline'
 res(ScanEntries.length>0)
 }
@@ -4934,7 +4935,8 @@ ScanBinList=[]  // reset to re-collect
 // Show which folder is being scanned, including subfolders（退路路徑沒有 handle，標籤已在選檔時寫好）
 _ScanFolderConfirmed=true
 if(ScanDirHandle){
-if(document.getElementById('scanFolderLabel'))document.getElementById('scanFolderLabel').innerHTML=`📁 ${ScanDirHandle.name} (+ subfolders)`
+_ScanRootName=ScanDirHandle.name;_lastScanFolder=null
+if(document.getElementById('scanFolderLabel')){let l=document.getElementById('scanFolderLabel');l.innerHTML=`📁 ${EscH(ScanDirHandle.name)} (+ subfolders)`;l.title=ScanDirHandle.name+' (and its subfolders)'}
 if(document.getElementById('scanFolderChg'))document.getElementById('scanFolderChg').style.display='inline'
 }
 // Collect .bin files from the folder and all subfolders
@@ -6110,16 +6112,25 @@ W=(x,y)=>{if(x)x.innerHTML=y}
 // and shows which subfolder the current file actually came from instead of a
 // static '(+ subfolders)' placeholder.
 let _lastScanFolder=null
+// 掃描根資料夾的名稱（瀏覽器只給名稱，拿不到絕對路徑）；標籤顯示「根 / 相對路徑」，
+// 滑鼠提示顯示相對路徑含檔名。
+_ScanRootName=''
 _SetFileLabel=name=>{
 let parts=(name||'').split('/')
 let fname=parts.pop()
 let folder=parts.join('/')
 W(G('fileLabel'),fname)
-if(G('fileLabel'))G('fileLabel').title=fname
-if(folder&&folder!==_lastScanFolder&&G('scanFolderLabel')){
+if(G('fileLabel'))G('fileLabel').title=(_ScanRootName&&!(name||'').startsWith(_ScanRootName+'/')?_ScanRootName+'/':'')+(name||'')
+let l=G('scanFolderLabel')
+if(l&&(folder||_ScanRootName)&&folder!==_lastScanFolder){
 _lastScanFolder=folder
-G('scanFolderLabel').innerHTML=`📁 ${folder}`
+// 退路路徑（webkitdirectory）的相對路徑本身就以根資料夾開頭，不要重複加
+let under=folder===_ScanRootName||folder.startsWith(_ScanRootName+'/')
+let full=(_ScanRootName&&!under?_ScanRootName+(folder?'/':''):'')+folder
+l.innerHTML=`📁 ${EscH(full)}`
+l.title=full+(fname?'/'+fname:'')
 }
+else if(l&&fname)l.title=(l.title||'').replace(/\/[^\/]*$/,'')+'/'+fname
 }
 HiliRange=(off,len)=>{NoHiLi(1);HiLi(1,off,len)}
 StaName=hex=>{
