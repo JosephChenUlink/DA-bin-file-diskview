@@ -156,7 +156,7 @@ body.guideOpen #guideDoc{overflow:visible;padding:0}
   <span style='display:flex;align-items:center;gap:8px'>
   <span id='scanElapsed' title='Time elapsed since the current scan started (resets on each Scan click)' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
   <span id='lifetimeStats' title='How many times a template has been displayed while stepping/playing through results, across all Scan clicks this session' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
-  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260909a</span>
+  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260909b</span>
   </span>
 </div>
 <input id='local'type='file'style='display:none'onchange='OpFl()'>
@@ -4558,13 +4558,18 @@ SrchClose=()=>{let p=G('srchPanel');if(p)p.classList.remove('open')}
 
 // Templates offered as a condition source: those actually present in the open
 // file, so a condition can never name something this capture does not contain.
+// 來源清單列出全部 template，不只開啟中檔案有的：掃描可以選任一介面，條件就得能指到
+// 任何介面的 template。本檔案有的排最前面（能探到列標籤／欄名做下拉），其餘依 SATA、
+// NVMe、SCSI、共用分組；掃描時檔案沒有該 template 就視為不符合。
 _SrchSrcOpts=sel=>{
+let opt=n=>"<option value='"+n+"'"+(String(sel)===String(n)?' selected':'')+">T"+n+" "+EscH((TmplNames&&TmplNames[n])||'')+"</option>"
 let o="<option value='A'"+(sel==='A'?' selected':'')+">Alerts</option>"
 +"<option value='H'"+(sel==='H'?' selected':'')+">Header</option>"
-if(ArIx)for(let i=0;i<ArIx.length;i+=2){
-let n=ArIx[i]
-o+="<option value='"+n+"'"+(String(sel)===String(n)?' selected':'')+">T"+n+" "+EscH((TmplNames&&TmplNames[n])||'')+"</option>"
-}
+let here=[];if(ArIx)for(let i=0;i<ArIx.length;i+=2)here.push(ArIx[i])
+if(here.length)o+="<optgroup label='In this file'>"+here.map(opt).join('')+"</optgroup>"
+let all=Object.keys(TmplNames||{}).map(Number).filter(n=>here.indexOf(n)<0).sort((a,b)=>a-b)
+let grp=[['SATA',n=>n<100],['NVMe',n=>n>=101&&n<=199],['Common (any interface)',n=>n>=201&&n<=299],['SCSI / SAS',n=>n>=301]]
+grp.forEach(([lab,f])=>{let L=all.filter(f);if(L.length)o+="<optgroup label='"+lab+"'>"+L.map(opt).join('')+"</optgroup>"})
 return o}
 
 let _SrchOps=[['','(any)'],['contains','contains'],['eq','equals'],['ne','does not equal'],
@@ -4592,7 +4597,7 @@ return 0}
 _SrchFieldCtl=(c,i)=>{
 let names=_SrchFieldCache[i]||[]
 if(!names.length)
-return "<input id='srchF"+i+"' value=\""+EscH(c.field||'')+"\" placeholder='field' oninput='SrchSet("+i+",\"field\",this.value)'>"
+return "<input id='srchF"+i+"' value=\""+EscH(c.field||'')+"\" placeholder='row label or column name' title='This template is not in the open file, so its fields cannot be listed: type the row label (e.g. Percentage Used) or, for entry tables such as T104 / T309, the column name (e.g. SCT) exactly as it appears on that template' oninput='SrchSet("+i+",\"field\",this.value)'>"
 // Alerts 留空＋is present／is absent＝任一告警（見 SrchFields、_SrchAlertOk）；
 // 標成「(any alert)」讓這條路徑看得見，而不是沿用泛用的「(choose a field)」。
 let o="<option value=''>"+(c.src==='A'?'(any alert)':'(choose a field)')+"</option>"
