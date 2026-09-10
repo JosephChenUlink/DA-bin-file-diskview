@@ -156,7 +156,7 @@ body.guideOpen #guideDoc{overflow:visible;padding:0}
   <span style='display:flex;align-items:center;gap:8px'>
   <span id='scanElapsed' title='Time elapsed since the current scan started (resets on each Scan click)' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
   <span id='lifetimeStats' title='How many times a template has been displayed while stepping/playing through results, across all Scan clicks this session' style='font-family:monospace;font-size:11px;color:#0d3d6e'></span>
-  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260909e</span>
+  <span style='font-family:monospace;font-size:11px;color:#1a5fa8;background:#fff;border:1px solid #1a5fa8;border-radius:3px;padding:1px 6px' title='Build version'>v18a.20260909f</span>
   </span>
 </div>
 <input id='local'type='file'style='display:none'onchange='OpFl()'>
@@ -1455,6 +1455,11 @@ AlertRules=[
 {key:'t7.1',tmpl:7,intf:'SATA',delta:1,row:/Reported Uncorrectable/i,name:'number_of_reported_uncorrectable_errors_7_1 Delta>0'},
 {key:'t7.2',tmpl:7,intf:'SATA',delta:1,row:/Resets Between Command/i,name:'number_of_resets_between_command_acceptance_and_command_completion_7_2 Delta>0'},
 {key:'t7.3',tmpl:7,intf:'SATA',delta:1,row:/Physical Element Status Changed/i,name:'physical_element_status_changed_7_3 Delta>0'},
+// 平台 V3.38（團隊 2026-09-09 決定）：規則表原本的自我測試筆數列照舊，Delta>0 比「記錄裡的筆數」，
+// 鍵值不變好讓軟體與應用程式相容；對齊清單找「新失敗」的規則另立新鍵 t15.3／t105.4／t309.2（見 AlertListRules）。
+// 這些筆數是有上限的 FIFO 內容（T15 19 格、T105／T309 20 格），舊的會被擠出去、T15 讀取還會在滿與空之間跳動，
+// 所以只比增加、不比減少，也不套用單調性閘（平台 GATE_EXEMPT_KEYS）。
+{key:'t15.2',tmpl:15,intf:'SATA',delta:1,raw:'cnt',rd:15,cnt:e=>e.length,what:'Self-test log entries in use',row:/./,name:'self_test_log_list_15_2 Delta>0'},
 {key:'t9.3',tmpl:9,intf:'SATA',delta:1,row:/Interface CRC/i,name:'interface_crc_errors_9_3 Delta>0'},
 {key:'t5.1',tmpl:5,intf:'SATA',delta:1,row:/Free-?Fall Events/i,name:'number_of_free_fall_events_detected_5_1 Delta>0'},
 {key:'t6.4',tmpl:6,intf:'SATA',delta:1,row:/Realloca(?:ted|tion) Logical Sectors/i,name:'reallocated_logical_sectors_6_4 Delta>0'},
@@ -1465,9 +1470,11 @@ AlertRules=[
 {key:'t103.17',tmpl:103,intf:'NVME',delta:1,row:/Critical Composite Temperature Time/i,name:'critical_composite_temperature_time_103_17 Delta>0'},
 // t104.1：T104 目前持有的錯誤項目數（平台 template_nvme_error_log.py：從頭連續、Error Count 非零的 64 位元組項目），讀原始位元組（_AlT104Count）
 {key:'t104.1',tmpl:104,intf:'NVME',delta:1,raw:'t104',row:/./,name:'nvme_error_log_entries_104_1 Delta>0'},
+{key:'t105.3',tmpl:105,intf:'NVME',delta:1,raw:'cnt',rd:105,cnt:e=>e.filter(x=>{let t=_AlSt(x);return t>=5&&t<=7}).length,what:'Failed self-test results held',row:/./,name:'self_test_number_of_self_test_error_logs_105_3 Delta>0'},
 {key:'t301.7',tmpl:301,intf:'SCSI',delta:1,row:/Total uncorrected errors/i,name:'total_write_uncorrected_errors_301_7 Delta>0'},
 {key:'t302.7',tmpl:302,intf:'SCSI',delta:1,row:/Total uncorrected errors/i,name:'total_read_uncorrected_errors_302_7 Delta>0'},
 {key:'t303.7',tmpl:303,intf:'SCSI',delta:1,row:/Total uncorrected errors/i,name:'total_verify_uncorrected_errors_303_7 Delta>0'},
+{key:'t309.1',tmpl:309,intf:'SCSI',delta:1,raw:'cnt',rd:309,cnt:e=>e.filter(x=>{let t=_AlSt(x);return t>=3&&t<=7}).length,what:'Failed self-test results held',row:/./,name:'number_of_self_test_error_logs_309_1 Delta>0'},
 // t311.3（背景掃描「執行次數」）已在平台 V3.00 退役：健康碟每次例行掃描都會加一。
 // 取而代之的是 t311.6：背景掃描「結果清單」多出來的項目（見 AlertListRules）。
 // t332.4.b：GList 宣告的缺陷筆數（READ DEFECT DATA 標頭的 list length ÷ 每筆長度），
@@ -1476,15 +1483,22 @@ AlertRules=[
 ]
 // 比較模式下要「對齊清單」而不是比一個數字的規則。自我測試記錄是循環／推入式的
 // FIFO，只比筆數會漏掉「舊的被擠出去、新的失敗補進來」這種筆數不變的情況。
+// 名稱一律以 Delta>0 結尾（平台 V3.38，之前是 Count>0）：算的是「比前一次擷取多出來的」，不是總數。
 AlertListRules=[
 // T15：時間戳（16 位元通電小時）大於前一筆最大值的才是新項目，0xFFFF 回繞另計；狀態 3h..8h 是失敗
-{key:'t15.3',tmpl:15,intf:'SATA',kind:'t15',name:'ext_self_test_errors_since_prev_15_3 Count>0'},
+{key:'t15.3',tmpl:15,intf:'SATA',kind:'t15',name:'ext_self_test_errors_since_prev_15_3 Delta>0'},
 // T105／T309：最新在前的推入式 FIFO，找最小的位移 k 使目前清單去掉前 k 筆等於前一筆清單的開頭；
-// 那 k 筆是新的，其中狀態落在失敗範圍（NVMe 5..7、SCSI 3..7）的才算
-{key:'t105.3',tmpl:105,intf:'NVME',kind:'fifo',lo:5,hi:7,name:'self_test_errors_since_prev_105_3 Count>0'},
-{key:'t309.1',tmpl:309,intf:'SCSI',kind:'fifo',lo:3,hi:7,name:'self_test_errors_since_prev_309_1 Count>0'},
+// 那 k 筆是新的，其中狀態落在失敗範圍（NVMe 5..7、SCSI 3..7）的才算。
+// 平台 V3.38 起的鍵是 t105.4／t309.2；t105.3／t309.1 回到規則表原本的「筆數 Delta>0」（見 AlertRules）。
+{key:'t105.4',tmpl:105,intf:'NVME',kind:'fifo',lo:5,hi:7,name:'self_test_errors_since_prev_105_4 Delta>0'},
+{key:'t309.2',tmpl:309,intf:'SCSI',kind:'fifo',lo:3,hi:7,name:'self_test_errors_since_prev_309_2 Delta>0'},
 // T311：結果清單（參數 0001h..0800h，每筆 pom:sensekey:asc:ascq:lba）的集合差；空清單是合法基準，沒有 T311 頁不是
-{key:'t311.6',tmpl:311,intf:'SCSI',kind:'set',name:'background_scan_new_results_311_6 Count>0'},
+{key:'t311.6',tmpl:311,intf:'SCSI',kind:'set',name:'background_scan_new_results_311_6 Delta>0'},
+// T104（平台 V3.35／V3.38）：Error Count 是 64 位元遞增的識別碼，大於前一筆最大值的就是這段期間新記錄的錯誤
+// （記錄滿了輪替也對得上）；其中狀態是媒體／可靠度問題的才算：SCT 2h（Media and Data Integrity，
+// 但 86h Access Denied、87h Deallocated 是主機的事，不算）或 SCT 0h 的 04h Data Transfer Error／06h Internal Error。
+// 主機指令問題（無效 opcode／欄位、中止、LBA 超界…）留給 t104.1。空記錄是合法基準，沒有 T104 不是。
+{key:'t104.2',tmpl:104,intf:'NVME',kind:'t104',name:'nvme_media_errors_since_prev_104_2 Delta>0'},
 ]
 // SMART N<=T 只看規則表列出的屬性（平台 SMART_NLET_IDS）。1、190、194 在 V2.98 退役：
 // 1 的對數正規化在永遠不會壞的碟上也常低於門檻；190／194 是溫度，改由 t8.1 負責。
@@ -1717,6 +1731,22 @@ _AlSt=e=>Number(e.split(':')[1])
 _AlT3ErrCount=()=>{let t=ArIx[Tx*2],off=t===3?500:452,lim=_AlRecEnd();if(F+off+2>lim)return null;return (A[F+off]*1)|((A[F+off+1]*1)<<8)}
 // 兩個檔案各自依平台優先序 T3 > T12 > T11 取第一個有的
 _AlDevErrCount=probe=>{for(const t of [3,12,11]){let v=probe(t,_AlT3ErrCount,true);if(v!=null)return {t,v}}return null}
+// T104 逐筆（平台 template_nvme_error_log.py）："error_count:sct:sc:lba"，最新在前。Status Field 是 bytes 12-13
+// u16 LE，去掉 bit 0 的 phase tag 後 bits 7:0 = SC、bits 10:8 = SCT；LBA 是 bytes 16-23。空記錄回 []，放不下一筆回 null。
+_AlT104Entries=()=>{let lim=_AlRecEnd(),out=[];if(F+64>lim)return null
+for(let i=0;i<256;i++){let s=F+i*64;if(s+64>lim)break
+let n=0n;for(let k=7;k>=0;k--)n=n*256n+BigInt(A[s+k]*1);if(n===0n)break
+let sf=((A[s+12]*1)|((A[s+13]*1)<<8))>>1,lba=0n;for(let k=23;k>=16;k--)lba=lba*256n+BigInt(A[s+k]*1)
+out.push(n+':'+((sf>>8)&7)+':'+(sf&255)+':'+lba)}
+return out}
+// t104.2 的新項目：Error Count 大於前一筆最大值（前一筆是空記錄 → 0，全部都是新的），且狀態屬於媒體／可靠度類
+_AlT104Media=(sct,sc)=>(sct===2&&sc!==0x86&&sc!==0x87)||(sct===0&&(sc===4||sc===6))
+_AlT104New=(cur,prev)=>{let ec=e=>BigInt(e.split(':')[0]),pm=0n;prev.forEach(e=>{let n=ec(e);if(n>pm)pm=n})
+return cur.filter(e=>{let p=e.split(':');return ec(e)>pm&&_AlT104Media(+p[1],+p[2])})}
+_AlT104Fmt=e=>{let p=e.split(':'),sct=+p[1],sc=+p[2]
+if(!window._NvmeStatusParts&&window._NvmeStatusInit)_NvmeStatusInit()
+if(window._NvmeStatusParts){let q=_NvmeStatusParts((sct<<9)|(sc<<1));return '#'+p[0]+' SCT '+q.sct+' / SC '+q.sc}
+return '#'+p[0]+' SCT '+sct+' SC '+sc.toString(16).padStart(2,'0')+'h'}
 // T104 目前持有的錯誤項目數：64 位元組一筆、最多 256 筆，Error Count（前 8 位元組）非零才算，遇到零就停
 _AlT104Count=()=>{let lim=_AlRecEnd(),n=0;if(F+64>lim)return null;for(let i=0;i<256;i++){let s=F+i*64;if(s+64>lim)break;let nz=false;for(let k=0;k<8;k++)if(A[s+k]*1){nz=true;break}if(!nz)break;n++}return n}
 
@@ -1725,7 +1755,7 @@ _AlListAlerts=()=>{
 let out=[]
 if(!A2||!ArIx2)return out
 let intf=_AlIntf()
-let rd={15:_AlT15Entries,105:_AlT105Entries,309:_AlT309Entries,311:_AlT311Entries}
+let rd={15:_AlT15Entries,104:_AlT104Entries,105:_AlT105Entries,309:_AlT309Entries,311:_AlT311Entries}
 AlertListRules.forEach(r=>{
 if(r.intf&&r.intf!==intf)return
 if(!_AlHas(r.tmpl))return
@@ -1735,9 +1765,11 @@ let hits=[]
 if(r.kind==='t15')hits=_AlT15New(cur,prev)
 else if(r.kind==='fifo')hits=_AlFifoNew(cur,prev).filter(e=>{let s=_AlSt(e);return s>=r.lo&&s<=r.hi})
 else if(r.kind==='set')hits=cur.filter(e=>prev.indexOf(e)<0)
+else if(r.kind==='t104')hits=_AlT104New(cur,prev)
 if(!hits.length)return
-let n=hits.length,what=r.kind==='set'?'new background-scan result entr'+(n===1?'y':'ies'):'new failed self-test entr'+(n===1?'y':'ies')
-out.push({key:r.key,tmpl:r.tmpl,name:r.name,value:n,ref:null,desc:n+' '+what+' since File 1: '+hits.slice(0,4).join(', ')+(n>4?', …':'')})
+let n=hits.length,what=r.kind==='set'?'new background-scan result entr'+(n===1?'y':'ies'):r.kind==='t104'?'new media / reliability error-log entr'+(n===1?'y':'ies'):'new failed self-test entr'+(n===1?'y':'ies')
+let shown=hits.slice(0,4).map(e=>r.kind==='t104'?_AlT104Fmt(e):e)
+out.push({key:r.key,tmpl:r.tmpl,name:r.name,value:n,ref:null,desc:n+' '+what+' since File 1: '+shown.join(', ')+(n>4?', …':'')})
 })
 AlertRules.forEach(r=>{
 if(!r.glist&&!r.raw)return
@@ -1753,6 +1785,12 @@ c1=p1.v;c2=p2.v;tmpl=p1.t;what='Device error count (T'+p1.t+')'
 }else if(r.raw==='t104'){
 if(!_AlHas(r.tmpl))return
 c1=_AlProbeF1(r.tmpl,_AlT104Count,true);c2=_AlProbeF2(r.tmpl,_AlT104Count,true);what='Error log entries held'
+}else if(r.raw==='cnt'){
+// 自我測試記錄的筆數（t15.2／t105.3／t309.1）：讀清單再數，兩邊都要讀得到
+if(!_AlHas(r.tmpl))return
+let e1=_AlProbeF1(r.tmpl,rd[r.rd],true),e2=_AlProbeF2(r.tmpl,rd[r.rd],true)
+if(e1==null||e2==null)return
+c1=r.cnt(e1);c2=r.cnt(e2);what=r.what
 }
 if(c1==null||c2==null)return
 if(c2-c1>0)out.push({key:r.key,tmpl:tmpl,name:r.name,value:c2,ref:c1,desc:what+' +'+(c2-c1)+' ('+c1+' → '+c2+')'})
