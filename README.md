@@ -26,6 +26,22 @@ hashed or zeroed.
 
 Click **Guide** in the toolbar for the full user guide.
 
+## Reference specifications (for developers)
+
+The decoding tables follow the ATA (ACS), SCSI (SPC/SBC), NVMe and OCP
+specifications. Those documents are kept in the private repository
+`JosephChenUlink/ULINK-Storage-Specs`, shared by every ULINK storage project.
+This repository does not mount it as a submodule because the viewer is served
+by GitHub Pages, whose branch build fails on a private submodule. Clone it
+next to this repository instead:
+
+```
+git clone https://github.com/JosephChenUlink/ULINK-Storage-Specs
+```
+
+Cite specifications by document and section (for example "ACS-7 7.12",
+"NVMe Base 2.3 5.16"), never by file path.
+
 ## Support
 
 Open an issue on this repository, or email joseph.chen@ulinktech.com.
